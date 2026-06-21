@@ -11,11 +11,13 @@ import type { RuntimeCompiledPart, RuntimePathCommand } from "./types.js";
 export interface RenderedPart {
   readonly renderable: Graphics | Mesh<MeshGeometry>;
   readonly graphicsContext?: GraphicsContext;
+  readonly meshBaseVertices?: Float32Array;
+  readonly meshPositions?: Float32Array;
 }
 
 export function createPartRenderable(part: RuntimeCompiledPart): RenderedPart | undefined {
   if (part.type === "mesh" && part.mesh) {
-    return { renderable: createMeshRenderable(part) };
+    return createMeshRenderable(part);
   }
 
   const context = createGraphicsContext(part);
@@ -97,18 +99,20 @@ function getPathCommands(part: RuntimeCompiledPart): readonly PathCommand[] {
   return [];
 }
 
-function createMeshRenderable(part: RuntimeCompiledPart): Mesh<MeshGeometry> {
+function createMeshRenderable(part: RuntimeCompiledPart): RenderedPart {
   if (!part.mesh) {
     throw new Error(`Mesh part '${part.id}' is missing mesh data.`);
   }
+  const positions = new Float32Array(part.mesh.vertices);
   const geometry = new MeshGeometry({
-    positions: new Float32Array(part.mesh.vertices),
+    positions,
     uvs: new Float32Array(part.mesh.vertices.length),
     indices: new Uint32Array(part.mesh.indices)
   });
   const renderable = new Mesh({ geometry, texture: Texture.WHITE });
   (renderable as Mesh<MeshGeometry> & { tint?: string | number }).tint = part.fill?.color ?? "#050505";
-  return renderable;
+  (renderable as Mesh<MeshGeometry> & { __bonesMeshPositions?: Float32Array }).__bonesMeshPositions = positions;
+  return { renderable, meshBaseVertices: new Float32Array(part.mesh.vertices), meshPositions: positions };
 }
 
 function toVectorPathCommand(command: RuntimePathCommand): PathCommand | undefined {

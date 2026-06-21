@@ -77,7 +77,9 @@ export class RigInstance {
         return {
           ...runtimePart,
           renderable: rendered.renderable,
-          ...(rendered.graphicsContext ? { graphicsContext: rendered.graphicsContext } : {})
+          ...(rendered.graphicsContext ? { graphicsContext: rendered.graphicsContext } : {}),
+          ...(rendered.meshBaseVertices ? { meshBaseVertices: rendered.meshBaseVertices } : {}),
+          ...(rendered.meshPositions ? { meshPositions: rendered.meshPositions } : {})
         };
       }
       return runtimePart;
@@ -246,7 +248,11 @@ export class RigInstance {
       } else if (value.targetKind === "part") {
         const part = this.partById.get(value.target);
         if (part) {
-          applySampleValue(part.container, value, additive);
+          if (value.property === "deform") {
+            this.applyMeshDeform(part, value.value, additive);
+          } else {
+            applySampleValue(part.container, value, additive);
+          }
         }
       }
     }
@@ -299,7 +305,26 @@ export class RigInstance {
         part.container.alpha = source.opacity;
         part.container.zIndex = source.drawOrder;
       }
+      this.resetMeshDeform(part);
     }
+  }
+
+  private resetMeshDeform(part: PartRuntime): void {
+    if (part.meshBaseVertices && part.meshPositions) {
+      part.meshPositions.set(part.meshBaseVertices);
+      updateMeshBuffer(part);
+    }
+  }
+
+  private applyMeshDeform(part: PartRuntime, value: unknown, additive: boolean): void {
+    if (!part.meshBaseVertices || !part.meshPositions || !Array.isArray(value)) {
+      return;
+    }
+    for (let index = 0; index < part.meshPositions.length; index += 1) {
+      const offset = typeof value[index] === "number" ? value[index] : 0;
+      part.meshPositions[index] = additive ? part.meshPositions[index] + offset : part.meshBaseVertices[index] + offset;
+    }
+    updateMeshBuffer(part);
   }
 }
 
@@ -326,6 +351,20 @@ function namedContainer(label: string): Container {
   const container = new Container();
   container.label = label;
   return container;
+}
+
+function updateMeshBuffer(part: PartRuntime): void {
+  if (!part.meshPositions || !part.renderable || !("geometry" in part.renderable)) {
+    return;
+  }
+  const geometry = part.renderable.geometry as unknown as {
+    getBuffer?: (id: string) => { data?: unknown; update?: (data?: unknown) => void } | undefined;
+  };
+  const buffer = geometry.getBuffer?.("aPosition") ?? geometry.getBuffer?.("aVertexPosition") ?? geometry.getBuffer?.("positions");
+  if (buffer) {
+    buffer.data = part.meshPositions;
+    buffer.update?.(part.meshPositions);
+  }
 }
 
 function applyTransform(container: Container, transform: PackedTransform2D): void {

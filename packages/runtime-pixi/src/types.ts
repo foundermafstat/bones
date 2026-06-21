@@ -106,6 +106,8 @@ export interface PartRuntime {
   readonly container: Container;
   readonly renderable?: Graphics | Mesh<MeshGeometry>;
   readonly graphicsContext?: GraphicsContext;
+  readonly meshBaseVertices?: Float32Array;
+  readonly meshPositions?: Float32Array;
 }
 
 export interface RigUpdateState {

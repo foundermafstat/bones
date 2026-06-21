@@ -244,6 +244,46 @@ test("constraints derive bone world params, rotate to surface normal, gate jump,
   assert.equal(locked.constraintValues, 4);
 });
 
+test("mesh deform tracks update vertices without rebuilding renderable and reset to base", () => {
+  const meshFixture = structuredClone(compiledFixture);
+  meshFixture.rig.parts.push({
+    id: 1,
+    bone: 1,
+    type: "mesh",
+    drawOrder: 3,
+    visible: true,
+    opacity: 1,
+    local: [0, 0, 0, 1, 1, 0, 0],
+    fill: { color: "#050505", alpha: 1 },
+    mesh: { vertices: [0, 0, 10, 0, 0, 10], indices: [0, 1, 2] }
+  });
+  const instance = new RigInstance(
+    {
+      ...meshFixture,
+      animations: [
+        {
+          id: 0,
+          duration: 1,
+          fps: 60,
+          loop: true,
+          tracks: [{ id: 0, targetKind: "part", target: 1, property: "deform", keyframes: [{ time: 0, value: [0, 2, 1, 0, -1, 0], interpolation: "hold" }] }]
+        }
+      ]
+    },
+    { stateMachine: false }
+  );
+  const meshPart = instance.getPartContainer(1).children[0];
+  const renderableBefore = meshPart;
+  const positions = meshPart.__bonesMeshPositions;
+
+  instance.update(0.01);
+  assert.deepEqual(Array.from(positions), [0, 2, 11, 0, -1, 10]);
+  assert.equal(instance.getPartContainer(1).children[0], renderableBefore);
+
+  instance.applySample({ normalizedTime: 0, localTime: 0, values: [] });
+  assert.deepEqual(Array.from(positions), [0, 0, 10, 0, 0, 10]);
+});
+
 test("update exposes state machine blend tree as mixer layers", () => {
   const instance = new RigInstance({
     ...compiledFixture,
