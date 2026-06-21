@@ -85,6 +85,7 @@ import {
 import { loadDraft, saveDraft, serializeEditorProject } from "./projectIo";
 import { PixiPreview } from "./PixiPreview";
 import { vectorizeSvgPart } from "./editorVectorImport";
+import { createInitialControllerState, toAnimationParameters, updatePlatformerController } from "@bones/platformer-preview";
 
 const modes = ["Rig", "Shape", "Pose", "Timeline", "Curve", "State Machine", "Procedural", "Preview"] as const;
 
@@ -147,6 +148,22 @@ export default function EditorPage() {
   const activeClip = editorState.project.animations[editorState.project.timeline.selectedClipId] ?? editorState.project.animations.idle!;
   const activeTrack = activeClip.tracks["body.scaleY"] ?? [];
   const selectedKeyId = editorState.project.timeline.selectedKeyIds[0] ?? activeTrack[0]?.id ?? "";
+  const previewLevel = useMemo(
+    () => ({
+      colliders: [
+        { x: -120, y: 34, width: 260, height: 16, kind: "solid" as const },
+        { x: 96, y: -42, width: 12, height: 76, kind: "wallJump" as const },
+        { x: 150, y: 20, width: 36, height: 18, kind: "deathZone" as const }
+      ],
+      cameraZones: [{ x: -64, y: -96, width: 180, height: 120, kind: "solid" as const }],
+      animationTriggers: [{ x: 96, y: -10, state: "wallSlide" }]
+    }),
+    []
+  );
+  const platformerDebug = useMemo(() => {
+    const state = updatePlatformerController(createInitialControllerState(0, 0), { moveX: 1, jumpPressed: false }, 0.2, previewLevel);
+    return { state, params: toAnimationParameters(state) };
+  }, [previewLevel]);
   const runCommand = (command: Parameters<typeof executeCommand>[1]) => setEditorState((state) => executeCommand(state, command));
   useEffect(() => {
     const autosave = editorState.project.autosave;
@@ -712,6 +729,8 @@ export default function EditorPage() {
                 <CardContent className="flex flex-col gap-1">
                   <p className="text-xs text-muted-foreground">Preview quality: medium</p>
                   <p className="text-xs text-muted-foreground">Update 0.4ms / Render 1.2ms</p>
+                  <p className="text-xs text-muted-foreground">Platformer {platformerDebug.state.animationState} / {platformerDebug.state.debug.activeColliders.length} colliders</p>
+                  <p className="text-xs text-muted-foreground">Camera {platformerDebug.state.cameraX.toFixed(0)}, {platformerDebug.state.cameraY.toFixed(0)} / abs {platformerDebug.params.absSpeed}</p>
                 </CardContent>
               </Card>
             </div>
