@@ -170,6 +170,13 @@ export interface RuntimeAnimationClip {
   readonly loop: boolean;
   readonly tracks: readonly RuntimeAnimationTrack[];
   readonly trackLookup?: Readonly<Record<string, NumericId>>;
+  readonly events?: readonly RuntimeAnimationEvent[];
+}
+
+export interface RuntimeAnimationEvent {
+  readonly time: number;
+  readonly type: string;
+  readonly payload?: RuntimeSampleValue;
 }
 
 export interface RuntimeAnimationTrack {
@@ -188,9 +195,9 @@ export interface RuntimeKeyframe {
 }
 
 export interface AnimationSampleTrackValue {
-  readonly targetKind: RuntimeTrackTargetKind;
-  readonly target: NumericId;
-  readonly property: RuntimeTrackProperty;
+  targetKind: RuntimeTrackTargetKind;
+  target: NumericId;
+  property: RuntimeTrackProperty;
   value: RuntimeSampleValue;
 }
 

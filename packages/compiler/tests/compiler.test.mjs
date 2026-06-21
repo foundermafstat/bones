@@ -61,6 +61,7 @@ const sourceProject = {
       duration: 1,
       loop: true,
       editor: { notes: "clip metadata" },
+      events: [{ time: 0.5, type: "footstep", payload: { foot: "front" } }],
       tracks: [
         {
           id: "track.body.y",
@@ -118,6 +119,7 @@ test("compiles source project into deterministic compiled JSON v1", () => {
   ]);
   assert.equal(first.animations[0].tracks[0].target, 1);
   assert.deepEqual(first.animations[0].tracks[0].keyframes[1].curve, [0.25, 0.1, 0.25, 1]);
+  assert.deepEqual(first.animations[0].events, [{ time: 0.5, type: "footstep", payload: { foot: "front" } }]);
   assert.equal(first.stateMachines[0].transitions[0].conditions[0].parameter, 0);
   assert.equal(first.stateMachines[0].transitions[0].easing, "easeOut");
   assert.equal(first.stateMachines[0].transitions[0].syncMode, "normalizedTime");

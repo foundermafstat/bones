@@ -158,14 +158,25 @@ export const compiledRigProjectJsonSchema = {
     animationClip: {
       type: "object",
       additionalProperties: false,
-      required: ["id", "duration", "fps", "loop", "tracks", "trackLookup"],
+      required: ["id", "duration", "fps", "loop", "tracks", "trackLookup", "events"],
       properties: {
         id: numericId,
         duration: { type: "number", exclusiveMinimum: 0 },
         fps: { type: "number", exclusiveMinimum: 0 },
         loop: { type: "boolean" },
         tracks: { type: "array", items: { $ref: "#/$defs/track" } },
-        trackLookup: lookupTable
+        trackLookup: lookupTable,
+        events: { type: "array", items: { $ref: "#/$defs/animationEvent" } }
+      }
+    },
+    animationEvent: {
+      type: "object",
+      additionalProperties: false,
+      required: ["time", "type"],
+      properties: {
+        time: { type: "number", minimum: 0 },
+        type: { type: "string", minLength: 1 },
+        payload: true
       }
     },
     track: {

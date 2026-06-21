@@ -2,6 +2,7 @@ import type {
   AnimationSample,
   AnimationSampleTrackValue,
   RuntimeAnimationClip,
+  RuntimeAnimationEvent,
   RuntimeAnimationTrack,
   RuntimeKeyframe,
   RuntimeSampleValue
@@ -9,7 +10,26 @@ import type {
 
 const defaultCurve: readonly [number, number, number, number] = [0, 0, 1, 1];
 
-export function sampleAnimationClip(clip: RuntimeAnimationClip, time: number, out: AnimationSample = createAnimationSample()): AnimationSample {
+export interface AnimationClipSampleCache {
+  readonly clipId: number;
+  readonly tracksById: ReadonlyMap<number, RuntimeAnimationTrack>;
+  readonly keyframeTimesByTrack: ReadonlyMap<number, Float32Array>;
+}
+
+export function createAnimationClipSampleCache(clip: RuntimeAnimationClip): AnimationClipSampleCache {
+  return {
+    clipId: clip.id,
+    tracksById: new Map(clip.tracks.map((track) => [track.id, track])),
+    keyframeTimesByTrack: new Map(clip.tracks.map((track) => [track.id, Float32Array.from(track.keyframes, (keyframe) => keyframe.time)]))
+  };
+}
+
+export function sampleAnimationClip(
+  clip: RuntimeAnimationClip,
+  time: number,
+  out: AnimationSample = createAnimationSample(),
+  cache?: AnimationClipSampleCache
+): AnimationSample {
   const localTime = normalizeClipTime(clip, time);
   out.localTime = localTime;
   out.normalizedTime = clip.duration > 0 ? localTime / clip.duration : 0;
@@ -18,7 +38,8 @@ export function sampleAnimationClip(clip: RuntimeAnimationClip, time: number, ou
   for (let index = 0; index < clip.tracks.length; index += 1) {
     const track = clip.tracks[index]!;
     const target = out.values[index] ?? createSampleTrackValue(track);
-    target.value = sampleTrackValue(track, localTime);
+    setSampleTrackMetadata(target, track);
+    target.value = sampleTrackValue(track, localTime, cache?.keyframeTimesByTrack.get(track.id));
     out.values[index] = target;
   }
 
@@ -34,7 +55,7 @@ export function createAnimationSample(): AnimationSample {
 }
 
 export function normalizeClipTime(clip: RuntimeAnimationClip, time: number): number {
-  if (clip.duration <= 0) {
+  if (clip.duration <= 0 || !Number.isFinite(time)) {
     return 0;
   }
   if (!clip.loop) {
@@ -44,7 +65,7 @@ export function normalizeClipTime(clip: RuntimeAnimationClip, time: number): num
   return wrapped < 0 ? wrapped + clip.duration : wrapped;
 }
 
-export function sampleTrackValue(track: RuntimeAnimationTrack, time: number): RuntimeSampleValue {
+export function sampleTrackValue(track: RuntimeAnimationTrack, time: number, keyframeTimes?: Float32Array): RuntimeSampleValue {
   const keyframes = track.keyframes;
   if (keyframes.length === 0) {
     return null;
@@ -58,7 +79,7 @@ export function sampleTrackValue(track: RuntimeAnimationTrack, time: number): Ru
     return last.value;
   }
 
-  const index = findKeyframeIndex(keyframes, time);
+  const index = findKeyframeIndex(keyframes, time, keyframeTimes);
   const from = keyframes[index]!;
   const to = keyframes[index + 1]!;
   if (!from || !to) {
@@ -71,6 +92,37 @@ export function sampleTrackValue(track: RuntimeAnimationTrack, time: number): Ru
   const rawT = clamp((time - from.time) / (to.time - from.time), 0, 1);
   const t = from.interpolation === "bezier" ? sampleBezier(rawT, from.curve ?? defaultCurve) : rawT;
   return interpolateValue(from.value, to.value, t, track.property);
+}
+
+export function sampleAnimationEvents(
+  clip: RuntimeAnimationClip,
+  previousTime: number,
+  nextTime: number,
+  out: RuntimeAnimationEvent[] = []
+): RuntimeAnimationEvent[] {
+  out.length = 0;
+  const events = clip.events ?? [];
+  if (!events.length || clip.duration <= 0) {
+    return out;
+  }
+
+  if (!clip.loop) {
+    const from = clamp(previousTime, 0, clip.duration);
+    const to = clamp(nextTime, 0, clip.duration);
+    collectEvents(events, Math.min(from, to), Math.max(from, to), out, false);
+    return out;
+  }
+
+  const from = normalizeClipTime(clip, previousTime);
+  const to = normalizeClipTime(clip, nextTime);
+  if (nextTime >= previousTime && to >= from) {
+    collectEvents(events, from, to, out, false);
+    return out;
+  }
+
+  collectEvents(events, from, clip.duration, out, false);
+  collectEvents(events, 0, to, out, true);
+  return out;
 }
 
 export function interpolateValue(
@@ -93,16 +145,16 @@ export function shortestAngleDelta(from: number, to: number): number {
   return ((((to - from) % fullTurn) + Math.PI * 3) % fullTurn) - Math.PI;
 }
 
-function findKeyframeIndex(keyframes: readonly RuntimeKeyframe[], time: number): number {
+function findKeyframeIndex(keyframes: readonly RuntimeKeyframe[], time: number, keyframeTimes?: Float32Array): number {
   let low = 0;
   let high = keyframes.length - 2;
   while (low <= high) {
     const mid = (low + high) >> 1;
-    const current = keyframes[mid]!;
-    const next = keyframes[mid + 1]!;
-    if (time < current.time) {
+    const currentTime = keyframeTimes?.[mid] ?? keyframes[mid]!.time;
+    const nextTime = keyframeTimes?.[mid + 1] ?? keyframes[mid + 1]!.time;
+    if (time < currentTime) {
       high = mid - 1;
-    } else if (time >= next.time) {
+    } else if (time >= nextTime) {
       low = mid + 1;
     } else {
       return mid;
@@ -140,6 +192,27 @@ function createSampleTrackValue(track: RuntimeAnimationTrack): AnimationSampleTr
     property: track.property,
     value: null
   };
+}
+
+function setSampleTrackMetadata(target: AnimationSampleTrackValue, track: RuntimeAnimationTrack): void {
+  target.targetKind = track.targetKind;
+  target.target = track.target;
+  target.property = track.property;
+}
+
+function collectEvents(
+  events: readonly RuntimeAnimationEvent[],
+  from: number,
+  to: number,
+  out: RuntimeAnimationEvent[],
+  includeStart: boolean
+): void {
+  for (const event of events) {
+    const afterStart = includeStart ? event.time >= from : event.time > from;
+    if (afterStart && event.time <= to) {
+      out.push(event);
+    }
+  }
 }
 
 function clamp(value: number, min: number, max: number): number {

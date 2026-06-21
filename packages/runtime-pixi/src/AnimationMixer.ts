@@ -1,7 +1,9 @@
 import {
   createAnimationSample,
+  createAnimationClipSampleCache,
   interpolateValue,
-  sampleAnimationClip
+  sampleAnimationClip,
+  type AnimationClipSampleCache
 } from "./AnimationSampler.js";
 import type {
   AnimationSample,
@@ -36,6 +38,7 @@ export class AnimationMixer {
   readonly output: AnimationSample = createAnimationSample();
 
   private readonly clips = new Map<number, RuntimeAnimationClip>();
+  private readonly clipCaches = new Map<number, AnimationClipSampleCache>();
   private readonly baseSample = createAnimationSample();
   private readonly fadeSample = createAnimationSample();
   private readonly layerSamples: AnimationSample[] = [];
@@ -50,12 +53,13 @@ export class AnimationMixer {
 
   constructor(clips: readonly RuntimeAnimationClip[] = []) {
     for (const clip of clips) {
-      this.clips.set(clip.id, clip);
+      this.addClip(clip);
     }
   }
 
   addClip(clip: RuntimeAnimationClip): void {
     this.clips.set(clip.id, clip);
+    this.clipCaches.set(clip.id, createAnimationClipSampleCache(clip));
   }
 
   play(clipId: number, time = 0): void {
@@ -91,13 +95,13 @@ export class AnimationMixer {
     }
 
     this.baseTime += dt;
-    const base = sampleAnimationClip(this.baseClip, this.baseTime, this.baseSample);
+    const base = sampleAnimationClip(this.baseClip, this.baseTime, this.baseSample, this.clipCaches.get(this.baseClip.id));
     copySample(base, this.output);
 
     if (this.fadeClip) {
       this.fadeTime += dt;
       this.fadeElapsed += dt;
-      const fade = sampleAnimationClip(this.fadeClip, this.fadeTime, this.fadeSample);
+      const fade = sampleAnimationClip(this.fadeClip, this.fadeTime, this.fadeSample, this.clipCaches.get(this.fadeClip.id));
       const rawWeight = Math.min(1, this.fadeElapsed / this.fadeDuration);
       const weight = transitionEase(rawWeight, this.fadeEasing);
       blendInto(this.output, fade, weight);
@@ -115,7 +119,7 @@ export class AnimationMixer {
       const layer = this.layers[index]!;
       const clip = this.requireClip(layer.clipId);
       const sample = this.layerSamples[index] ?? createAnimationSample();
-      this.layerSamples[index] = sampleAnimationClip(clip, layer.time ?? this.baseTime, sample);
+      this.layerSamples[index] = sampleAnimationClip(clip, layer.time ?? this.baseTime, sample, this.clipCaches.get(clip.id));
       if (layer.additive) {
         addInto(this.output, sample, layer.weight ?? 1, layer.mask);
       } else {
@@ -175,6 +179,9 @@ function copySample(from: AnimationSample, to: AnimationSample): void {
     const value = from.values[index]!;
     const target = to.values[index];
     if (target) {
+      target.targetKind = value.targetKind;
+      target.target = value.target;
+      target.property = value.property;
       target.value = value.value;
     } else {
       to.values[index] = { ...value };

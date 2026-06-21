@@ -85,6 +85,7 @@ export interface CompiledAnimationClipV1 {
   readonly loop: boolean;
   readonly tracks: readonly CompiledAnimationTrackV1[];
   readonly trackLookup: Readonly<Record<string, NumericId>>;
+  readonly events: readonly CompiledAnimationEventV1[];
 }
 
 export interface CompiledAnimationTrackV1 {
@@ -100,6 +101,12 @@ export interface CompiledKeyframeV1 {
   readonly value: JsonValue;
   readonly interpolation: "linear" | "step" | "hold" | "bezier" | "spring";
   readonly curve: readonly [number, number, number, number];
+}
+
+export interface CompiledAnimationEventV1 {
+  readonly time: number;
+  readonly type: string;
+  readonly payload?: JsonValue;
 }
 
 export interface CompiledStateMachineV1 {

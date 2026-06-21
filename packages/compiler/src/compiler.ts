@@ -4,6 +4,7 @@ import {
   validateRigProject,
   type AnimationClip,
   type AnimationCondition,
+  type AnimationEvent,
   type AnimationStateMachine,
   type AnimationTransition,
   type AnimationTrack,
@@ -153,7 +154,12 @@ function compileAnimationClip(
     fps: clip.fps ?? clip.frameRate ?? defaultFrameRate,
     loop: clip.loop ?? false,
     tracks: tracks.map((track) => compileTrack(track, trackLookup, lookups)),
-    trackLookup
+    trackLookup,
+    events: sortEvents(clip.events ?? []).map((event) => ({
+      time: event.time,
+      type: event.type,
+      ...(event.payload ? { payload: event.payload as unknown as JsonValue } : {})
+    }))
   };
 }
 
@@ -340,6 +346,10 @@ function sortKeyframes(keyframes: readonly Keyframe[]): readonly Keyframe[] {
   return [...keyframes].sort(
     (left, right) => left.time - right.time || JSON.stringify(left.value).localeCompare(JSON.stringify(right.value))
   );
+}
+
+function sortEvents(events: readonly AnimationEvent[]): readonly AnimationEvent[] {
+  return [...events].sort((left, right) => left.time - right.time || left.type.localeCompare(right.type));
 }
 
 function sortById<T extends { readonly id: string }>(items: readonly T[]): readonly T[] {
