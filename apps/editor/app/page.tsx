@@ -1,16 +1,134 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import type { CSSProperties } from "react";
+
+const modes = ["Rig", "Shape", "Pose", "Timeline", "Curve", "State Machine", "Procedural", "Preview"] as const;
+
+const sampleProject = {
+  name: "Shadow Hero",
+  hierarchy: ["root", "body", "head", "upperArmFront", "forearmFront", "handFront", "thighFront", "shinFront", "footFront", "cloak"],
+  tracks: ["body.scaleY", "head.y", "thighFront.rotation", "thighBack.rotation", "cloak.x"]
+};
+
+type DepthStyle = CSSProperties & { "--depth": number };
+
 export default function EditorPage() {
+  const [mode, setMode] = useState<(typeof modes)[number]>("Rig");
+  const selectedBone = sampleProject.hierarchy[1];
+  const inspectorRows = useMemo(
+    () => [
+      ["Mode", mode],
+      ["Selection", selectedBone],
+      ["X", "0"],
+      ["Y", "-36"],
+      ["Rotation", "0"],
+      ["Scale", "1, 1"]
+    ],
+    [mode, selectedBone]
+  );
+
   return (
     <main className="editorShell" aria-label="Bones editor shell">
       <header className="topBar">
-        <strong>Bones</strong>
-        <span>Editor shell</span>
+        <div className="brand">
+          <strong>Bones</strong>
+          <span>{sampleProject.name}</span>
+        </div>
+        <nav className="modeTabs" aria-label="Editor modes">
+          {modes.map((item) => (
+            <button key={item} className={item === mode ? "active" : ""} type="button" onClick={() => setMode(item)}>
+              {item}
+            </button>
+          ))}
+        </nav>
+        <div className="toolbarActions" aria-label="Playback tools">
+          <button type="button">Play</button>
+          <button type="button">Pause</button>
+          <button type="button">Record</button>
+          <button type="button">Auto Key</button>
+          <button type="button">Snap</button>
+          <select aria-label="Timeline FPS" defaultValue="60">
+            <option value="30">30 FPS</option>
+            <option value="60">60 FPS</option>
+          </select>
+          <button type="button">Export</button>
+        </div>
       </header>
-      <section className="workspace" aria-label="Empty editor workspace">
-        <aside className="panel">Hierarchy</aside>
-        <div className="canvas" aria-label="Editor canvas" />
-        <aside className="panel">Inspector</aside>
+      <section className="workspace" aria-label="Editor workspace">
+        <aside className="panel hierarchyPanel">
+          <header>Hierarchy</header>
+          <ol>
+            {sampleProject.hierarchy.map((item, index) => (
+              <li
+                key={item}
+                className={item === selectedBone ? "selected" : ""}
+                style={{ "--depth": item === "root" ? 0 : index > 2 ? 2 : 1 } as DepthStyle}
+              >
+                {item}
+              </li>
+            ))}
+          </ol>
+        </aside>
+        <section className="canvasPanel" aria-label="Canvas and Pixi preview">
+          <div className="canvasToolbar">
+            <span>{mode}</span>
+            <span>100%</span>
+            <span>Light</span>
+          </div>
+          <div className="canvas" aria-label="PixiJS canvas viewport">
+            <canvas aria-label="PixiJS preview canvas" />
+            <div className="rigPreview" aria-hidden="true">
+              <span className="bone rootBone" />
+              <span className="bone bodyBone" />
+              <span className="bone headBone" />
+              <span className="bone armBone front" />
+              <span className="bone armBone back" />
+              <span className="bone legBone front" />
+              <span className="bone legBone back" />
+              <span className="shape bodyShape" />
+              <span className="shape headShape" />
+              <span className="shape cloakShape" />
+            </div>
+          </div>
+        </section>
+        <aside className="panel inspectorPanel">
+          <header>Inspector</header>
+          <section>
+            <h2>Transform</h2>
+            {inspectorRows.map(([label, value]) => (
+              <label key={label}>
+                <span>{label}</span>
+                <input readOnly value={value} />
+              </label>
+            ))}
+          </section>
+          <section>
+            <h2>Shape</h2>
+            <p>Path / procedural silhouette</p>
+          </section>
+          <section>
+            <h2>Constraints</h2>
+            <p>Foot IK placeholder</p>
+          </section>
+        </aside>
       </section>
-      <footer className="timeline">Timeline</footer>
+      <footer className="timeline" aria-label="Timeline and dopesheet">
+        <header>
+          <strong>Timeline</strong>
+          <span>00:00 / 01:12</span>
+        </header>
+        <div className="tracks">
+          {sampleProject.tracks.map((track, index) => (
+            <div className="track" key={track}>
+              <span>{track}</span>
+              <i style={{ left: `${18 + index * 8}%` }} />
+              <i style={{ left: `${52 + index * 5}%` }} />
+              <i style={{ left: "86%" }} />
+            </div>
+          ))}
+        </div>
+      </footer>
     </main>
   );
 }
