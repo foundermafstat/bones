@@ -20,6 +20,7 @@ import {
   createMoveKeyframeCommand,
   createChangeCurveCommand,
   createTransitionCommand,
+  createUpdateProceduralCommand,
   executeCommand,
   initialEditorProject,
   redo,
@@ -135,6 +136,12 @@ export default function EditorPage() {
           <button type="button" onClick={() => runCommand(createTransitionCommand({ id: "walk-jump", fromStateId: "walk", toStateId: "jump", duration: 0.12, priority: 10, canInterrupt: true, syncMode: "none" }))}>
             Transition
           </button>
+          <button type="button" onClick={() => runCommand(createUpdateProceduralCommand({ breathing: { enabled: true, frequency: 1, amplitude: 1.2, affectedBones: ["body", "head", "cloak"] } }))}>
+            Breathing
+          </button>
+          <button type="button" onClick={() => runCommand(createUpdateProceduralCommand({ footIk: { enabled: true, feet: ["footFront", "footBack"], maxCorrection: 8, blend: 0.75 } }))}>
+            Foot IK
+          </button>
           <button type="button">Play</button>
           <button type="button">Pause</button>
           <button type="button">Record</button>
@@ -228,6 +235,12 @@ export default function EditorPage() {
             <h2>State Machine</h2>
             <p>{editorState.project.stateMachine.transitions.map((transition) => `${transition.fromStateId}->${transition.toStateId}`).join(", ")}</p>
             <p>{Object.keys(editorState.project.stateMachine.parameters).join(", ")}</p>
+          </section>
+          <section>
+            <h2>Procedural</h2>
+            <p>Breathing {editorState.project.procedural.breathing.frequency} Hz</p>
+            <p>Cloak stiffness {editorState.project.procedural.secondaryMotion.stiffness}</p>
+            <p>Foot IK {editorState.project.procedural.footIk.enabled ? "on" : "off"}</p>
           </section>
         </aside>
       </section>

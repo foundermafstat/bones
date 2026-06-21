@@ -16,6 +16,7 @@ export interface EditorProjectState {
   readonly poses: Readonly<Record<string, PoseDefinition>>;
   readonly animations: Readonly<Record<string, AnimationClip>>;
   readonly stateMachine: EditorStateMachine;
+  readonly procedural: ProceduralPresetState;
   readonly dirty: boolean;
   readonly dirtyParts: readonly string[];
 }
@@ -66,6 +67,13 @@ export interface EditorTransition {
   readonly priority: number;
   readonly canInterrupt: boolean;
   readonly syncMode: "none" | "normalizedTime" | "phaseMatch";
+}
+
+export interface ProceduralPresetState {
+  readonly breathing: { readonly enabled: boolean; readonly frequency: number; readonly amplitude: number; readonly affectedBones: readonly string[] };
+  readonly secondaryMotion: { readonly enabled: boolean; readonly target: string; readonly stiffness: number; readonly damping: number; readonly velocityInfluence: number };
+  readonly squashStretch: { readonly enabled: boolean; readonly targetBone: string; readonly landingImpactScale: number };
+  readonly footIk: { readonly enabled: boolean; readonly feet: readonly string[]; readonly maxCorrection: number; readonly blend: number };
 }
 
 export interface EditorCommand {
@@ -140,6 +148,12 @@ export const initialEditorProject: EditorProjectState = {
     ],
     transitions: [{ id: "idle-walk", fromStateId: "idle", toStateId: "walk", duration: 0.18, priority: 0, canInterrupt: true, syncMode: "phaseMatch" }],
     parameters: { absSpeed: 0, velocityY: 0, grounded: true, jumpPressed: false, facing: 1, wallContact: "none", timeInState: 0 }
+  },
+  procedural: {
+    breathing: { enabled: true, frequency: 0.8, amplitude: 1, affectedBones: ["body", "head"] },
+    secondaryMotion: { enabled: true, target: "cloak", stiffness: 0.22, damping: 0.72, velocityInfluence: 0.35 },
+    squashStretch: { enabled: true, targetBone: "body", landingImpactScale: 0.18 },
+    footIk: { enabled: false, feet: ["footFront"], maxCorrection: 8, blend: 0.75 }
   }
 };
 
@@ -452,6 +466,27 @@ export function createTransitionCommand(transition: EditorTransition): EditorCom
         transitions: state.stateMachine.transitions.filter((item) => item.id !== transition.id)
       }
     })
+  };
+}
+
+export function createUpdateProceduralCommand(next: Partial<ProceduralPresetState>): EditorCommand {
+  let previous: ProceduralPresetState | undefined;
+  return {
+    id: "procedural:update",
+    label: "Update procedural preset",
+    do: (state) => {
+      previous = state.procedural;
+      return {
+        ...markDirty(state, "procedural"),
+        procedural: {
+          breathing: { ...state.procedural.breathing, ...next.breathing },
+          secondaryMotion: { ...state.procedural.secondaryMotion, ...next.secondaryMotion },
+          squashStretch: { ...state.procedural.squashStretch, ...next.squashStretch },
+          footIk: { ...state.procedural.footIk, ...next.footIk }
+        }
+      };
+    },
+    undo: (state) => (previous ? { ...markDirty(state, "procedural"), procedural: previous } : state)
   };
 }
 
