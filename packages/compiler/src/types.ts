@@ -130,8 +130,10 @@ export interface CompiledTransitionV1 {
   readonly from: NumericId;
   readonly to: NumericId;
   readonly duration: number;
+  readonly easing: "linear" | "easeIn" | "easeOut" | "easeInOut" | "cubicBezier" | "spring" | "overshoot" | "anticipation";
   readonly priority: number;
   readonly canInterrupt: boolean;
+  readonly syncMode: "none" | "normalizedTime" | "phaseMatch";
   readonly conditions: readonly CompiledConditionV1[];
 }
 
@@ -158,4 +160,9 @@ export interface CompiledLookupTablesV1 {
 export interface CompileOptions {
   readonly rigId?: string;
   readonly defaultFrameRate?: number;
+}
+
+export interface CompileIssue {
+  readonly path: string;
+  readonly message: string;
 }

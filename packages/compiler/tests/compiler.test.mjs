@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   BONES_COMPILED_FORMAT_VERSION,
+  CompileError,
   SchemaValidationError,
   buildLookupTables,
   compileRig,
+  compiledRigProjectJsonSchema,
   flattenKeyframes,
+  migrateCompiledRigProject,
   validateProject
 } from "../dist/index.js";
 
@@ -84,8 +87,10 @@ const sourceProject = {
           fromStateId: "idle",
           toStateId: "idle",
           duration: 0.1,
+          easing: "easeOut",
           priority: 3,
           canInterrupt: false,
+          syncMode: "normalizedTime",
           conditions: [{ parameterId: "absSpeed", operator: ">=", value: 0 }]
         }
       ],
@@ -114,7 +119,16 @@ test("compiles source project into deterministic compiled JSON v1", () => {
   assert.equal(first.animations[0].tracks[0].target, 1);
   assert.deepEqual(first.animations[0].tracks[0].keyframes[1].curve, [0.25, 0.1, 0.25, 1]);
   assert.equal(first.stateMachines[0].transitions[0].conditions[0].parameter, 0);
+  assert.equal(first.stateMachines[0].transitions[0].easing, "easeOut");
+  assert.equal(first.stateMachines[0].transitions[0].syncMode, "normalizedTime");
   assert.equal(JSON.stringify(first).includes("editor"), false);
+});
+
+test("normalizes source array order into stable compiled ids", () => {
+  const reordered = JSON.parse(JSON.stringify(sourceProject));
+  reordered.rigs[0].bones.reverse();
+
+  assert.deepEqual(compileRig(reordered), compileRig(sourceProject));
 });
 
 test("buildLookupTables exposes stable numeric ids", () => {
@@ -141,6 +155,22 @@ test("flattenKeyframes fills interpolation and curve defaults", () => {
 test("invalid source project fails with clear validation error", () => {
   assert.throws(
     () => compileRig({ ...sourceProject, runtimeTarget: "dom" }),
-    (error) => error instanceof SchemaValidationError && /runtimeTarget/.test(error.message)
+    (error) => error instanceof CompileError && /\$\.runtimeTarget/.test(error.message)
   );
+});
+
+test("validateProject keeps source schema validation semantics", () => {
+  assert.throws(
+    () => validateProject({ ...sourceProject, runtimeTarget: "dom" }),
+    (error) => error instanceof SchemaValidationError && /\$\.runtimeTarget/.test(error.message)
+  );
+});
+
+test("exports compiled json schema and compiled migration contract", () => {
+  const compiled = compileRig(sourceProject);
+
+  assert.equal(compiledRigProjectJsonSchema.$id, "https://bones.dev/schemas/compiled-rig-project-1.0.0.json");
+  assert.equal(compiledRigProjectJsonSchema.properties.compiledFormatVersion.const, BONES_COMPILED_FORMAT_VERSION);
+  assert.equal(migrateCompiledRigProject(compiled), compiled);
+  assert.throws(() => migrateCompiledRigProject({ ...compiled, compiledFormatVersion: "0.9.0" }), /Unsupported compiledFormatVersion/);
 });
