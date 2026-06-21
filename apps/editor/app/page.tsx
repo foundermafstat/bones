@@ -27,6 +27,7 @@ import {
   undo,
   type EditorStateContainer
 } from "./editorState";
+import { loadDraft, saveDraft, serializeEditorProject } from "./projectIo";
 
 const modes = ["Rig", "Shape", "Pose", "Timeline", "Curve", "State Machine", "Procedural", "Preview"] as const;
 
@@ -141,6 +142,15 @@ export default function EditorPage() {
           </button>
           <button type="button" onClick={() => runCommand(createUpdateProceduralCommand({ footIk: { enabled: true, feet: ["footFront", "footBack"], maxCorrection: 8, blend: 0.75 } }))}>
             Foot IK
+          </button>
+          <button type="button" onClick={() => saveDraft(editorState.project)}>
+            Save
+          </button>
+          <button type="button" onClick={() => setEditorState((state) => ({ ...state, project: loadDraft() ?? state.project }))}>
+            Load
+          </button>
+          <button type="button" onClick={() => navigator.clipboard?.writeText(serializeEditorProject(editorState.project))}>
+            Copy JSON
           </button>
           <button type="button">Play</button>
           <button type="button">Pause</button>
