@@ -82,7 +82,7 @@ import {
   type EditorProjectState,
   type EditorStateContainer
 } from "./editorState";
-import { loadDraft, saveDraft, serializeEditorProject } from "./projectIo";
+import { createProjectExportBundle, loadDraft, parseImportedProject, saveDraft, serializeEditorProject } from "./projectIo";
 import { PixiPreview } from "./PixiPreview";
 import { vectorizeSvgPart } from "./editorVectorImport";
 import { createInitialControllerState, toAnimationParameters, updatePlatformerController } from "@bones/platformer-preview";
@@ -126,6 +126,7 @@ export default function EditorPage() {
   const [dragPoint, setDragPoint] = useState<{ readonly index: number; readonly point: readonly [number, number] } | null>(null);
   const [dragBone, setDragBone] = useState<{ readonly boneId: string; readonly point: readonly [number, number] } | null>(null);
   const [selectedPoseId, setSelectedPoseId] = useState("idle_neutral");
+  const [ioStatus, setIoStatus] = useState("ready");
   const [editorState, setEditorState] = useState<EditorStateContainer>({
     project: initialEditorProject,
     history: { past: [], future: [] }
@@ -165,6 +166,19 @@ export default function EditorPage() {
     return { state, params: toAnimationParameters(state) };
   }, [previewLevel]);
   const runCommand = (command: Parameters<typeof executeCommand>[1]) => setEditorState((state) => executeCommand(state, command));
+  const exportBundle = () => {
+    const bundle = createProjectExportBundle(editorState.project);
+    setIoStatus(bundle.validation.ok ? `exported ${Object.keys(bundle.files).length} files` : bundle.validation.errors.join("; "));
+    void navigator.clipboard?.writeText(JSON.stringify(bundle.files, null, 2));
+  };
+  const importFromClipboard = async () => {
+    const text = await navigator.clipboard?.readText();
+    const result = parseImportedProject(text ?? "");
+    if (result.project) {
+      setEditorState((state) => ({ ...state, project: result.project! }));
+    }
+    setIoStatus(result.errors.length ? result.errors.join("; ") : "imported source JSON");
+  };
   useEffect(() => {
     const autosave = editorState.project.autosave;
     if (autosave.status !== "pending") {
@@ -234,7 +248,9 @@ export default function EditorPage() {
       actions: [
         { label: "Save", onClick: () => saveDraft(editorState.project) },
         { label: "Load", onClick: () => setEditorState((state) => ({ ...state, project: loadDraft() ?? state.project })) },
-        { label: "Copy JSON", onClick: () => navigator.clipboard?.writeText(serializeEditorProject(editorState.project)) }
+        { label: "Copy JSON", onClick: () => navigator.clipboard?.writeText(serializeEditorProject(editorState.project)) },
+        { label: "Export Bundle", onClick: exportBundle },
+        { label: "Import Clipboard", onClick: () => void importFromClipboard() }
       ]
     }
   ];
@@ -247,9 +263,10 @@ export default function EditorPage() {
       ["Y", String(selectedTransform.y)],
       ["Rotation", selectedTransform.rotation.toFixed(2)],
       ["Scale", `${selectedTransform.scaleX}, ${selectedTransform.scaleY}`],
+      ["IO", ioStatus],
       ["Dirty", editorState.project.dirty ? editorState.project.dirtyParts.join(", ") : "clean"]
     ],
-    [editorState.project.dirty, editorState.project.dirtyParts, mode, selectedBone, selectedTransform]
+    [editorState.project.dirty, editorState.project.dirtyParts, ioStatus, mode, selectedBone, selectedTransform]
   );
 
   return (
@@ -312,7 +329,7 @@ export default function EditorPage() {
                 </SelectGroup>
               </SelectContent>
             </Select>
-            <Button size="sm" variant="outline" type="button">
+            <Button size="sm" variant="outline" type="button" onClick={exportBundle}>
               Export
             </Button>
           </div>
