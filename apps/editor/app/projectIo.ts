@@ -1,4 +1,5 @@
 import type { EditorProjectState } from "./editorState";
+import { fromSourceProject, toSourceProject } from "./editorSourceProject";
 
 export const EDITOR_DRAFT_KEY = "bones:editor:draft:v1";
 export const CURRENT_EDITOR_SCHEMA_VERSION = "1.0.0";
@@ -10,18 +11,18 @@ export interface SerializedEditorProject {
 }
 
 export function serializeEditorProject(project: EditorProjectState): string {
-  return JSON.stringify({ schemaVersion: CURRENT_EDITOR_SCHEMA_VERSION, savedAt: new Date().toISOString(), project } satisfies SerializedEditorProject, null, 2);
+  return JSON.stringify(toSourceProject(project), null, 2);
 }
 
 export function parseEditorProject(json: string): EditorProjectState {
-  const parsed = JSON.parse(json) as Partial<SerializedEditorProject>;
-  if (!parsed.project) {
-    throw new Error("Editor project JSON is missing project data.");
+  const parsed = JSON.parse(json) as Partial<SerializedEditorProject> & Record<string, unknown>;
+  if (parsed.project) {
+    if (parsed.schemaVersion && parsed.schemaVersion !== CURRENT_EDITOR_SCHEMA_VERSION) {
+      return migrateEditorProject(parsed);
+    }
+    return parsed.project;
   }
-  if (parsed.schemaVersion && parsed.schemaVersion !== CURRENT_EDITOR_SCHEMA_VERSION) {
-    return migrateEditorProject(parsed);
-  }
-  return parsed.project;
+  return fromSourceProject(parsed);
 }
 
 export function saveDraft(project: EditorProjectState, storage: Pick<Storage, "setItem"> = window.localStorage): void {
