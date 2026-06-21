@@ -161,10 +161,26 @@ export interface EditorTransitionCondition {
 }
 
 export interface ProceduralPresetState {
-  readonly breathing: { readonly enabled: boolean; readonly frequency: number; readonly amplitude: number; readonly affectedBones: readonly string[] };
-  readonly secondaryMotion: { readonly enabled: boolean; readonly target: string; readonly stiffness: number; readonly damping: number; readonly velocityInfluence: number };
-  readonly squashStretch: { readonly enabled: boolean; readonly targetBone: string; readonly landingImpactScale: number };
-  readonly footIk: { readonly enabled: boolean; readonly feet: readonly string[]; readonly maxCorrection: number; readonly blend: number };
+  readonly inputs: { readonly velocityX: number; readonly velocityY: number; readonly gravity: number; readonly wind: number; readonly grounded: boolean; readonly jumpStart: boolean; readonly landHeavy: boolean };
+  readonly breathing: { readonly enabled: boolean; readonly frequency: number; readonly amplitude: number; readonly affectedBones: readonly string[]; readonly affectedBoneTransforms: Readonly<Record<string, Partial<BoneTransform>>> };
+  readonly secondaryMotion: { readonly enabled: boolean; readonly target: string; readonly stiffness: number; readonly damping: number; readonly velocityInfluence: number; readonly gravityInfluence: number; readonly windInfluence: number; readonly maxOffset: number };
+  readonly squashStretch: { readonly enabled: boolean; readonly targetBone: string; readonly landingImpactScale: number; readonly rules: readonly SquashStretchRule[] };
+  readonly footIk: { readonly enabled: boolean; readonly feet: readonly string[]; readonly footChains: readonly FootIkChain[]; readonly maxCorrection: number; readonly blend: number };
+}
+
+export interface SquashStretchRule {
+  readonly condition: string;
+  readonly scaleX: number;
+  readonly scaleY: number;
+  readonly duration: number;
+}
+
+export interface FootIkChain {
+  readonly footBone: string;
+  readonly shinBone?: string;
+  readonly thighBone?: string;
+  readonly raycastOffsetX: number;
+  readonly raycastHeight: number;
 }
 
 export type DirtyScopeName = "project" | "bones" | "parts" | "animations" | "poses" | "stateMachine" | "procedural";
@@ -365,10 +381,11 @@ export const initialEditorProject: EditorProjectState = {
     preview: { fromStateId: "idle", toStateId: "walk", weight: 0.5 }
   },
   procedural: {
-    breathing: { enabled: true, frequency: 0.8, amplitude: 1, affectedBones: ["body", "head"] },
-    secondaryMotion: { enabled: true, target: "cloak", stiffness: 0.22, damping: 0.72, velocityInfluence: 0.35 },
-    squashStretch: { enabled: true, targetBone: "body", landingImpactScale: 0.18 },
-    footIk: { enabled: false, feet: ["footFront"], maxCorrection: 8, blend: 0.75 }
+    inputs: { velocityX: 0, velocityY: 0, gravity: 1, wind: 0, grounded: true, jumpStart: false, landHeavy: false },
+    breathing: { enabled: true, frequency: 0.8, amplitude: 1, affectedBones: ["body", "head"], affectedBoneTransforms: { body: { scaleY: 0.025, y: -0.8 }, head: { y: -0.5 }, upperArmFront: { rotation: 0.025 }, upperArmBack: { rotation: -0.018 } } },
+    secondaryMotion: { enabled: true, target: "cloak", stiffness: 0.22, damping: 0.72, velocityInfluence: 0.35, gravityInfluence: 0.18, windInfluence: 0.1, maxOffset: 14 },
+    squashStretch: { enabled: true, targetBone: "body", landingImpactScale: 0.18, rules: [{ condition: "jumpStart", scaleX: 0.92, scaleY: 1.12, duration: 0.08 }, { condition: "landHeavy", scaleX: 1.14, scaleY: 0.82, duration: 0.12 }] },
+    footIk: { enabled: false, feet: ["footFront"], footChains: [{ footBone: "footFront", shinBone: "shinFront", thighBone: "thighFront", raycastOffsetX: 4, raycastHeight: 20 }, { footBone: "footBack", shinBone: "shinBack", thighBone: "thighBack", raycastOffsetX: -4, raycastHeight: 20 }], maxCorrection: 8, blend: 0.75 }
   },
   dirtyScopes: cleanDirtyScopes,
   autosave: initialAutosaveState
@@ -1238,6 +1255,7 @@ export function createUpdateProceduralCommand(next: Partial<ProceduralPresetStat
       return {
         ...markDirty(state, "procedural"),
         procedural: {
+          inputs: { ...state.procedural.inputs, ...next.inputs },
           breathing: { ...state.procedural.breathing, ...next.breathing },
           secondaryMotion: { ...state.procedural.secondaryMotion, ...next.secondaryMotion },
           squashStretch: { ...state.procedural.squashStretch, ...next.squashStretch },

@@ -65,6 +65,7 @@ export function toSourceProject(project: EditorProjectState): RigProject {
     ],
     animations: Object.values(project.animations).map(toSourceAnimationClip),
     poses: Object.values(project.poses).map((pose) => toSourcePose(pose, rigId)),
+    proceduralPresets: proceduralPresetsToSource(project.procedural),
     stateMachines: [
       {
         id: stateMachineId,
@@ -471,6 +472,26 @@ function proceduralToJson(procedural: ProceduralPresetState) {
   };
 }
 
+function proceduralPresetsToSource(procedural: ProceduralPresetState) {
+  return [
+    { id: "breathing", type: "breathing" as const, enabled: procedural.breathing.enabled, frequency: procedural.breathing.frequency, amplitude: procedural.breathing.amplitude, affectedBones: procedural.breathing.affectedBoneTransforms },
+    {
+      id: "cloak-secondary",
+      type: "secondaryMotion" as const,
+      enabled: procedural.secondaryMotion.enabled,
+      target: procedural.secondaryMotion.target,
+      stiffness: procedural.secondaryMotion.stiffness,
+      damping: procedural.secondaryMotion.damping,
+      velocityInfluence: procedural.secondaryMotion.velocityInfluence,
+      gravityInfluence: procedural.secondaryMotion.gravityInfluence,
+      windInfluence: procedural.secondaryMotion.windInfluence,
+      maxOffset: procedural.secondaryMotion.maxOffset
+    },
+    { id: "squash-stretch", type: "squashStretch" as const, enabled: procedural.squashStretch.enabled, targetBone: procedural.squashStretch.targetBone, landingImpactScale: procedural.squashStretch.landingImpactScale, rules: procedural.squashStretch.rules },
+    { id: "foot-ik", type: "footIK" as const, enabled: procedural.footIk.enabled, feet: procedural.footIk.footChains, maxCorrection: procedural.footIk.maxCorrection, blend: procedural.footIk.blend }
+  ];
+}
+
 function dirtyScopesToJson(dirtyScopes: DirtyScopes) {
   return {
     project: [...dirtyScopes.project],
@@ -524,6 +545,7 @@ function readProcedural(value: unknown): ProceduralPresetState {
     return initialEditorProject.procedural;
   }
   return {
+    inputs: isRecord(value.inputs) ? { ...initialEditorProject.procedural.inputs, ...value.inputs } : initialEditorProject.procedural.inputs,
     breathing: isRecord(value.breathing) ? { ...initialEditorProject.procedural.breathing, ...value.breathing } : initialEditorProject.procedural.breathing,
     secondaryMotion: isRecord(value.secondaryMotion) ? { ...initialEditorProject.procedural.secondaryMotion, ...value.secondaryMotion } : initialEditorProject.procedural.secondaryMotion,
     squashStretch: isRecord(value.squashStretch) ? { ...initialEditorProject.procedural.squashStretch, ...value.squashStretch } : initialEditorProject.procedural.squashStretch,

@@ -208,8 +208,8 @@ export default function EditorPage() {
     {
       label: "Procedural",
       actions: [
-        { label: "Breathing", onClick: () => runCommand(createUpdateProceduralCommand({ breathing: { enabled: true, frequency: 1, amplitude: 1.2, affectedBones: ["body", "head", "cloak"] } })) },
-        { label: "Foot IK", onClick: () => runCommand(createUpdateProceduralCommand({ footIk: { enabled: true, feet: ["footFront", "footBack"], maxCorrection: 8, blend: 0.75 } })) }
+        { label: "Breathing", onClick: () => runCommand(createUpdateProceduralCommand({ breathing: { ...editorState.project.procedural.breathing, enabled: true, frequency: 1, amplitude: 1.2, affectedBones: ["body", "head", "cloak"] } })) },
+        { label: "Foot IK", onClick: () => runCommand(createUpdateProceduralCommand({ footIk: { ...editorState.project.procedural.footIk, enabled: true, feet: ["footFront", "footBack"], maxCorrection: 8, blend: 0.75 } })) }
       ]
     },
     {
@@ -686,8 +686,22 @@ export default function EditorPage() {
                 </CardHeader>
                 <CardContent className="flex flex-col gap-1">
                   <p className="text-xs text-muted-foreground">Breathing {editorState.project.procedural.breathing.frequency} Hz</p>
-                  <p className="text-xs text-muted-foreground">Cloak stiffness {editorState.project.procedural.secondaryMotion.stiffness}</p>
+                  <p className="text-xs text-muted-foreground">Cloak stiffness {editorState.project.procedural.secondaryMotion.stiffness} / wind {editorState.project.procedural.secondaryMotion.windInfluence}</p>
                   <p className="text-xs text-muted-foreground">Foot IK {editorState.project.procedural.footIk.enabled ? "on" : "off"}</p>
+                  <div className="grid grid-cols-2 gap-1">
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createUpdateProceduralCommand({ inputs: { ...editorState.project.procedural.inputs, velocityX: 120, velocityY: 18, wind: 0.4 } }))}>
+                      Velocity
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createUpdateProceduralCommand({ secondaryMotion: { ...editorState.project.procedural.secondaryMotion, gravityInfluence: 0.22, windInfluence: 0.18, maxOffset: 18 } }))}>
+                      Cloak Lag
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createUpdateProceduralCommand({ squashStretch: { ...editorState.project.procedural.squashStretch, rules: [...editorState.project.procedural.squashStretch.rules, { condition: "damageHit", scaleX: 1.08, scaleY: 0.9, duration: 0.1 }] } }))}>
+                      Squash Rule
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createUpdateProceduralCommand({ footIk: { ...editorState.project.procedural.footIk, enabled: true, maxCorrection: 10, blend: 0.85 } }))}>
+                      IK Tune
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
               <Card size="sm">
