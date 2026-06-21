@@ -123,9 +123,23 @@ export interface TimelineState {
 
 export interface EditorStateMachine {
   readonly initialStateId: string;
-  readonly states: readonly { readonly id: string; readonly clipId: string }[];
+  readonly states: readonly EditorStateNode[];
   readonly transitions: readonly EditorTransition[];
   readonly parameters: Readonly<Record<string, number | boolean | string>>;
+  readonly preview: { readonly fromStateId: string; readonly toStateId: string; readonly weight: number };
+}
+
+export interface EditorStateNode {
+  readonly id: string;
+  readonly clipId: string;
+  readonly blendTree?: BlendTree1D;
+  readonly tags?: readonly string[];
+}
+
+export interface BlendTree1D {
+  readonly type: "1d";
+  readonly parameter: string;
+  readonly children: readonly { readonly threshold: number; readonly clipId: string }[];
 }
 
 export interface EditorTransition {
@@ -133,9 +147,17 @@ export interface EditorTransition {
   readonly fromStateId: string;
   readonly toStateId: string;
   readonly duration: number;
+  readonly easing: "linear" | "easeIn" | "easeOut" | "easeInOut" | "cubicBezier" | "spring" | "overshoot" | "anticipation";
   readonly priority: number;
   readonly canInterrupt: boolean;
   readonly syncMode: "none" | "normalizedTime" | "phaseMatch";
+  readonly conditions: readonly EditorTransitionCondition[];
+}
+
+export interface EditorTransitionCondition {
+  readonly parameter: string;
+  readonly op: "==" | "!=" | ">" | ">=" | "<" | "<=";
+  readonly value: number | boolean | string;
 }
 
 export interface ProceduralPresetState {
@@ -325,13 +347,22 @@ export const initialEditorProject: EditorProjectState = {
     initialStateId: "idle",
     states: [
       { id: "idle", clipId: "idle" },
+      { id: "locomotion", clipId: "walk", blendTree: { type: "1d", parameter: "absSpeed", children: [{ threshold: 0, clipId: "idle" }, { threshold: 80, clipId: "walk" }, { threshold: 150, clipId: "walk" }] }, tags: ["blendTree"] },
       { id: "walk", clipId: "walk" },
       { id: "jump", clipId: "jump" },
       { id: "fall", clipId: "fall" },
       { id: "land", clipId: "land" }
     ],
-    transitions: [{ id: "idle-walk", fromStateId: "idle", toStateId: "walk", duration: 0.18, priority: 0, canInterrupt: true, syncMode: "phaseMatch" }],
-    parameters: { absSpeed: 0, velocityY: 0, grounded: true, jumpPressed: false, facing: 1, wallContact: "none", timeInState: 0 }
+    transitions: [
+      { id: "idle-walk", fromStateId: "idle", toStateId: "walk", duration: 0.18, easing: "easeOut", priority: 0, canInterrupt: true, syncMode: "phaseMatch", conditions: [{ parameter: "absSpeed", op: ">", value: 12 }] },
+      { id: "walk-idle", fromStateId: "walk", toStateId: "idle", duration: 0.16, easing: "easeInOut", priority: 0, canInterrupt: true, syncMode: "phaseMatch", conditions: [{ parameter: "absSpeed", op: "<=", value: 8 }] },
+      { id: "any-jump", fromStateId: "idle", toStateId: "jump", duration: 0.08, easing: "anticipation", priority: 10, canInterrupt: true, syncMode: "none", conditions: [{ parameter: "jumpPressed", op: "==", value: true }] },
+      { id: "jump-fall", fromStateId: "jump", toStateId: "fall", duration: 0.12, easing: "easeIn", priority: 5, canInterrupt: true, syncMode: "normalizedTime", conditions: [{ parameter: "velocityY", op: ">", value: 0 }] },
+      { id: "fall-land", fromStateId: "fall", toStateId: "land", duration: 0.08, easing: "overshoot", priority: 8, canInterrupt: true, syncMode: "none", conditions: [{ parameter: "grounded", op: "==", value: true }] },
+      { id: "land-idle", fromStateId: "land", toStateId: "idle", duration: 0.22, easing: "easeOut", priority: 0, canInterrupt: false, syncMode: "none", conditions: [{ parameter: "timeInState", op: ">", value: 0.2 }] }
+    ],
+    parameters: { speed: 0, absSpeed: 0, velocityX: 0, velocityY: 0, grounded: true, wasGrounded: true, landingImpact: 0, joystickX: 0, joystickY: 0, joystickMagnitude: 0, jumpPressed: false, attackPressed: false, facing: 1, wallContact: "none", timeInState: 0 },
+    preview: { fromStateId: "idle", toStateId: "walk", weight: 0.5 }
   },
   procedural: {
     breathing: { enabled: true, frequency: 0.8, amplitude: 1, affectedBones: ["body", "head"] },
@@ -1115,6 +1146,85 @@ export function createTransitionCommand(transition: EditorTransition): EditorCom
         transitions: state.stateMachine.transitions.filter((item) => item.id !== transition.id)
       }
     })
+  };
+}
+
+export function createStateMachineStateCommand(stateNode: EditorStateNode): EditorCommand {
+  return {
+    id: `state:${stateNode.id}`,
+    label: "Create state",
+    do: (state) => ({
+      ...markDirty(state, stateNode.id, "stateMachine"),
+      stateMachine: { ...state.stateMachine, states: state.stateMachine.states.some((item) => item.id === stateNode.id) ? state.stateMachine.states : [...state.stateMachine.states, stateNode] }
+    }),
+    undo: (state) => ({ ...markDirty(state, stateNode.id, "stateMachine"), stateMachine: { ...state.stateMachine, states: state.stateMachine.states.filter((item) => item.id !== stateNode.id) } })
+  };
+}
+
+export function createUpdateTransitionCommand(transitionId: string, patch: Partial<EditorTransition>): EditorCommand {
+  let previous: EditorTransition | undefined;
+  return {
+    id: `transition-update:${transitionId}`,
+    label: "Update transition",
+    do: (state) => {
+      previous = state.stateMachine.transitions.find((transition) => transition.id === transitionId);
+      return {
+        ...markDirty(state, transitionId, "stateMachine"),
+        stateMachine: { ...state.stateMachine, transitions: state.stateMachine.transitions.map((transition) => (transition.id === transitionId ? { ...transition, ...patch } : transition)) }
+      };
+    },
+    undo: (state) => (previous ? { ...markDirty(state, transitionId, "stateMachine"), stateMachine: { ...state.stateMachine, transitions: state.stateMachine.transitions.map((transition) => (transition.id === transitionId ? previous! : transition)) } } : state)
+  };
+}
+
+export function createSetTransitionConditionsCommand(transitionId: string, conditions: readonly EditorTransitionCondition[]): EditorCommand {
+  return createUpdateTransitionCommand(transitionId, { conditions });
+}
+
+export function createSetStateMachineParameterCommand(parameter: string, value: number | boolean | string): EditorCommand {
+  let previous: number | boolean | string | undefined;
+  return {
+    id: `state-param:${parameter}`,
+    label: "Set state machine parameter",
+    do: (state) => {
+      previous = state.stateMachine.parameters[parameter];
+      return { ...markDirty(state, parameter, "stateMachine"), stateMachine: { ...state.stateMachine, parameters: { ...state.stateMachine.parameters, [parameter]: value } } };
+    },
+    undo: (state) => {
+      const parameters = { ...state.stateMachine.parameters };
+      if (previous === undefined) {
+        delete parameters[parameter];
+      } else {
+        parameters[parameter] = previous;
+      }
+      return { ...markDirty(state, parameter, "stateMachine"), stateMachine: { ...state.stateMachine, parameters } };
+    }
+  };
+}
+
+export function createSetBlendTreeCommand(stateId: string, blendTree: BlendTree1D): EditorCommand {
+  let previous: EditorStateNode | undefined;
+  return {
+    id: `blend-tree:${stateId}`,
+    label: "Set blend tree",
+    do: (state) => {
+      previous = state.stateMachine.states.find((item) => item.id === stateId);
+      return { ...markDirty(state, stateId, "stateMachine"), stateMachine: { ...state.stateMachine, states: state.stateMachine.states.map((item) => (item.id === stateId ? { ...item, blendTree } : item)) } };
+    },
+    undo: (state) => (previous ? { ...markDirty(state, stateId, "stateMachine"), stateMachine: { ...state.stateMachine, states: state.stateMachine.states.map((item) => (item.id === stateId ? previous! : item)) } } : state)
+  };
+}
+
+export function createSetStateMachinePreviewCommand(fromStateId: string, toStateId: string, weight: number): EditorCommand {
+  let previous: EditorStateMachine["preview"] | undefined;
+  return {
+    id: `state-preview:${fromStateId}:${toStateId}:${weight}`,
+    label: "Set state machine preview",
+    do: (state) => {
+      previous = state.stateMachine.preview;
+      return { ...state, stateMachine: { ...state.stateMachine, preview: { fromStateId, toStateId, weight: Math.max(0, Math.min(1, weight)) } } };
+    },
+    undo: (state) => (previous ? { ...state, stateMachine: { ...state.stateMachine, preview: previous } } : state)
   };
 }
 

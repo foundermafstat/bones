@@ -66,7 +66,13 @@ import {
   createReverseClipCommand,
   createRetimeClipCommand,
   createSetTimelineSelectionCommand,
+  createSetBlendTreeCommand,
+  createSetStateMachineParameterCommand,
+  createSetStateMachinePreviewCommand,
+  createSetTransitionConditionsCommand,
+  createStateMachineStateCommand,
   createTransitionCommand,
+  createUpdateTransitionCommand,
   createUpdateProceduralCommand,
   executeCommand,
   initialEditorProject,
@@ -196,7 +202,7 @@ export default function EditorPage() {
         { label: "Move Key", disabled: !activeTrack.length, onClick: () => runCommand(createMoveKeyframeCommand(activeClip.id, "body.scaleY", activeTrack[0]?.id ?? "", 0.12)) },
         { label: "Delete Key", disabled: !activeTrack.length, variant: "destructive", onClick: () => runCommand(createDeleteKeyframeCommand(activeClip.id, "body.scaleY", activeTrack[0]?.id ?? "")) },
         { label: "Curve", disabled: !activeTrack.length, onClick: () => runCommand(createChangeCurveCommand(activeClip.id, "body.scaleY", activeTrack[0]?.id ?? "", "bezier", [0.2, 0.8, 0.2, 1])) },
-        { label: "Transition", onClick: () => runCommand(createTransitionCommand({ id: "walk-jump", fromStateId: "walk", toStateId: "jump", duration: 0.12, priority: 10, canInterrupt: true, syncMode: "none" })) }
+        { label: "Transition", onClick: () => runCommand(createTransitionCommand({ id: "walk-jump", fromStateId: "walk", toStateId: "jump", duration: 0.12, easing: "anticipation", priority: 10, canInterrupt: true, syncMode: "none", conditions: [{ parameter: "jumpPressed", op: "==", value: true }] })) }
       ]
     },
     {
@@ -644,6 +650,34 @@ export default function EditorPage() {
                 <CardContent className="flex flex-col gap-1">
                   <p className="line-clamp-2 text-xs text-muted-foreground">{editorState.project.stateMachine.transitions.map((transition) => `${transition.fromStateId}->${transition.toStateId}`).join(", ")}</p>
                   <p className="line-clamp-2 text-xs text-muted-foreground">{Object.keys(editorState.project.stateMachine.parameters).join(", ")}</p>
+                  <div className="grid grid-cols-2 gap-1">
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createStateMachineStateCommand({ id: "run", clipId: "walk", tags: ["locomotion"] }))}>
+                      State +
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createTransitionCommand({ id: "walk-run", fromStateId: "walk", toStateId: "run", duration: 0.18, easing: "easeOut", priority: 1, canInterrupt: true, syncMode: "phaseMatch", conditions: [{ parameter: "absSpeed", op: ">", value: 120 }] }))}>
+                      Link +
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createUpdateTransitionCommand("idle-walk", { easing: "easeInOut", duration: 0.22 }))}>
+                      Ease
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetTransitionConditionsCommand("idle-walk", [{ parameter: "absSpeed", op: ">", value: 10 }]))}>
+                      Condition
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetStateMachineParameterCommand("absSpeed", 96))}>
+                      Param
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetBlendTreeCommand("locomotion", { type: "1d", parameter: "absSpeed", children: [{ threshold: 0, clipId: "idle" }, { threshold: 80, clipId: "walk" }, { threshold: 150, clipId: "walk" }] }))}>
+                      Blend 1D
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetStateMachinePreviewCommand("idle", "walk", Math.min(1, editorState.project.stateMachine.preview.weight + 0.1)))}>
+                      Preview
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {editorState.project.stateMachine.preview.fromStateId}
+                    {"->"}
+                    {editorState.project.stateMachine.preview.toStateId} {editorState.project.stateMachine.preview.weight.toFixed(1)}
+                  </p>
                 </CardContent>
               </Card>
               <Card size="sm">

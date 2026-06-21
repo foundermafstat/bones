@@ -19,11 +19,17 @@ import {
   createRenameBoneCommand,
   createReverseClipCommand,
   createRotateBoneCommand,
+  createSetBlendTreeCommand,
   createSetCurvePreviewCommand,
+  createSetStateMachineParameterCommand,
+  createSetStateMachinePreviewCommand,
+  createSetTransitionConditionsCommand,
   createSetKeyframeTangentsCommand,
   createRetimeClipCommand,
   createSetTimelineSelectionCommand,
   createSetParentCommand,
+  createStateMachineStateCommand,
+  createUpdateTransitionCommand,
   executeCommand,
   initialEditorProject,
   redo,
@@ -228,4 +234,27 @@ test("curve presets, tangents, and preview state are undoable", () => {
 
   const undone = undo(preview);
   assert.deepEqual(undone.project.timeline.curvePreview, tangent.project.timeline.curvePreview);
+});
+
+test("state machine graph commands edit states, transitions, parameters, blend tree, and preview", () => {
+  const withState = executeCommand(freshContainer(), createStateMachineStateCommand({ id: "run", clipId: "walk", tags: ["locomotion"] }));
+  assert.ok(withState.project.stateMachine.states.some((state) => state.id === "run"));
+
+  const eased = executeCommand(withState, createUpdateTransitionCommand("idle-walk", { easing: "easeInOut", duration: 0.22 }));
+  assert.equal(eased.project.stateMachine.transitions.find((transition) => transition.id === "idle-walk").easing, "easeInOut");
+
+  const conditioned = executeCommand(eased, createSetTransitionConditionsCommand("idle-walk", [{ parameter: "absSpeed", op: ">", value: 10 }]));
+  assert.deepEqual(conditioned.project.stateMachine.transitions.find((transition) => transition.id === "idle-walk").conditions, [{ parameter: "absSpeed", op: ">", value: 10 }]);
+
+  const parameter = executeCommand(conditioned, createSetStateMachineParameterCommand("absSpeed", 96));
+  assert.equal(parameter.project.stateMachine.parameters.absSpeed, 96);
+
+  const blend = executeCommand(parameter, createSetBlendTreeCommand("locomotion", { type: "1d", parameter: "absSpeed", children: [{ threshold: 0, clipId: "idle" }, { threshold: 80, clipId: "walk" }, { threshold: 150, clipId: "walk" }] }));
+  assert.equal(blend.project.stateMachine.states.find((state) => state.id === "locomotion").blendTree.children.length, 3);
+
+  const preview = executeCommand(blend, createSetStateMachinePreviewCommand("idle", "walk", 0.9));
+  assert.deepEqual(preview.project.stateMachine.preview, { fromStateId: "idle", toStateId: "walk", weight: 0.9 });
+
+  const undone = undo(preview);
+  assert.deepEqual(undone.project.stateMachine.preview, blend.project.stateMachine.preview);
 });

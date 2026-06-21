@@ -70,13 +70,14 @@ export function toSourceProject(project: EditorProjectState): RigProject {
         id: stateMachineId,
         name: "Shadow Hero State Machine",
         initialStateId: project.stateMachine.initialStateId,
-        states: project.stateMachine.states.map((state) => ({ id: state.id, name: state.id, clipId: state.clipId })),
+        states: project.stateMachine.states.map((state) => ({ id: state.id, name: state.id, clipId: state.clipId, ...(state.blendTree ? { blendTree: state.blendTree } : {}), editor: { tags: state.tags ?? [] } })),
         transitions: project.stateMachine.transitions.map(toSourceTransition),
         parameters: Object.entries(project.stateMachine.parameters).map(([id, value]) => ({
           id,
           type: typeof value === "boolean" ? "boolean" : typeof value === "number" ? "number" : "string",
           defaultValue: value
-        }))
+        })),
+        editor: { custom: { preview: project.stateMachine.preview } }
       }
     ],
     editor: {
@@ -131,17 +132,20 @@ export function fromSourceProject(sourceInput: unknown): EditorProjectState {
     stateMachine: machine
       ? {
           initialStateId: machine.initialStateId,
-          states: machine.states.map((state) => ({ id: state.id, clipId: state.clipId ?? "" })),
+          states: machine.states.map((state) => ({ id: state.id, clipId: state.clipId ?? "", ...(state.blendTree ? { blendTree: state.blendTree } : {}), tags: state.editor?.tags ?? [] })),
           transitions: (machine.transitions ?? []).map((transition) => ({
             id: transition.id,
             fromStateId: transition.fromStateId,
             toStateId: transition.toStateId,
             duration: transition.duration,
+            easing: transition.easing ?? "linear",
             priority: transition.priority ?? 0,
             canInterrupt: transition.canInterrupt ?? true,
-            syncMode: "none"
+            syncMode: transition.syncMode ?? "none",
+            conditions: (transition.conditions ?? []).map((condition) => ({ parameter: condition.parameterId, op: condition.operator, value: condition.value }))
           })),
-          parameters: Object.fromEntries((machine.parameters ?? []).map((parameter) => [parameter.id, parameter.defaultValue]))
+          parameters: Object.fromEntries((machine.parameters ?? []).map((parameter) => [parameter.id, parameter.defaultValue])),
+          preview: readStateMachinePreview(machine.editor?.custom?.preview)
         }
       : initialEditorProject.stateMachine,
     procedural,
@@ -348,8 +352,11 @@ function toSourceTransition(transition: EditorTransition) {
     fromStateId: transition.fromStateId,
     toStateId: transition.toStateId,
     duration: transition.duration,
+    easing: transition.easing,
     priority: transition.priority,
-    canInterrupt: transition.canInterrupt
+    canInterrupt: transition.canInterrupt,
+    syncMode: transition.syncMode,
+    conditions: transition.conditions.map((condition) => ({ parameterId: condition.parameter, operator: condition.op, value: condition.value }))
   };
 }
 
@@ -577,6 +584,17 @@ function readTimeline(value: unknown): TimelineState {
           weight: numberValue(value.curvePreview.weight) ?? 0.5
         }
       : initialEditorProject.timeline.curvePreview
+  };
+}
+
+function readStateMachinePreview(value: unknown): EditorProjectState["stateMachine"]["preview"] {
+  if (!isRecord(value)) {
+    return initialEditorProject.stateMachine.preview;
+  }
+  return {
+    fromStateId: stringValue(value.fromStateId) ?? initialEditorProject.stateMachine.preview.fromStateId,
+    toStateId: stringValue(value.toStateId) ?? initialEditorProject.stateMachine.preview.toStateId,
+    weight: numberValue(value.weight) ?? initialEditorProject.stateMachine.preview.weight
   };
 }
 

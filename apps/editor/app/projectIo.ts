@@ -48,6 +48,7 @@ function normalizeEditorProject(project: EditorProjectState): EditorProjectState
     ...project,
     poseClipboard: project.poseClipboard ?? null,
     timeline: project.timeline ?? initialEditorProject.timeline,
+    stateMachine: { ...initialEditorProject.stateMachine, ...project.stateMachine, preview: project.stateMachine.preview ?? initialEditorProject.stateMachine.preview },
     dirtyScopes: project.dirtyScopes ?? initialEditorProject.dirtyScopes,
     autosave: project.autosave ?? initialEditorProject.autosave
   };
