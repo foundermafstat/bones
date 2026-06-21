@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "pixi.js": ["../../apps/editor/node_modules/pixi.js/lib/index.d.ts"],
+      "@bones/runtime-pixi": ["../../packages/runtime-pixi/dist/index.d.ts"],
+      "@bones/ldtk-adapter": ["../../packages/ldtk-adapter/dist/index.d.ts"],
+      "@bones/platformer-preview": ["../../packages/platformer-preview/dist/index.d.ts"]
+    }
+  },
+  "include": ["integration.ts"]
+}

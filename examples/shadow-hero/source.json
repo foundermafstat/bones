@@ -1,0 +1,182 @@
+{
+  "schemaVersion": "1.0.0",
+  "runtimeTarget": "pixi-v8",
+  "id": "shadow-hero-source",
+  "name": "Shadow Hero RC Source",
+  "units": "pixels",
+  "defaultFrameRate": 60,
+  "rigs": [
+    {
+      "id": "shadowHero",
+      "name": "Shadow Hero",
+      "rootBoneId": "root",
+      "bones": [
+        { "id": "root", "name": "Root", "local": { "x": 0, "y": 0, "rotation": 0, "scaleX": 1, "scaleY": 1 }, "length": 0 },
+        { "id": "body", "name": "Body", "parentId": "root", "local": { "x": 0, "y": -36, "rotation": 0, "scaleX": 1, "scaleY": 1 }, "length": 48 },
+        { "id": "head", "name": "Head", "parentId": "body", "local": { "x": 0, "y": -34, "rotation": 0, "scaleX": 1, "scaleY": 1 }, "length": 18 },
+        { "id": "cloak", "name": "Cloak", "parentId": "body", "local": { "x": -18, "y": -12, "rotation": -0.08, "scaleX": 1, "scaleY": 1 }, "length": 70 },
+        { "id": "thighFront", "name": "Thigh Front", "parentId": "root", "local": { "x": 8, "y": -6, "rotation": 1.36, "scaleX": 1, "scaleY": 1 }, "length": 26 },
+        { "id": "shinFront", "name": "Shin Front", "parentId": "thighFront", "local": { "x": 24, "y": 0, "rotation": -0.08, "scaleX": 1, "scaleY": 1 }, "length": 26 },
+        { "id": "footFront", "name": "Foot Front", "parentId": "shinFront", "local": { "x": 24, "y": 0, "rotation": -1.18, "scaleX": 1, "scaleY": 1 }, "length": 12 },
+        { "id": "thighBack", "name": "Thigh Back", "parentId": "root", "local": { "x": -8, "y": -6, "rotation": 1.72, "scaleX": 1, "scaleY": 1 }, "length": 26 },
+        { "id": "shinBack", "name": "Shin Back", "parentId": "thighBack", "local": { "x": 24, "y": 0, "rotation": 0.16, "scaleX": 1, "scaleY": 1 }, "length": 26 },
+        { "id": "footBack", "name": "Foot Back", "parentId": "shinBack", "local": { "x": 24, "y": 0, "rotation": -1.1, "scaleX": 1, "scaleY": 1 }, "length": 12 }
+      ],
+      "parts": [
+        {
+          "id": "bodyShape",
+          "name": "Body Silhouette",
+          "boneId": "body",
+          "type": "procedural",
+          "drawOrder": 10,
+          "fill": { "color": "#050505", "alpha": 1 },
+          "procedural": { "preset": "organic-blob", "params": { "width": 38, "height": 62, "taper": 0.18 } }
+        },
+        {
+          "id": "headShape",
+          "name": "Hair Head Silhouette",
+          "boneId": "head",
+          "type": "procedural",
+          "drawOrder": 20,
+          "fill": { "color": "#050505", "alpha": 1 },
+          "procedural": { "preset": "circle", "params": { "radius": 24, "spikes": 6 } }
+        },
+        {
+          "id": "cloakShape",
+          "name": "Cloak Mesh",
+          "boneId": "cloak",
+          "type": "mesh",
+          "drawOrder": 1,
+          "fill": { "color": "#050505", "alpha": 1 },
+          "mesh": {
+            "vertices": [0, 0, -68, 44, -46, 72, -18, 58, 18, 70, 34, 38],
+            "indices": [0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 5]
+          }
+        },
+        {
+          "id": "frontLegShape",
+          "name": "Front Leg",
+          "boneId": "thighFront",
+          "type": "procedural",
+          "drawOrder": 12,
+          "fill": { "color": "#050505", "alpha": 1 },
+          "procedural": { "preset": "tapered-limb", "params": { "length": 54, "startWidth": 10, "endWidth": 7 } }
+        },
+        {
+          "id": "backLegShape",
+          "name": "Back Leg",
+          "boneId": "thighBack",
+          "type": "procedural",
+          "drawOrder": 8,
+          "fill": { "color": "#050505", "alpha": 1 },
+          "procedural": { "preset": "tapered-limb", "params": { "length": 54, "startWidth": 10, "endWidth": 7 } }
+        }
+      ]
+    }
+  ],
+  "animations": [
+    {
+      "id": "idle",
+      "name": "Idle breathing",
+      "duration": 1.2,
+      "loop": true,
+      "tags": ["idle", "breathing"],
+      "tracks": [
+        { "id": "idle.body.scaleY", "target": { "kind": "bone", "id": "body" }, "property": "transform.scaleY", "keyframes": [{ "time": 0, "value": 1 }, { "time": 0.6, "value": 1.025, "interpolation": "bezier", "curve": [0.4, 0, 0.2, 1] }, { "time": 1.2, "value": 1 }] },
+        { "id": "idle.head.y", "target": { "kind": "bone", "id": "head" }, "property": "transform.y", "keyframes": [{ "time": 0, "value": -34 }, { "time": 0.6, "value": -35.4 }, { "time": 1.2, "value": -34 }] },
+        { "id": "idle.cloak.rotation", "target": { "kind": "bone", "id": "cloak" }, "property": "transform.rotation", "keyframes": [{ "time": 0, "value": -0.08 }, { "time": 0.6, "value": -0.11 }, { "time": 1.2, "value": -0.08 }] }
+      ]
+    },
+    {
+      "id": "walk",
+      "name": "Walk contact",
+      "duration": 0.72,
+      "loop": true,
+      "tags": ["locomotion"],
+      "events": [{ "time": 0.18, "type": "footstep", "payload": { "foot": "front" } }, { "time": 0.54, "type": "footstep", "payload": { "foot": "back" } }],
+      "tracks": [
+        { "id": "walk.body.y", "target": { "kind": "bone", "id": "body" }, "property": "transform.y", "keyframes": [{ "time": 0, "value": -36 }, { "time": 0.36, "value": -38 }, { "time": 0.72, "value": -36 }] },
+        { "id": "walk.thighFront.rotation", "target": { "kind": "bone", "id": "thighFront" }, "property": "transform.rotation", "keyframes": [{ "time": 0, "value": 1.05 }, { "time": 0.36, "value": 1.72 }, { "time": 0.72, "value": 1.05 }] },
+        { "id": "walk.thighBack.rotation", "target": { "kind": "bone", "id": "thighBack" }, "property": "transform.rotation", "keyframes": [{ "time": 0, "value": 1.76 }, { "time": 0.36, "value": 1.08 }, { "time": 0.72, "value": 1.76 }] },
+        { "id": "walk.cloak.rotation", "target": { "kind": "bone", "id": "cloak" }, "property": "transform.rotation", "keyframes": [{ "time": 0, "value": -0.14 }, { "time": 0.36, "value": -0.04 }, { "time": 0.72, "value": -0.14 }] }
+      ]
+    },
+    {
+      "id": "jump",
+      "name": "Jump anticipation",
+      "duration": 0.46,
+      "loop": false,
+      "tags": ["jump"],
+      "events": [{ "time": 0.08, "type": "liftoff" }],
+      "tracks": [
+        { "id": "jump.body.y", "target": { "kind": "bone", "id": "body" }, "property": "transform.y", "keyframes": [{ "time": 0, "value": -32 }, { "time": 0.12, "value": -30 }, { "time": 0.46, "value": -50 }] },
+        { "id": "jump.body.scaleY", "target": { "kind": "bone", "id": "body" }, "property": "transform.scaleY", "keyframes": [{ "time": 0, "value": 0.9 }, { "time": 0.12, "value": 0.86 }, { "time": 0.46, "value": 1.08 }] }
+      ]
+    },
+    {
+      "id": "fall",
+      "name": "Fall reaction",
+      "duration": 0.6,
+      "loop": true,
+      "tags": ["fall"],
+      "tracks": [
+        { "id": "fall.body.y", "target": { "kind": "bone", "id": "body" }, "property": "transform.y", "keyframes": [{ "time": 0, "value": -50 }, { "time": 0.6, "value": -42 }] },
+        { "id": "fall.cloak.rotation", "target": { "kind": "bone", "id": "cloak" }, "property": "transform.rotation", "keyframes": [{ "time": 0, "value": -0.22 }, { "time": 0.6, "value": -0.1 }] }
+      ]
+    },
+    {
+      "id": "land",
+      "name": "Land squash",
+      "duration": 0.34,
+      "loop": false,
+      "tags": ["land"],
+      "events": [{ "time": 0, "type": "dust", "payload": { "strength": 1 } }],
+      "tracks": [
+        { "id": "land.body.scaleX", "target": { "kind": "bone", "id": "body" }, "property": "transform.scaleX", "keyframes": [{ "time": 0, "value": 1.14 }, { "time": 0.34, "value": 1 }] },
+        { "id": "land.body.scaleY", "target": { "kind": "bone", "id": "body" }, "property": "transform.scaleY", "keyframes": [{ "time": 0, "value": 0.82 }, { "time": 0.34, "value": 1 }] }
+      ]
+    }
+  ],
+  "stateMachines": [
+    {
+      "id": "locomotion",
+      "name": "Platformer Locomotion",
+      "initialStateId": "idle",
+      "parameters": [
+        { "id": "absSpeed", "type": "number", "defaultValue": 0 },
+        { "id": "velocityY", "type": "number", "defaultValue": 0 },
+        { "id": "grounded", "type": "boolean", "defaultValue": true },
+        { "id": "landed", "type": "boolean", "defaultValue": false }
+      ],
+      "states": [
+        { "id": "idle", "name": "Idle", "clipId": "idle" },
+        { "id": "walk", "name": "Walk", "clipId": "walk" },
+        { "id": "jump", "name": "Jump", "clipId": "jump" },
+        { "id": "fall", "name": "Fall", "clipId": "fall" },
+        { "id": "land", "name": "Land", "clipId": "land" }
+      ],
+      "transitions": [
+        { "id": "idle.walk", "fromStateId": "idle", "toStateId": "walk", "duration": 0.14, "easing": "easeOut", "conditions": [{ "parameterId": "absSpeed", "operator": ">", "value": 20 }] },
+        { "id": "walk.idle", "fromStateId": "walk", "toStateId": "idle", "duration": 0.18, "easing": "easeInOut", "conditions": [{ "parameterId": "absSpeed", "operator": "<=", "value": 20 }] },
+        { "id": "any.jump", "fromStateId": "walk", "toStateId": "jump", "duration": 0.08, "easing": "anticipation", "priority": 5, "conditions": [{ "parameterId": "velocityY", "operator": "<", "value": -1 }] },
+        { "id": "jump.fall", "fromStateId": "jump", "toStateId": "fall", "duration": 0.16, "easing": "easeIn", "conditions": [{ "parameterId": "velocityY", "operator": ">", "value": 0 }] },
+        { "id": "fall.land", "fromStateId": "fall", "toStateId": "land", "duration": 0.06, "easing": "easeOut", "priority": 8, "conditions": [{ "parameterId": "landed", "operator": "==", "value": true }] },
+        { "id": "land.idle", "fromStateId": "land", "toStateId": "idle", "duration": 0.14, "easing": "easeOut", "conditions": [{ "parameterId": "grounded", "operator": "==", "value": true }] }
+      ]
+    }
+  ],
+  "proceduralPresets": [
+    { "id": "breathing", "type": "breathing", "enabled": true, "frequency": 0.8, "amplitude": 1.1, "affectedBones": { "body": { "scaleY": 1.02 }, "head": { "y": -1 } } },
+    { "id": "cloakLag", "type": "secondaryMotion", "enabled": true, "target": "cloak", "stiffness": 0.18, "damping": 0.72, "velocityInfluence": 0.24, "gravityInfluence": 0.1, "windInfluence": 0.18, "maxOffset": 18 },
+    { "id": "landingSquash", "type": "squashStretch", "enabled": true, "targetBone": "body", "landingImpactScale": 0.82 },
+    { "id": "feet", "type": "footIK", "enabled": true, "feet": [{ "footBone": "footFront", "shinBone": "shinFront", "thighBone": "thighFront" }, { "footBone": "footBack", "shinBone": "shinBack", "thighBone": "thighBack" }], "maxCorrection": 10, "blend": 0.85 }
+  ],
+  "preview": {
+    "ldtkPath": "examples/ldtk/sample-room.ldtk.json",
+    "spawnPointId": "player",
+    "quality": "medium",
+    "showCollisionDebug": true,
+    "showAnimationStateDebug": true,
+    "showSkeleton": true
+  }
+}

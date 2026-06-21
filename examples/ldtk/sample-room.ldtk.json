@@ -1,0 +1,18 @@
+{
+  "identifier": "shadow-hero-rc-room",
+  "layerInstances": [
+    {
+      "__identifier": "Entities",
+      "entityInstances": [
+        { "__identifier": "Collider", "px": [-128, 48], "width": 320, "height": 16 },
+        { "__identifier": "MovingPlatform", "px": [64, -8], "width": 48, "height": 10 },
+        { "__identifier": "DeathZone", "px": [-128, 96], "width": 320, "height": 24 },
+        { "__identifier": "WallJumpSurface", "px": [152, -40], "width": 10, "height": 88 },
+        { "__identifier": "Spawn", "px": [-88, 16], "fieldInstances": [{ "__identifier": "id", "__value": "player" }] },
+        { "__identifier": "Light", "px": [16, -24], "fieldInstances": [{ "__identifier": "radius", "__value": 120 }] },
+        { "__identifier": "CameraZone", "px": [-112, -88], "width": 240, "height": 136 },
+        { "__identifier": "AnimationTrigger", "px": [136, 0], "fieldInstances": [{ "__identifier": "state", "__value": "wallSlide" }] }
+      ]
+    }
+  ]
+}
