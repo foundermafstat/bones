@@ -4,13 +4,22 @@ import test from "node:test";
 import {
   createAddBoneCommand,
   createApplyPoseCommand,
+  createAddTimelineEventCommand,
+  createAddTimelineMarkerCommand,
+  createAnimationClipCommand,
   createCopyPoseCommand,
+  createCopySelectedKeysCommand,
   createEditPathPointCommand,
   createGroupedCommand,
   createMoveBoneCommand,
+  createNormalizeLoopCommand,
+  createPasteKeysCommand,
   createPastePoseCommand,
   createRenameBoneCommand,
+  createReverseClipCommand,
   createRotateBoneCommand,
+  createRetimeClipCommand,
+  createSetTimelineSelectionCommand,
   createSetParentCommand,
   executeCommand,
   initialEditorProject,
@@ -163,4 +172,39 @@ test("copy and paste pose create an undoable pose copy", () => {
   const undone = undo(pasted);
   assert.equal(undone.project.poses.jump_peak_pasted, undefined);
   assert.equal(undone.project.poseClipboard?.id, "jump_peak");
+});
+
+test("timeline creates clips and copies selected keys with snapping", () => {
+  const created = executeCommand(freshContainer(), createAnimationClipCommand("test_clip", "Test Clip", 1, true));
+  assert.equal(created.project.timeline.selectedClipId, "test_clip");
+  assert.equal(created.project.animations.test_clip.frameRate, 60);
+
+  const withKey = executeCommand(created, createAddBoneCommand("body", "timelineBone"));
+  const selected = executeCommand(withKey, createSetTimelineSelectionCommand("idle", ["idle-body-1"]));
+  const copied = executeCommand(selected, createCopySelectedKeysCommand());
+  assert.equal(copied.project.timeline.keyClipboard.length, 1);
+
+  const pasted = executeCommand(copied, createPasteKeysCommand("idle", 0.1));
+  assert.equal(pasted.project.timeline.selectedKeyIds.length, 1);
+  assert.ok(pasted.project.animations.idle.tracks["body.scaleY"].some((key) => key.id.startsWith("idle-body-1_paste")));
+});
+
+test("timeline retime, reverse, normalize loop, events, and markers are undoable", () => {
+  const retimed = executeCommand(freshContainer(), createRetimeClipCommand("walk", 1.44));
+  assert.equal(retimed.project.animations.walk.duration, 1.44);
+  assert.equal(retimed.project.animations.walk.events[0].time, 0.16);
+
+  const reversed = executeCommand(retimed, createReverseClipCommand("walk"));
+  assert.ok(reversed.project.animations.walk.events[0].time < reversed.project.animations.walk.events[1].time);
+
+  const normalized = executeCommand(reversed, createNormalizeLoopCommand("walk"));
+  assert.ok(Object.values(normalized.project.animations.walk.tracks).every((keys) => keys.some((key) => Math.abs(key.time - normalized.project.animations.walk.duration) < 0.0001)));
+
+  const marked = executeCommand(normalized, createAddTimelineMarkerCommand("walk", { id: "breakdown", time: 0.5, label: "Breakdown" }));
+  const evented = executeCommand(marked, createAddTimelineEventCommand("walk", { id: "cue", time: 0.5, type: "cue" }));
+  assert.ok(evented.project.animations.walk.markers.some((marker) => marker.id === "breakdown"));
+  assert.ok(evented.project.animations.walk.events.some((event) => event.id === "cue"));
+
+  const undone = undo(evented);
+  assert.equal(undone.project.animations.walk.events.some((event) => event.id === "cue"), false);
 });

@@ -24,7 +24,8 @@ import type {
   Keyframe,
   PoseDefinition,
   ProceduralPresetState,
-  ShapePart
+  ShapePart,
+  TimelineState
 } from "./editorState";
 import { initialEditorProject } from "./editorState";
 
@@ -56,6 +57,7 @@ export function toSourceProject(project: EditorProjectState): RigProject {
             dirtyParts: [...project.dirtyParts],
             dirtyScopes: dirtyScopesToJson(project.dirtyScopes),
             autosave: autosaveToJson(project.autosave),
+            timeline: timelineToJson(project.timeline),
             procedural: proceduralToJson(project.procedural)
           }
         }
@@ -143,6 +145,7 @@ export function fromSourceProject(sourceInput: unknown): EditorProjectState {
         }
       : initialEditorProject.stateMachine,
     procedural,
+    timeline: readTimeline(rig.editor?.custom?.timeline),
     dirty: Boolean(rig.editor?.custom?.dirty),
     dirtyParts: readStringArray(rig.editor?.custom?.dirtyParts) ?? [],
     dirtyScopes: readDirtyScopes(rig.editor?.custom?.dirtyScopes),
@@ -259,19 +262,28 @@ function fromSourcePose(pose: SourcePoseDefinition): PoseDefinition {
 function toSourceAnimationClip(clip: AnimationClip): SourceAnimationClip {
   return {
     id: clip.id,
-    name: clip.id,
+    name: clip.name,
     duration: clip.duration,
+    frameRate: clip.frameRate,
     loop: clip.loop,
-    tracks: Object.entries(clip.tracks).map(([trackId, keyframes]) => toSourceTrack(trackId, keyframes))
+    tracks: Object.entries(clip.tracks).map(([trackId, keyframes]) => toSourceTrack(trackId, keyframes)),
+    events: clip.events.map(({ id: _id, ...event }) => event),
+    markers: clip.markers,
+    tags: clip.tags
   };
 }
 
 function fromSourceAnimationClip(clip: SourceAnimationClip): AnimationClip {
   return {
     id: clip.id,
+    name: clip.name,
     duration: clip.duration,
+    frameRate: clip.frameRate ?? clip.fps ?? 60,
     loop: clip.loop ?? false,
-    tracks: Object.fromEntries(clip.tracks.map((track) => [fromTrackId(track), track.keyframes.map(fromSourceKeyframe)]))
+    tracks: Object.fromEntries(clip.tracks.map((track) => [fromTrackId(track), track.keyframes.map(fromSourceKeyframe)])),
+    events: (clip.events ?? []).map((event, index) => ({ id: `${clip.id}-event-${index}`, ...event })),
+    markers: clip.markers ?? [],
+    tags: clip.tags ?? []
   };
 }
 
@@ -457,6 +469,26 @@ function poseDeformsToJson(deforms: Readonly<Record<string, readonly (readonly [
   return Object.fromEntries(Object.entries(deforms).map(([partId, points]) => [partId, points.map((point) => [point[0], point[1]])]));
 }
 
+function timelineToJson(timeline: TimelineState) {
+  return {
+    selectedClipId: timeline.selectedClipId,
+    selectedKeyIds: [...timeline.selectedKeyIds],
+    keyClipboard: timeline.keyClipboard.map((item) => {
+      const { curve: _curve, ...keyframe } = item.keyframe;
+      return {
+        trackId: item.trackId,
+        keyframe: {
+          ...keyframe,
+          ...(item.keyframe.curve ? { curve: [...item.keyframe.curve] } : {})
+        }
+      };
+    }),
+    autoKey: timeline.autoKey,
+    snappingFps: timeline.snappingFps,
+    virtualWindow: { ...timeline.virtualWindow }
+  };
+}
+
 function readProcedural(value: unknown): ProceduralPresetState {
   if (!isRecord(value)) {
     return initialEditorProject.procedural;
@@ -497,6 +529,41 @@ function readAutosave(value: unknown): AutosaveState {
     nextSaveAt: numberValue(value.nextSaveAt) ?? 0,
     ...(lastSavedAt !== undefined ? { lastSavedAt } : {})
   };
+}
+
+function readTimeline(value: unknown): TimelineState {
+  if (!isRecord(value)) {
+    return initialEditorProject.timeline;
+  }
+  return {
+    selectedClipId: stringValue(value.selectedClipId) ?? initialEditorProject.timeline.selectedClipId,
+    selectedKeyIds: readStringArray(value.selectedKeyIds) ?? [],
+    keyClipboard: readTimelineClipboard(value.keyClipboard),
+    autoKey: typeof value.autoKey === "boolean" ? value.autoKey : false,
+    snappingFps: numberValue(value.snappingFps) ?? 60,
+    virtualWindow: isRecord(value.virtualWindow)
+      ? {
+          startRow: numberValue(value.virtualWindow.startRow) ?? 0,
+          rowCount: numberValue(value.virtualWindow.rowCount) ?? 12
+        }
+      : initialEditorProject.timeline.virtualWindow
+  };
+}
+
+function readTimelineClipboard(value: unknown): TimelineState["keyClipboard"] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((item) => {
+    if (!isRecord(item) || typeof item.trackId !== "string" || !isRecord(item.keyframe)) {
+      return [];
+    }
+    return [{ trackId: item.trackId, keyframe: fromSourceKeyframe({ time: numberValue(item.keyframe.time) ?? 0, value: jsonScalarValue(item.keyframe.value), interpolation: "linear", editor: { custom: { id: stringValue(item.keyframe.id) ?? "clipboard-key" } } }) }];
+  });
+}
+
+function jsonScalarValue(value: unknown): string | number | boolean {
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? value : 0;
 }
 
 function readStringArray(value: unknown): string[] | undefined {

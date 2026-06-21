@@ -53,6 +53,15 @@ import {
   createDeleteKeyframeCommand,
   createMoveKeyframeCommand,
   createChangeCurveCommand,
+  createAddTimelineEventCommand,
+  createAddTimelineMarkerCommand,
+  createAnimationClipCommand,
+  createCopySelectedKeysCommand,
+  createNormalizeLoopCommand,
+  createPasteKeysCommand,
+  createReverseClipCommand,
+  createRetimeClipCommand,
+  createSetTimelineSelectionCommand,
   createTransitionCommand,
   createUpdateProceduralCommand,
   executeCommand,
@@ -124,7 +133,8 @@ export default function EditorPage() {
   const poseIds = Object.keys(editorState.project.poses);
   const selectedPose = editorState.project.poses[selectedPoseId] ?? editorState.project.poses[poseIds[0]!]!;
   const selectedPoseTagText = selectedPose.tags.join(", ");
-  const activeClip = editorState.project.animations.idle!;
+  const clipIds = Object.keys(editorState.project.animations);
+  const activeClip = editorState.project.animations[editorState.project.timeline.selectedClipId] ?? editorState.project.animations.idle!;
   const activeTrack = activeClip.tracks["body.scaleY"] ?? [];
   const runCommand = (command: Parameters<typeof executeCommand>[1]) => setEditorState((state) => executeCommand(state, command));
   useEffect(() => {
@@ -177,10 +187,10 @@ export default function EditorPage() {
         { label: "Apply Pose", onClick: () => runCommand(createApplyPoseCommand(selectedPose.id)) },
         { label: "Duplicate Pose", onClick: () => runCommand(createDuplicatePoseCommand(selectedPose.id, `${selectedPose.id}_copy`)) },
         { label: "Mirror Pose", onClick: () => runCommand(createMirrorPoseCommand(selectedPose.id, `${selectedPose.id}_mirror`)) },
-        { label: "Add Key", onClick: () => runCommand(createAddKeyframeCommand("idle", "body.scaleY", { id: `key${activeTrack.length}`, time: 0.6, value: 1.025, interpolation: "bezier" })) },
-        { label: "Move Key", disabled: !activeTrack.length, onClick: () => runCommand(createMoveKeyframeCommand("idle", "body.scaleY", activeTrack[0]?.id ?? "", 0.12)) },
-        { label: "Delete Key", disabled: !activeTrack.length, variant: "destructive", onClick: () => runCommand(createDeleteKeyframeCommand("idle", "body.scaleY", activeTrack[0]?.id ?? "")) },
-        { label: "Curve", disabled: !activeTrack.length, onClick: () => runCommand(createChangeCurveCommand("idle", "body.scaleY", activeTrack[0]?.id ?? "", "bezier", [0.2, 0.8, 0.2, 1])) },
+        { label: "Add Key", onClick: () => runCommand(createAddKeyframeCommand(activeClip.id, "body.scaleY", { id: `key${activeTrack.length}`, time: 0.6, value: 1.025, interpolation: "bezier" })) },
+        { label: "Move Key", disabled: !activeTrack.length, onClick: () => runCommand(createMoveKeyframeCommand(activeClip.id, "body.scaleY", activeTrack[0]?.id ?? "", 0.12)) },
+        { label: "Delete Key", disabled: !activeTrack.length, variant: "destructive", onClick: () => runCommand(createDeleteKeyframeCommand(activeClip.id, "body.scaleY", activeTrack[0]?.id ?? "")) },
+        { label: "Curve", disabled: !activeTrack.length, onClick: () => runCommand(createChangeCurveCommand(activeClip.id, "body.scaleY", activeTrack[0]?.id ?? "", "bezier", [0.2, 0.8, 0.2, 1])) },
         { label: "Transition", onClick: () => runCommand(createTransitionCommand({ id: "walk-jump", fromStateId: "walk", toStateId: "jump", duration: 0.12, priority: 10, canInterrupt: true, syncMode: "none" })) }
       ]
     },
@@ -634,7 +644,49 @@ export default function EditorPage() {
 
       <Card className="min-w-0 rounded-none border-0 border-t py-2 ring-0" aria-label="Timeline and dopesheet">
         <CardHeader className="flex flex-row items-center justify-between px-2.5 py-0">
-          <CardTitle className="text-sm">Timeline</CardTitle>
+          <div className="flex min-w-0 items-center gap-2">
+            <CardTitle className="text-sm">Timeline</CardTitle>
+            <Select value={activeClip.id} onValueChange={(clipId) => runCommand(createSetTimelineSelectionCommand(clipId, []))}>
+              <SelectTrigger className="h-7 w-28" aria-label="Timeline clip">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {clipIds.map((clipId) => (
+                    <SelectItem key={clipId} value={clipId}>
+                      {editorState.project.animations[clipId]?.name ?? clipId}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <div className="flex items-center gap-1">
+              <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createAnimationClipCommand(`clip_${clipIds.length + 1}`, `Clip ${clipIds.length + 1}`, 1, true))}>
+                Clip +
+              </Button>
+              <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createReverseClipCommand(activeClip.id))}>
+                Reverse
+              </Button>
+              <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createRetimeClipCommand(activeClip.id, activeClip.duration + 0.12))}>
+                Retime
+              </Button>
+              <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createNormalizeLoopCommand(activeClip.id))}>
+                Loop
+              </Button>
+              <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createAddTimelineMarkerCommand(activeClip.id, { id: `${activeClip.id}-marker-${activeClip.markers.length}`, time: activeClip.duration * 0.5, label: "Breakdown", color: "#f59e0b" }))}>
+                Marker
+              </Button>
+              <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createAddTimelineEventCommand(activeClip.id, { id: `${activeClip.id}-event-${activeClip.events.length}`, time: activeClip.duration * 0.5, type: "cue" }))}>
+                Event
+              </Button>
+              <Button size="sm" type="button" variant="outline" disabled={!editorState.project.timeline.selectedKeyIds.length} onClick={() => runCommand(createCopySelectedKeysCommand())}>
+                Copy Keys
+              </Button>
+              <Button size="sm" type="button" variant="outline" disabled={!editorState.project.timeline.keyClipboard.length} onClick={() => runCommand(createPasteKeysCommand(activeClip.id, activeClip.duration * 0.5))}>
+                Paste Keys
+              </Button>
+            </div>
+          </div>
           <Badge variant="outline">00:00 / 01:12</Badge>
         </CardHeader>
         <CardContent className="mt-1 grid gap-1 px-2.5">
@@ -644,10 +696,22 @@ export default function EditorPage() {
               {(activeClip.tracks[track] ?? []).map((keyframe) => (
                 <Tooltip key={keyframe.id}>
                   <TooltipTrigger asChild>
-                    <span className="absolute top-[5px] size-[7px] rounded-full bg-primary" style={{ left: `${(keyframe.time / activeClip.duration) * 100}%` }} />
+                    <button
+                      className="absolute top-[5px] size-[7px] rounded-full bg-primary"
+                      style={{ left: `${(keyframe.time / activeClip.duration) * 100}%` }}
+                      type="button"
+                      aria-label={`Key ${keyframe.id}`}
+                      onClick={() => runCommand(createSetTimelineSelectionCommand(activeClip.id, [keyframe.id]))}
+                    />
                   </TooltipTrigger>
                   <TooltipContent>{keyframe.id}</TooltipContent>
                 </Tooltip>
+              ))}
+              {activeClip.markers.map((marker) => (
+                <span className="absolute top-0 h-[17px] w-px bg-amber-500" key={marker.id} style={{ left: `${(marker.time / activeClip.duration) * 100}%` }} title={marker.label} />
+              ))}
+              {activeClip.events.map((event) => (
+                <span className="absolute top-[2px] size-[5px] rotate-45 bg-emerald-500" key={event.id} style={{ left: `${(event.time / activeClip.duration) * 100}%` }} title={event.type} />
               ))}
               <span className="absolute top-[5px] size-[7px] rounded-full bg-primary" style={{ left: `${52 + index * 5}%` }} />
             </div>

@@ -1,4 +1,4 @@
-import type { PathCommand } from "@bones/schema";
+import type { JsonValue, PathCommand } from "@bones/schema";
 
 export interface BoneTransform {
   readonly x: number;
@@ -19,6 +19,7 @@ export interface EditorProjectState {
   readonly poses: Readonly<Record<string, PoseDefinition>>;
   readonly poseClipboard: PoseDefinition | null;
   readonly animations: Readonly<Record<string, AnimationClip>>;
+  readonly timeline: TimelineState;
   readonly stateMachine: EditorStateMachine;
   readonly procedural: ProceduralPresetState;
   readonly dirtyScopes: DirtyScopes;
@@ -68,9 +69,14 @@ export interface PosePartProperties {
 
 export interface AnimationClip {
   readonly id: string;
+  readonly name: string;
   readonly duration: number;
+  readonly frameRate: number;
   readonly loop: boolean;
   readonly tracks: Readonly<Record<string, readonly Keyframe[]>>;
+  readonly events: readonly TimelineEvent[];
+  readonly markers: readonly TimelineMarker[];
+  readonly tags: readonly string[];
 }
 
 export interface Keyframe {
@@ -79,6 +85,34 @@ export interface Keyframe {
   readonly value: number;
   readonly interpolation: "linear" | "step" | "hold" | "bezier" | "spring";
   readonly curve?: readonly [number, number, number, number];
+}
+
+export interface TimelineEvent {
+  readonly id: string;
+  readonly time: number;
+  readonly type: string;
+  readonly payload?: Readonly<Record<string, JsonValue>>;
+}
+
+export interface TimelineMarker {
+  readonly id: string;
+  readonly time: number;
+  readonly label: string;
+  readonly color?: string;
+}
+
+export interface TimelineClipboardKey {
+  readonly trackId: string;
+  readonly keyframe: Keyframe;
+}
+
+export interface TimelineState {
+  readonly selectedClipId: string;
+  readonly selectedKeyIds: readonly string[];
+  readonly keyClipboard: readonly TimelineClipboardKey[];
+  readonly autoKey: boolean;
+  readonly snappingFps: number;
+  readonly virtualWindow: { readonly startRow: number; readonly rowCount: number };
 }
 
 export interface EditorStateMachine {
@@ -242,8 +276,13 @@ export const initialEditorProject: EditorProjectState = {
   animations: {
     idle: {
       id: "idle",
+      name: "Idle",
       duration: 1.2,
+      frameRate: 60,
       loop: true,
+      events: [],
+      markers: [{ id: "idle-loop", time: 1.2, label: "Loop", color: "#4f8cff" }],
+      tags: ["idle"],
       tracks: {
         "body.scaleY": [{ id: "idle-body-0", time: 0, value: 1, interpolation: "bezier" }, { id: "idle-body-1", time: 0.6, value: 1.025, interpolation: "bezier" }, { id: "idle-body-2", time: 1.2, value: 1, interpolation: "bezier" }],
         "head.rotation": [{ id: "idle-head-0", time: 0, value: -0.025, interpolation: "linear" }, { id: "idle-head-1", time: 0.6, value: 0.025, interpolation: "linear" }, { id: "idle-head-2", time: 1.2, value: -0.025, interpolation: "linear" }],
@@ -252,8 +291,16 @@ export const initialEditorProject: EditorProjectState = {
     },
     walk: {
       id: "walk",
+      name: "Walk",
       duration: 0.72,
+      frameRate: 60,
       loop: true,
+      events: [
+        { id: "walk-foot-front", time: 0.08, type: "footstep", payload: { foot: "front" } },
+        { id: "walk-foot-back", time: 0.44, type: "footstep", payload: { foot: "back" } }
+      ],
+      markers: [{ id: "walk-loop", time: 0.72, label: "Loop", color: "#4f8cff" }],
+      tags: ["walk"],
       tracks: {
         "body.y": [{ id: "walk-body-0", time: 0, value: -250, interpolation: "linear" }, { id: "walk-body-1", time: 0.36, value: -244, interpolation: "linear" }, { id: "walk-body-2", time: 0.72, value: -250, interpolation: "linear" }],
         "upperArmFront.rotation": [{ id: "walk-arm-f-0", time: 0, value: -0.24, interpolation: "linear" }, { id: "walk-arm-f-1", time: 0.36, value: 0.22, interpolation: "linear" }, { id: "walk-arm-f-2", time: 0.72, value: -0.24, interpolation: "linear" }],
@@ -263,10 +310,11 @@ export const initialEditorProject: EditorProjectState = {
         "cloak.rotation": [{ id: "walk-cloak-0", time: 0, value: 0.1, interpolation: "linear" }, { id: "walk-cloak-1", time: 0.36, value: -0.06, interpolation: "linear" }, { id: "walk-cloak-2", time: 0.72, value: 0.1, interpolation: "linear" }]
       }
     },
-    jump: { id: "jump", duration: 0.46, loop: false, tracks: { "body.y": [{ id: "jump-body-0", time: 0, value: -244, interpolation: "linear" }, { id: "jump-body-1", time: 0.46, value: -286, interpolation: "linear" }], "body.scaleY": [{ id: "jump-scale-0", time: 0, value: 0.9, interpolation: "linear" }, { id: "jump-scale-1", time: 0.46, value: 1.08, interpolation: "linear" }] } },
-    fall: { id: "fall", duration: 0.6, loop: true, tracks: { "body.y": [{ id: "fall-body-0", time: 0, value: -280, interpolation: "linear" }, { id: "fall-body-1", time: 0.6, value: -252, interpolation: "linear" }], "cloak.rotation": [{ id: "fall-cloak-0", time: 0, value: -0.18, interpolation: "linear" }, { id: "fall-cloak-1", time: 0.6, value: -0.04, interpolation: "linear" }] } },
-    land: { id: "land", duration: 0.34, loop: false, tracks: { "body.scaleX": [{ id: "land-x-0", time: 0, value: 1.14, interpolation: "linear" }, { id: "land-x-1", time: 0.34, value: 1, interpolation: "linear" }], "body.scaleY": [{ id: "land-y-0", time: 0, value: 0.82, interpolation: "linear" }, { id: "land-y-1", time: 0.34, value: 1, interpolation: "linear" }] } }
+    jump: { id: "jump", name: "Jump", duration: 0.46, frameRate: 60, loop: false, events: [{ id: "jump-liftoff", time: 0, type: "liftoff" }], markers: [{ id: "jump-peak", time: 0.46, label: "Peak", color: "#8b5cf6" }], tags: ["jump"], tracks: { "body.y": [{ id: "jump-body-0", time: 0, value: -244, interpolation: "linear" }, { id: "jump-body-1", time: 0.46, value: -286, interpolation: "linear" }], "body.scaleY": [{ id: "jump-scale-0", time: 0, value: 0.9, interpolation: "linear" }, { id: "jump-scale-1", time: 0.46, value: 1.08, interpolation: "linear" }] } },
+    fall: { id: "fall", name: "Fall", duration: 0.6, frameRate: 60, loop: true, events: [], markers: [{ id: "fall-loop", time: 0.6, label: "Loop", color: "#4f8cff" }], tags: ["fall"], tracks: { "body.y": [{ id: "fall-body-0", time: 0, value: -280, interpolation: "linear" }, { id: "fall-body-1", time: 0.6, value: -252, interpolation: "linear" }], "cloak.rotation": [{ id: "fall-cloak-0", time: 0, value: -0.18, interpolation: "linear" }, { id: "fall-cloak-1", time: 0.6, value: -0.04, interpolation: "linear" }] } },
+    land: { id: "land", name: "Land", duration: 0.34, frameRate: 60, loop: false, events: [{ id: "land-impact", time: 0, type: "land", payload: { strength: 1 } }], markers: [{ id: "land-recover", time: 0.34, label: "Recover", color: "#22c55e" }], tags: ["land"], tracks: { "body.scaleX": [{ id: "land-x-0", time: 0, value: 1.14, interpolation: "linear" }, { id: "land-x-1", time: 0.34, value: 1, interpolation: "linear" }], "body.scaleY": [{ id: "land-y-0", time: 0, value: 0.82, interpolation: "linear" }, { id: "land-y-1", time: 0.34, value: 1, interpolation: "linear" }] } }
   },
+  timeline: { selectedClipId: "idle", selectedKeyIds: [], keyClipboard: [], autoKey: false, snappingFps: 60, virtualWindow: { startRow: 0, rowCount: 12 } },
   stateMachine: {
     initialStateId: "idle",
     states: [
@@ -750,7 +798,7 @@ export function createAddKeyframeCommand(clipId: string, trackId: string, keyfra
   return {
     id: `add-key:${clipId}:${trackId}:${keyframe.id}`,
     label: "Add keyframe",
-    do: (state) => updateClipTrack(state, clipId, trackId, (keys) => [...keys, keyframe].sort((a, b) => a.time - b.time)),
+    do: (state) => updateClipTrack(state, clipId, trackId, (keys) => [...keys, snapKeyframe(state, keyframe)].sort((a, b) => a.time - b.time)),
     undo: (state) => updateClipTrack(state, clipId, trackId, (keys) => keys.filter((key) => key.id !== keyframe.id))
   };
 }
@@ -779,7 +827,7 @@ export function createMoveKeyframeCommand(clipId: string, trackId: string, keyfr
             return key;
           }
           previousTime = key.time;
-          return { ...key, time };
+          return snapKeyframe(state, { ...key, time });
         })
         .sort((a, b) => a.time - b.time)
     );
@@ -788,6 +836,181 @@ export function createMoveKeyframeCommand(clipId: string, trackId: string, keyfr
     label: "Move keyframe",
     do: (state) => move(state, nextTime),
     undo: (state) => move(state, previousTime)
+  };
+}
+
+export function createAnimationClipCommand(clipId: string, name: string, duration = 1, loop = true): EditorCommand {
+  return {
+    id: `create-clip:${clipId}`,
+    label: "Create animation clip",
+    do: (state) =>
+      state.animations[clipId]
+        ? state
+        : {
+            ...markDirty(state, clipId, "animations"),
+            animations: { ...state.animations, [clipId]: { id: clipId, name, duration, frameRate: state.timeline.snappingFps, loop, tracks: {}, events: [], markers: [], tags: [] } },
+            timeline: { ...state.timeline, selectedClipId: clipId, selectedKeyIds: [] }
+          },
+    undo: (state) => {
+      const { [clipId]: _removed, ...animations } = state.animations;
+      return { ...markDirty(state, clipId, "animations"), animations, timeline: { ...state.timeline, selectedClipId: state.timeline.selectedClipId === clipId ? "idle" : state.timeline.selectedClipId } };
+    }
+  };
+}
+
+export function createDeleteAnimationClipCommand(clipId: string): EditorCommand {
+  let previous: AnimationClip | undefined;
+  return {
+    id: `delete-clip:${clipId}`,
+    label: "Delete animation clip",
+    do: (state) => {
+      previous = state.animations[clipId];
+      const { [clipId]: _removed, ...animations } = state.animations;
+      return previous ? { ...markDirty(state, clipId, "animations"), animations, timeline: { ...state.timeline, selectedClipId: "idle", selectedKeyIds: [] } } : state;
+    },
+    undo: (state) => (previous ? { ...markDirty(state, clipId, "animations"), animations: { ...state.animations, [clipId]: previous }, timeline: { ...state.timeline, selectedClipId: clipId } } : state)
+  };
+}
+
+export function createSetTimelineSelectionCommand(clipId: string, keyIds: readonly string[]): EditorCommand {
+  let previous: TimelineState | undefined;
+  return {
+    id: `timeline-select:${clipId}:${keyIds.join(",")}`,
+    label: "Select timeline keys",
+    do: (state) => {
+      previous = state.timeline;
+      return { ...state, timeline: { ...state.timeline, selectedClipId: clipId, selectedKeyIds: keyIds } };
+    },
+    undo: (state) => (previous ? { ...state, timeline: previous } : state)
+  };
+}
+
+export function createCopySelectedKeysCommand(): EditorCommand {
+  let previous: readonly TimelineClipboardKey[] = [];
+  return {
+    id: "timeline-copy-keys",
+    label: "Copy selected keys",
+    do: (state) => {
+      const clip = state.animations[state.timeline.selectedClipId];
+      previous = state.timeline.keyClipboard;
+      if (!clip) {
+        return state;
+      }
+      const selected = new Set(state.timeline.selectedKeyIds);
+      const keyClipboard = Object.entries(clip.tracks).flatMap(([trackId, keys]) => keys.filter((key) => selected.has(key.id)).map((key) => ({ trackId, keyframe: { ...key } })));
+      return { ...state, timeline: { ...state.timeline, keyClipboard } };
+    },
+    undo: (state) => ({ ...state, timeline: { ...state.timeline, keyClipboard: previous } })
+  };
+}
+
+export function createPasteKeysCommand(clipId: string, atTime: number): EditorCommand {
+  return {
+    id: `timeline-paste-keys:${clipId}:${atTime}`,
+    label: "Paste keys",
+    do: (state) => {
+      const clip = state.animations[clipId];
+      if (!clip || !state.timeline.keyClipboard.length) {
+        return state;
+      }
+      const minTime = Math.min(...state.timeline.keyClipboard.map((item) => item.keyframe.time));
+      const tracks = { ...clip.tracks };
+      const pastedIds: string[] = [];
+      for (const item of state.timeline.keyClipboard) {
+        const keyframe = snapKeyframe(state, { ...item.keyframe, id: `${item.keyframe.id}_paste_${pastedIds.length}`, time: atTime + item.keyframe.time - minTime });
+        pastedIds.push(keyframe.id);
+        tracks[item.trackId] = [...(tracks[item.trackId] ?? []), keyframe].sort((a, b) => a.time - b.time);
+      }
+      return { ...markDirty(state, clipId, "animations"), animations: { ...state.animations, [clipId]: { ...clip, tracks } }, timeline: { ...state.timeline, selectedClipId: clipId, selectedKeyIds: pastedIds } };
+    },
+    undo: (state) => {
+      const clip = state.animations[clipId];
+      if (!clip) {
+        return state;
+      }
+      const selected = new Set(state.timeline.selectedKeyIds);
+      const tracks = Object.fromEntries(Object.entries(clip.tracks).map(([trackId, keys]) => [trackId, keys.filter((key) => !selected.has(key.id))]));
+      return { ...markDirty(state, clipId, "animations"), animations: { ...state.animations, [clipId]: { ...clip, tracks } } };
+    }
+  };
+}
+
+export function createScaleSelectedKeysCommand(factor: number): EditorCommand {
+  let previous: AnimationClip | undefined;
+  return {
+    id: `timeline-scale-keys:${factor}`,
+    label: "Scale selected keys",
+    do: (state) => {
+      const clip = state.animations[state.timeline.selectedClipId];
+      previous = clip;
+      if (!clip) return state;
+      const selected = new Set(state.timeline.selectedKeyIds);
+      return {
+        ...markDirty(state, clip.id, "animations"),
+        animations: { ...state.animations, [clip.id]: { ...clip, tracks: mapClipKeys(clip, (key) => (selected.has(key.id) ? snapKeyframe(state, { ...key, time: key.time * factor }) : key)).tracks } }
+      };
+    },
+    undo: (state) => (previous ? { ...markDirty(state, previous.id, "animations"), animations: { ...state.animations, [previous.id]: previous } } : state)
+  };
+}
+
+export function createRetimeClipCommand(clipId: string, duration: number): EditorCommand {
+  let previous: AnimationClip | undefined;
+  return {
+    id: `retime-clip:${clipId}:${duration}`,
+    label: "Retime clip",
+    do: (state) => {
+      const clip = state.animations[clipId];
+      previous = clip;
+      return clip ? { ...markDirty(state, clipId, "animations"), animations: { ...state.animations, [clipId]: retimeClip(clip, duration) } } : state;
+    },
+    undo: (state) => (previous ? { ...markDirty(state, clipId, "animations"), animations: { ...state.animations, [clipId]: previous } } : state)
+  };
+}
+
+export function createReverseClipCommand(clipId: string): EditorCommand {
+  let previous: AnimationClip | undefined;
+  return {
+    id: `reverse-clip:${clipId}`,
+    label: "Reverse clip",
+    do: (state) => {
+      const clip = state.animations[clipId];
+      previous = clip;
+      return clip ? { ...markDirty(state, clipId, "animations"), animations: { ...state.animations, [clipId]: reverseClip(clip) } } : state;
+    },
+    undo: (state) => (previous ? { ...markDirty(state, clipId, "animations"), animations: { ...state.animations, [clipId]: previous } } : state)
+  };
+}
+
+export function createNormalizeLoopCommand(clipId: string): EditorCommand {
+  let previous: AnimationClip | undefined;
+  return {
+    id: `normalize-loop:${clipId}`,
+    label: "Normalize loop",
+    do: (state) => {
+      const clip = state.animations[clipId];
+      previous = clip;
+      return clip ? { ...markDirty(state, clipId, "animations"), animations: { ...state.animations, [clipId]: normalizeLoopClip(clip) } } : state;
+    },
+    undo: (state) => (previous ? { ...markDirty(state, clipId, "animations"), animations: { ...state.animations, [clipId]: previous } } : state)
+  };
+}
+
+export function createAddTimelineMarkerCommand(clipId: string, marker: TimelineMarker): EditorCommand {
+  return {
+    id: `timeline-marker:${clipId}:${marker.id}`,
+    label: "Add timeline marker",
+    do: (state) => updateClip(state, clipId, (clip) => ({ ...clip, markers: [...clip.markers.filter((item) => item.id !== marker.id), marker].sort((a, b) => a.time - b.time) })),
+    undo: (state) => updateClip(state, clipId, (clip) => ({ ...clip, markers: clip.markers.filter((item) => item.id !== marker.id) }))
+  };
+}
+
+export function createAddTimelineEventCommand(clipId: string, event: TimelineEvent): EditorCommand {
+  return {
+    id: `timeline-event:${clipId}:${event.id}`,
+    label: "Add timeline event",
+    do: (state) => updateClip(state, clipId, (clip) => ({ ...clip, events: [...clip.events.filter((item) => item.id !== event.id), event].sort((a, b) => a.time - b.time) })),
+    undo: (state) => updateClip(state, clipId, (clip) => ({ ...clip, events: clip.events.filter((item) => item.id !== event.id) }))
   };
 }
 
@@ -1026,6 +1249,56 @@ function updateClipTrack(state: EditorProjectState, clipId: string, trackId: str
       }
     }
   };
+}
+
+function updateClip(state: EditorProjectState, clipId: string, updater: (clip: AnimationClip) => AnimationClip): EditorProjectState {
+  const clip = state.animations[clipId];
+  return clip ? { ...markDirty(state, clipId, "animations"), animations: { ...state.animations, [clipId]: updater(clip) } } : state;
+}
+
+function snapKeyframe(state: EditorProjectState, keyframe: Keyframe): Keyframe {
+  const frame = 1 / Math.max(1, state.timeline.snappingFps);
+  return { ...keyframe, time: Math.round(keyframe.time / frame) * frame };
+}
+
+function mapClipKeys(clip: AnimationClip, mapper: (key: Keyframe, trackId: string) => Keyframe): AnimationClip {
+  return {
+    ...clip,
+    tracks: Object.fromEntries(Object.entries(clip.tracks).map(([trackId, keys]) => [trackId, keys.map((key) => mapper(key, trackId)).sort((a, b) => a.time - b.time)]))
+  };
+}
+
+function retimeClip(clip: AnimationClip, duration: number): AnimationClip {
+  const nextDuration = Math.max(1 / clip.frameRate, duration);
+  const factor = nextDuration / Math.max(1 / clip.frameRate, clip.duration);
+  return {
+    ...mapClipKeys(clip, (key) => ({ ...key, time: key.time * factor })),
+    duration: nextDuration,
+    events: clip.events.map((event) => ({ ...event, time: event.time * factor })),
+    markers: clip.markers.map((marker) => ({ ...marker, time: marker.time * factor }))
+  };
+}
+
+function reverseClip(clip: AnimationClip): AnimationClip {
+  return {
+    ...mapClipKeys(clip, (key) => ({ ...key, time: Math.max(0, clip.duration - key.time) })),
+    events: clip.events.map((event) => ({ ...event, time: Math.max(0, clip.duration - event.time) })).sort((a, b) => a.time - b.time),
+    markers: clip.markers.map((marker) => ({ ...marker, time: Math.max(0, clip.duration - marker.time) })).sort((a, b) => a.time - b.time)
+  };
+}
+
+function normalizeLoopClip(clip: AnimationClip): AnimationClip {
+  if (!clip.loop) {
+    return clip;
+  }
+  const tracks = Object.fromEntries(
+    Object.entries(clip.tracks).map(([trackId, keys]) => {
+      const first = keys[0];
+      const hasEnd = keys.some((key) => Math.abs(key.time - clip.duration) < 0.0001);
+      return [trackId, first && !hasEnd ? [...keys, { ...first, id: `${first.id}_loop`, time: clip.duration }].sort((a, b) => a.time - b.time) : keys];
+    })
+  );
+  return { ...clip, tracks, markers: clip.markers.some((marker) => marker.time === clip.duration) ? clip.markers : [...clip.markers, { id: `${clip.id}-loop`, time: clip.duration, label: "Loop", color: "#4f8cff" }] };
 }
 
 function renameAnimation(state: EditorProjectState, clipId: string, nextId: string): EditorProjectState {
