@@ -1,5 +1,3 @@
-export const runtimePixiPackageName = "@bones/runtime-pixi";
-
-export interface BonesRuntimePixiPackage {
-  readonly name: typeof runtimePixiPackageName;
-}
+export * from "./RigInstance.js";
+export * from "./RigLoader.js";
+export * from "./types.js";

@@ -1,5 +1,4 @@
-export const vectorCorePackageName = "@bones/vector-core";
-
-export interface BonesVectorCorePackage {
-  readonly name: typeof vectorCorePackageName;
-}
+export * from "./factories.js";
+export * from "./path.js";
+export * from "./pixi.js";
+export * from "./types.js";

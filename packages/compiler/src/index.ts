@@ -1,5 +1,2 @@
-export const compilerPackageName = "@bones/compiler";
-
-export interface BonesCompilerPackage {
-  readonly name: typeof compilerPackageName;
-}
+export * from "./compiler.js";
+export * from "./types.js";
