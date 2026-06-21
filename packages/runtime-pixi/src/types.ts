@@ -20,6 +20,7 @@ export interface RuntimeCompiledRig {
   readonly sourceProjectId: string;
   readonly name: string;
   readonly rig: RuntimeCompiledRigData;
+  readonly animations?: readonly RuntimeAnimationClip[];
 }
 
 export interface RuntimeCompiledRigData {
@@ -93,6 +94,59 @@ export interface RigUpdateState {
   readonly elapsed: number;
   readonly lastDelta: number;
   readonly params: AnimationParameters;
+}
+
+export type RuntimeTrackTargetKind = "bone" | "part" | "project" | "stateMachine";
+export type RuntimeTrackProperty =
+  | "transform.x"
+  | "transform.y"
+  | "transform.rotation"
+  | "transform.scaleX"
+  | "transform.scaleY"
+  | "transform.skewX"
+  | "transform.skewY"
+  | "visible"
+  | "opacity"
+  | "drawOrder"
+  | "procedural.params";
+export type RuntimeKeyframeInterpolation = "linear" | "step" | "hold" | "bezier";
+export type RuntimeSampleValue = string | number | boolean | null | readonly RuntimeSampleValue[] | { readonly [key: string]: RuntimeSampleValue };
+
+export interface RuntimeAnimationClip {
+  readonly id: NumericId;
+  readonly duration: number;
+  readonly fps: number;
+  readonly loop: boolean;
+  readonly tracks: readonly RuntimeAnimationTrack[];
+  readonly trackLookup?: Readonly<Record<string, NumericId>>;
+}
+
+export interface RuntimeAnimationTrack {
+  readonly id: NumericId;
+  readonly targetKind: RuntimeTrackTargetKind;
+  readonly target: NumericId;
+  readonly property: RuntimeTrackProperty;
+  readonly keyframes: readonly RuntimeKeyframe[];
+}
+
+export interface RuntimeKeyframe {
+  readonly time: number;
+  readonly value: RuntimeSampleValue;
+  readonly interpolation: RuntimeKeyframeInterpolation;
+  readonly curve: readonly [number, number, number, number];
+}
+
+export interface AnimationSampleTrackValue {
+  readonly targetKind: RuntimeTrackTargetKind;
+  readonly target: NumericId;
+  readonly property: RuntimeTrackProperty;
+  value: RuntimeSampleValue;
+}
+
+export interface AnimationSample {
+  normalizedTime: number;
+  localTime: number;
+  readonly values: AnimationSampleTrackValue[];
 }
 
 export type RuntimePathCommand =
