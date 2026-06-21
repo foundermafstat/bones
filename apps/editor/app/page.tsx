@@ -19,6 +19,7 @@ import {
   createDeleteKeyframeCommand,
   createMoveKeyframeCommand,
   createChangeCurveCommand,
+  createTransitionCommand,
   executeCommand,
   initialEditorProject,
   redo,
@@ -131,6 +132,9 @@ export default function EditorPage() {
           <button type="button" disabled={!activeTrack.length} onClick={() => runCommand(createChangeCurveCommand("idle", "body.scaleY", activeTrack[0]?.id ?? "", "bezier", [0.2, 0.8, 0.2, 1]))}>
             Ease
           </button>
+          <button type="button" onClick={() => runCommand(createTransitionCommand({ id: "walk-jump", fromStateId: "walk", toStateId: "jump", duration: 0.12, priority: 10, canInterrupt: true, syncMode: "none" }))}>
+            Transition
+          </button>
           <button type="button">Play</button>
           <button type="button">Pause</button>
           <button type="button">Record</button>
@@ -219,6 +223,11 @@ export default function EditorPage() {
           <section>
             <h2>Curve</h2>
             <p>{activeTrack.map((key) => `${key.id}: ${key.interpolation}`).join(", ")}</p>
+          </section>
+          <section>
+            <h2>State Machine</h2>
+            <p>{editorState.project.stateMachine.transitions.map((transition) => `${transition.fromStateId}->${transition.toStateId}`).join(", ")}</p>
+            <p>{Object.keys(editorState.project.stateMachine.parameters).join(", ")}</p>
           </section>
         </aside>
       </section>

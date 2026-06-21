@@ -15,6 +15,7 @@ export interface EditorProjectState {
   readonly parts: Readonly<Record<string, ShapePart>>;
   readonly poses: Readonly<Record<string, PoseDefinition>>;
   readonly animations: Readonly<Record<string, AnimationClip>>;
+  readonly stateMachine: EditorStateMachine;
   readonly dirty: boolean;
   readonly dirtyParts: readonly string[];
 }
@@ -48,6 +49,23 @@ export interface Keyframe {
   readonly value: number;
   readonly interpolation: "linear" | "step" | "hold" | "bezier";
   readonly curve?: readonly [number, number, number, number];
+}
+
+export interface EditorStateMachine {
+  readonly initialStateId: string;
+  readonly states: readonly { readonly id: string; readonly clipId: string }[];
+  readonly transitions: readonly EditorTransition[];
+  readonly parameters: Readonly<Record<string, number | boolean | string>>;
+}
+
+export interface EditorTransition {
+  readonly id: string;
+  readonly fromStateId: string;
+  readonly toStateId: string;
+  readonly duration: number;
+  readonly priority: number;
+  readonly canInterrupt: boolean;
+  readonly syncMode: "none" | "normalizedTime" | "phaseMatch";
 }
 
 export interface EditorCommand {
@@ -112,6 +130,16 @@ export const initialEditorProject: EditorProjectState = {
     idle: { id: "idle", duration: 1.2, loop: true, tracks: { "body.scaleY": [{ id: "idle-0", time: 0, value: 1, interpolation: "bezier" }] } },
     walk: { id: "walk", duration: 0.72, loop: true, tracks: { "thighFront.rotation": [{ id: "walk-0", time: 0, value: 1.25, interpolation: "linear" }] } },
     jump: { id: "jump", duration: 0.3, loop: false, tracks: {} }
+  },
+  stateMachine: {
+    initialStateId: "idle",
+    states: [
+      { id: "idle", clipId: "idle" },
+      { id: "walk", clipId: "walk" },
+      { id: "jump", clipId: "jump" }
+    ],
+    transitions: [{ id: "idle-walk", fromStateId: "idle", toStateId: "walk", duration: 0.18, priority: 0, canInterrupt: true, syncMode: "phaseMatch" }],
+    parameters: { absSpeed: 0, velocityY: 0, grounded: true, jumpPressed: false, facing: 1, wallContact: "none", timeInState: 0 }
   }
 };
 
@@ -403,6 +431,27 @@ export function createChangeCurveCommand(
     label: "Change curve",
     do: (state) => change(state, { interpolation, curve }),
     undo: (state) => (previous ? change(state, { interpolation: previous.interpolation, curve: previous.curve ?? [0, 0, 1, 1] }) : state)
+  };
+}
+
+export function createTransitionCommand(transition: EditorTransition): EditorCommand {
+  return {
+    id: `transition:${transition.id}`,
+    label: "Create transition",
+    do: (state) => ({
+      ...markDirty(state, transition.id),
+      stateMachine: {
+        ...state.stateMachine,
+        transitions: state.stateMachine.transitions.some((item) => item.id === transition.id) ? state.stateMachine.transitions : [...state.stateMachine.transitions, transition]
+      }
+    }),
+    undo: (state) => ({
+      ...markDirty(state, transition.id),
+      stateMachine: {
+        ...state.stateMachine,
+        transitions: state.stateMachine.transitions.filter((item) => item.id !== transition.id)
+      }
+    })
   };
 }
 
