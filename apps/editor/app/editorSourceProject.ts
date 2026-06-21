@@ -14,6 +14,7 @@ import {
 } from "@bones/schema";
 import type {
   AnimationClip,
+  BoneMetadata,
   BoneTransform,
   EditorProjectState,
   EditorTransition,
@@ -96,6 +97,19 @@ export function fromSourceProject(sourceInput: unknown): EditorProjectState {
 
   const hierarchy = readStringArray(rig.editor?.custom?.hierarchy) ?? orderBones(rig.bones, rig.rootBoneId);
   const bones = Object.fromEntries(rig.bones.map((bone) => [bone.id, fromTransform(bone.local ?? bone.transform ?? identityTransform())]));
+  const boneMetadata: Readonly<Record<string, BoneMetadata>> = Object.fromEntries(
+    rig.bones.map((bone) => {
+      const facing = bone.editor?.custom?.facing === -1 || bone.editor?.custom?.facing === 1 ? bone.editor.custom.facing : undefined;
+      const metadata: BoneMetadata = {
+        ...(bone.inheritRotation === false ? { locked: true } : {}),
+        ...(bone.mirrorGroup ? { mirrorGroup: bone.mirrorGroup } : {}),
+        ...(bone.tags ? { tags: bone.tags } : {}),
+        ...(typeof bone.editor?.custom?.hidden === "boolean" ? { hidden: bone.editor.custom.hidden } : {}),
+        ...(facing ? { facing } : {})
+      };
+      return [bone.id, metadata];
+    })
+  );
   const parents = Object.fromEntries(rig.bones.map((bone) => [bone.id, bone.parentId ?? null]));
   const parts = Object.fromEntries((rig.parts ?? []).map((part) => [part.id, fromSourcePart(part)]));
   const machine = source.stateMachines?.[0];
@@ -108,6 +122,7 @@ export function fromSourceProject(sourceInput: unknown): EditorProjectState {
     hierarchy,
     parents,
     bones,
+    boneMetadata,
     parts,
     poses: Object.fromEntries(
       (source.poses ?? []).map((pose) => [
@@ -144,11 +159,25 @@ export function fromSourceProject(sourceInput: unknown): EditorProjectState {
 }
 
 function toSourceBone(project: EditorProjectState, boneId: string): BoneDefinition {
+  const metadata = project.boneMetadata[boneId];
   return {
     id: boneId,
     name: boneId,
     ...(project.parents[boneId] ? { parentId: project.parents[boneId] ?? undefined } : {}),
-    local: toTransform(project.bones[boneId] ?? identityTransform())
+    local: toTransform(project.bones[boneId] ?? identityTransform()),
+    ...(metadata?.mirrorGroup ? { mirrorGroup: metadata.mirrorGroup } : {}),
+    ...(metadata?.tags?.length ? { tags: metadata.tags } : {}),
+    ...(metadata?.locked ? { inheritRotation: false, inheritScale: false } : {}),
+    ...(metadata?.hidden !== undefined || metadata?.facing !== undefined
+      ? {
+          editor: {
+            custom: {
+              ...(metadata.hidden !== undefined ? { hidden: metadata.hidden } : {}),
+              ...(metadata.facing !== undefined ? { facing: metadata.facing } : {})
+            }
+          }
+        }
+      : {})
   };
 }
 

@@ -32,6 +32,9 @@ import {
   createAddBoneCommand,
   createDeleteBoneCommand,
   createRenameBoneCommand,
+  createSetBoneMetadataCommand,
+  createSetBoneTransformCommand,
+  createSetParentCommand,
   createBindProceduralPartCommand,
   createEditPathPointCommand,
   createMirrorPathCommand,
@@ -51,6 +54,7 @@ import {
   initialEditorProject,
   redo,
   undo,
+  type EditorProjectState,
   type EditorStateContainer
 } from "./editorState";
 import { loadDraft, saveDraft, serializeEditorProject } from "./projectIo";
@@ -94,12 +98,17 @@ export default function EditorPage() {
   const [previewClipId, setPreviewClipId] = useState(0);
   const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
   const [dragPoint, setDragPoint] = useState<{ readonly index: number; readonly point: readonly [number, number] } | null>(null);
+  const [dragBone, setDragBone] = useState<{ readonly boneId: string; readonly point: readonly [number, number] } | null>(null);
   const [editorState, setEditorState] = useState<EditorStateContainer>({
     project: initialEditorProject,
     history: { past: [], future: [] }
   });
   const selectedBone = editorState.project.selectedBoneId;
   const selectedTransform = editorState.project.bones[selectedBone] ?? initialEditorProject.bones.body!;
+  const selectedBoneMetadata = editorState.project.boneMetadata[selectedBone] ?? {};
+  const rigPoints = useMemo(() => getRigWorldPoints(editorState.project), [editorState.project]);
+  const displayedRigPoints = dragBone ? { ...rigPoints, [dragBone.boneId]: dragBone.point } : rigPoints;
+  const rigViewBox = useMemo(() => getShapeViewBox(Object.values(displayedRigPoints)), [displayedRigPoints]);
   const selectedPart = Object.values(editorState.project.parts).find((part) => part.boneId === selectedBone) ?? editorState.project.parts.bodyShape!;
   const shapePoints = dragPoint
     ? selectedPart.points.map((point, index) => (index === dragPoint.index ? dragPoint.point : point))
@@ -322,6 +331,70 @@ export default function EditorPage() {
           </CardHeader>
           <CardContent className="relative min-h-0 flex-1 overflow-hidden bg-[linear-gradient(var(--border)_1px,transparent_1px),linear-gradient(90deg,var(--border)_1px,transparent_1px)] bg-[size:24px_24px] p-0" aria-label="PixiJS canvas viewport">
             <PixiPreview clipId={previewClipId} playing={previewPlaying} project={editorState.project} showSkeleton={mode !== "Preview"} />
+            {mode === "Rig" ? (
+              <svg
+                aria-label="Rig bone editor"
+                className="absolute inset-0 z-10 size-full touch-none"
+                viewBox={`${rigViewBox.x} ${rigViewBox.y} ${rigViewBox.width} ${rigViewBox.height}`}
+                onPointerMove={(event) => {
+                  if (dragBone) {
+                    setDragBone({ boneId: dragBone.boneId, point: svgPointFromEvent(event, rigViewBox) });
+                  }
+                }}
+                onPointerUp={() => {
+                  if (dragBone) {
+                    const parentId = editorState.project.parents[dragBone.boneId];
+                    const parentPoint = parentId ? rigPoints[parentId] : [0, 0];
+                    const current = editorState.project.bones[dragBone.boneId] ?? selectedTransform;
+                    runCommand(
+                      createSetBoneTransformCommand(dragBone.boneId, {
+                        ...current,
+                        x: dragBone.point[0] - (parentPoint?.[0] ?? 0),
+                        y: dragBone.point[1] - (parentPoint?.[1] ?? 0)
+                      })
+                    );
+                    setDragBone(null);
+                  }
+                }}
+              >
+                {editorState.project.hierarchy.map((boneId) => {
+                  const parentId = editorState.project.parents[boneId];
+                  const point = displayedRigPoints[boneId];
+                  const parentPoint = parentId ? displayedRigPoints[parentId] : undefined;
+                  return parentPoint && point ? (
+                    <line key={`${boneId}-line`} stroke="#4f8cff" strokeWidth={2} vectorEffect="non-scaling-stroke" x1={parentPoint[0]} x2={point[0]} y1={parentPoint[1]} y2={point[1]} />
+                  ) : null;
+                })}
+                {editorState.project.hierarchy.map((boneId) => {
+                  const point = displayedRigPoints[boneId];
+                  if (!point || editorState.project.boneMetadata[boneId]?.hidden) {
+                    return null;
+                  }
+                  const selected = boneId === selectedBone;
+                  return (
+                    <circle
+                      cx={point[0]}
+                      cy={point[1]}
+                      fill={selected ? "#ffffff" : "#4f8cff"}
+                      aria-label={`Bone ${boneId}`}
+                      key={boneId}
+                      r={selected ? 5 : 3.5}
+                      stroke="#1b4dcc"
+                      strokeWidth={1.5}
+                      vectorEffect="non-scaling-stroke"
+                      onPointerDown={(event) => {
+                        event.preventDefault();
+                        event.currentTarget.setPointerCapture(event.pointerId);
+                        setEditorState((state) => ({ ...state, project: { ...state.project, selectedBoneId: boneId } }));
+                        if (!editorState.project.boneMetadata[boneId]?.locked) {
+                          setDragBone({ boneId, point });
+                        }
+                      }}
+                    />
+                  );
+                })}
+              </svg>
+            ) : null}
             {mode === "Shape" && shapePoints.length > 0 ? (
               <svg
                 aria-label="Shape point editor"
@@ -391,6 +464,29 @@ export default function EditorPage() {
                   {inspectorRows.map(([label, value]) => (
                     <ReadOnlyField key={label} label={label} value={value} />
                   ))}
+                  <div className="grid grid-cols-2 gap-1">
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetParentCommand(selectedBone, "root"))} disabled={selectedBone === "root"}>
+                      Parent Root
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetParentCommand(selectedBone, "body"))} disabled={selectedBone === "root" || selectedBone === "body"}>
+                      Parent Body
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetBoneMetadataCommand(selectedBone, { locked: !selectedBoneMetadata.locked }))}>
+                      {selectedBoneMetadata.locked ? "Unlock" : "Lock"}
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetBoneMetadataCommand(selectedBone, { hidden: !selectedBoneMetadata.hidden }))}>
+                      {selectedBoneMetadata.hidden ? "Show" : "Hide"}
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetBoneMetadataCommand(selectedBone, { mirrorGroup: selectedBone.includes("Front") ? "front" : "back" }))}>
+                      Mirror ID
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetBoneMetadataCommand(selectedBone, { tags: [...(selectedBoneMetadata.tags ?? []), "default-pose"] }))}>
+                      Tag
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetBoneMetadataCommand(selectedBone, { facing: selectedBoneMetadata.facing === -1 ? 1 : -1 }))}>
+                      Facing
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
               <Card size="sm">
@@ -528,6 +624,26 @@ function getShapeViewBox(points: readonly (readonly [number, number])[]): ShapeV
     width: width + padding * 2,
     height: height + padding * 2
   };
+}
+
+function getRigWorldPoints(project: EditorProjectState): Readonly<Record<string, readonly [number, number]>> {
+  const points: Record<string, readonly [number, number]> = {};
+  const visit = (boneId: string): readonly [number, number] => {
+    const existing = points[boneId];
+    if (existing) {
+      return existing;
+    }
+    const local = project.bones[boneId] ?? { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 };
+    const parentId = project.parents[boneId];
+    const parent = parentId ? visit(parentId) : ([0, 0] as const);
+    const point = [parent[0] + local.x, parent[1] + local.y] as const;
+    points[boneId] = point;
+    return point;
+  };
+  for (const boneId of project.hierarchy) {
+    visit(boneId);
+  }
+  return points;
 }
 
 function svgPointFromEvent(event: PointerEvent<SVGSVGElement> | MouseEvent<SVGSVGElement>, viewBox: ShapeViewBox): readonly [number, number] {

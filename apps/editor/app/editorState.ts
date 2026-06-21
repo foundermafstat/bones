@@ -14,6 +14,7 @@ export interface EditorProjectState {
   readonly hierarchy: readonly string[];
   readonly parents: Readonly<Record<string, string | null>>;
   readonly bones: Readonly<Record<string, BoneTransform>>;
+  readonly boneMetadata: Readonly<Record<string, BoneMetadata>>;
   readonly parts: Readonly<Record<string, ShapePart>>;
   readonly poses: Readonly<Record<string, PoseDefinition>>;
   readonly animations: Readonly<Record<string, AnimationClip>>;
@@ -21,6 +22,14 @@ export interface EditorProjectState {
   readonly procedural: ProceduralPresetState;
   readonly dirty: boolean;
   readonly dirtyParts: readonly string[];
+}
+
+export interface BoneMetadata {
+  readonly locked?: boolean;
+  readonly hidden?: boolean;
+  readonly mirrorGroup?: string;
+  readonly tags?: readonly string[];
+  readonly facing?: -1 | 1;
 }
 
 export interface ShapePart {
@@ -146,6 +155,7 @@ export const initialEditorProject: EditorProjectState = {
     shinFront: { x: 0, y: 82, rotation: 0.02, scaleX: 1, scaleY: 1 },
     footFront: { x: 5, y: 78, rotation: 0.12, scaleX: 1, scaleY: 1 }
   },
+  boneMetadata: {},
   parts: {
     cloakShape: { id: "cloakShape", boneId: "cloak", type: "svg", pivot: [0, 0], points: [], preset: undefined, assetPath: "/assets/shadow-hero-silhouette/part_05_large_cape.svg", width: 238, anchor: [0.62, 0.1], zIndex: 1 },
     headShape: { id: "headShape", boneId: "head", type: "svg", pivot: [0, 0], points: [], preset: undefined, assetPath: "/assets/shadow-hero-silhouette/part_01_rear_head_hair.svg", width: 118, anchor: [0.5, 0.72], zIndex: 8 },
@@ -317,6 +327,40 @@ export function createSetParentCommand(boneId: string, parentId: string | null):
     label: "Set parent",
     do: (state) => ({ ...markDirty(state, boneId), parents: { ...state.parents, [boneId]: parentId } }),
     undo: (state) => ({ ...markDirty(state, boneId), parents: { ...state.parents, [boneId]: state.parents[boneId] ?? null } })
+  };
+}
+
+export function createSetBoneTransformCommand(boneId: string, transform: BoneTransform): EditorCommand {
+  let previous: BoneTransform | undefined;
+  return {
+    id: `set-bone-transform:${boneId}`,
+    label: "Set bone transform",
+    do: (state) => {
+      previous = state.bones[boneId];
+      return { ...markDirty(state, boneId), bones: { ...state.bones, [boneId]: transform } };
+    },
+    undo: (state) => (previous ? { ...markDirty(state, boneId), bones: { ...state.bones, [boneId]: previous } } : state)
+  };
+}
+
+export function createSetBoneMetadataCommand(boneId: string, metadata: BoneMetadata): EditorCommand {
+  let previous: BoneMetadata | undefined;
+  return {
+    id: `set-bone-metadata:${boneId}`,
+    label: "Set bone metadata",
+    do: (state) => {
+      previous = state.boneMetadata[boneId];
+      return { ...markDirty(state, boneId), boneMetadata: { ...state.boneMetadata, [boneId]: { ...(state.boneMetadata[boneId] ?? {}), ...metadata } } };
+    },
+    undo: (state) => {
+      const nextMetadata = { ...state.boneMetadata };
+      if (previous) {
+        nextMetadata[boneId] = previous;
+      } else {
+        delete nextMetadata[boneId];
+      }
+      return { ...markDirty(state, boneId), boneMetadata: nextMetadata };
+    }
   };
 }
 
