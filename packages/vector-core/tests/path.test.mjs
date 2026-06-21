@@ -2,17 +2,26 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   closePath,
+  convertLineToSmoothCubic,
   createOrganicBlobPath,
   createTaperedLimbPath,
   createSvgPathSource,
+  deletePathCommand,
+  getBoundsOverlap,
+  getPathBounds,
   getPathDirection,
+  getPathPivot,
+  hitTestPath,
   importSvgPaths,
+  insertPointOnSegment,
   isPathClosed,
   mirrorPath,
+  movePathCommandPoint,
   normalizePath,
   normalizePathDirection,
   parsePathData,
   reversePath,
+  setCubicHandles,
   serializePathData,
   simplifyPath,
   smoothPath,
@@ -127,4 +136,37 @@ test("imports SVG path data into editable vector commands", () => {
     { cmd: "L", x: 10, y: 20 },
     { cmd: "Z" }
   ]);
+});
+
+test("computes bounds, pivot, hit tests, and overlap preview", () => {
+  const bounds = getPathBounds(square);
+
+  assert.deepEqual(bounds, { minX: 0, minY: 0, maxX: 10, maxY: 10, width: 10, height: 10 });
+  assert.deepEqual(getPathPivot(square), { x: 5, y: 5 });
+  assert.deepEqual(hitTestPath(square, { x: 10, y: 5 }, 0.1), { kind: "segment", index: 2, distance: 0 });
+  assert.deepEqual(getBoundsOverlap(bounds, { minX: 5, minY: 5, maxX: 15, maxY: 8, width: 10, height: 3 }), {
+    minX: 5,
+    minY: 5,
+    maxX: 10,
+    maxY: 8,
+    width: 5,
+    height: 3
+  });
+});
+
+test("edits path points and bezier handles", () => {
+  const inserted = insertPointOnSegment(square, 1, 0.5);
+  assert.deepEqual(inserted[1], { cmd: "L", x: 5, y: 0 });
+
+  const moved = movePathCommandPoint(inserted, 1, { x: 6, y: 1 });
+  assert.deepEqual(moved[1], { cmd: "L", x: 6, y: 1 });
+
+  const deleted = deletePathCommand(moved, 1);
+  assert.deepEqual(deleted, square);
+
+  const cubic = convertLineToSmoothCubic(square, 1, 0.25);
+  assert.equal(cubic[1].cmd, "C");
+
+  const handled = setCubicHandles(cubic, 1, { x: 2, y: -2 }, { x: 8, y: -2 });
+  assert.deepEqual(handled[1], { cmd: "C", cp1x: 2, cp1y: -2, cp2x: 8, cp2y: -2, x: 10, y: 0 });
 });
