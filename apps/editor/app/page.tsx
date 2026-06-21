@@ -12,6 +12,9 @@ import {
   createEditPathPointCommand,
   createMirrorPathCommand,
   createSetPartPivotCommand,
+  createApplyPoseCommand,
+  createDuplicatePoseCommand,
+  createMirrorPoseCommand,
   executeCommand,
   initialEditorProject,
   redo,
@@ -36,6 +39,8 @@ export default function EditorPage() {
   const selectedBone = editorState.project.selectedBoneId;
   const selectedTransform = editorState.project.bones[selectedBone] ?? initialEditorProject.bones.body!;
   const selectedPart = Object.values(editorState.project.parts).find((part) => part.boneId === selectedBone) ?? editorState.project.parts.bodyShape!;
+  const poseIds = Object.keys(editorState.project.poses);
+  const selectedPose = editorState.project.poses[poseIds[0]!]!;
   const runCommand = (command: Parameters<typeof executeCommand>[1]) => setEditorState((state) => executeCommand(state, command));
   const inspectorRows = useMemo(
     () => [
@@ -98,6 +103,15 @@ export default function EditorPage() {
           </button>
           <button type="button" onClick={() => runCommand(createSetPartPivotCommand(selectedPart.id, [4, 0]))}>
             Pivot
+          </button>
+          <button type="button" onClick={() => runCommand(createApplyPoseCommand(selectedPose.id))}>
+            Apply Pose
+          </button>
+          <button type="button" onClick={() => runCommand(createDuplicatePoseCommand(selectedPose.id, `${selectedPose.id}_copy`))}>
+            Duplicate Pose
+          </button>
+          <button type="button" onClick={() => runCommand(createMirrorPoseCommand(selectedPose.id, `${selectedPose.id}_mirror`))}>
+            Mirror Pose
           </button>
           <button type="button">Play</button>
           <button type="button">Pause</button>
@@ -179,6 +193,10 @@ export default function EditorPage() {
           <section>
             <h2>Constraints</h2>
             <p>Foot IK placeholder</p>
+          </section>
+          <section>
+            <h2>Pose Library</h2>
+            <p>{poseIds.map((poseId) => editorState.project.poses[poseId]?.name).join(", ")}</p>
           </section>
         </aside>
       </section>

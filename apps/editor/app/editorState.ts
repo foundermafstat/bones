@@ -13,6 +13,7 @@ export interface EditorProjectState {
   readonly parents: Readonly<Record<string, string | null>>;
   readonly bones: Readonly<Record<string, BoneTransform>>;
   readonly parts: Readonly<Record<string, ShapePart>>;
+  readonly poses: Readonly<Record<string, PoseDefinition>>;
   readonly dirty: boolean;
   readonly dirtyParts: readonly string[];
 }
@@ -24,6 +25,13 @@ export interface ShapePart {
   readonly pivot: readonly [number, number];
   readonly points: readonly (readonly [number, number])[];
   readonly preset: "tapered-limb" | "organic-blob" | "capsule" | undefined;
+}
+
+export interface PoseDefinition {
+  readonly id: string;
+  readonly name: string;
+  readonly boneTransforms: Readonly<Record<string, BoneTransform>>;
+  readonly tags: readonly string[];
 }
 
 export interface EditorCommand {
@@ -76,6 +84,13 @@ export const initialEditorProject: EditorProjectState = {
   parts: {
     bodyShape: { id: "bodyShape", boneId: "body", type: "procedural", pivot: [0, 0], points: [], preset: "organic-blob" },
     armShape: { id: "armShape", boneId: "upperArmFront", type: "procedural", pivot: [0, 0], points: [], preset: "tapered-limb" }
+  },
+  poses: {
+    idle_neutral: { id: "idle_neutral", name: "Idle neutral", boneTransforms: {}, tags: ["idle"] },
+    breath_in: { id: "breath_in", name: "Breath in", boneTransforms: { body: { x: 0, y: -37, rotation: 0, scaleX: 1, scaleY: 1.025 } }, tags: ["idle"] },
+    walk_contact: { id: "walk_contact", name: "Walk contact", boneTransforms: { thighFront: { x: 7, y: -4, rotation: 1.25, scaleX: 1, scaleY: 1 } }, tags: ["walk"] },
+    jump_peak: { id: "jump_peak", name: "Jump peak", boneTransforms: { body: { x: 0, y: -44, rotation: -0.04, scaleX: 1, scaleY: 1.04 } }, tags: ["jump"] },
+    land_heavy: { id: "land_heavy", name: "Land heavy", boneTransforms: { body: { x: 0, y: -33, rotation: 0, scaleX: 1.14, scaleY: 0.82 } }, tags: ["land"] }
   }
 };
 
@@ -237,6 +252,64 @@ export function createSetPartPivotCommand(partId: string, pivot: readonly [numbe
     undo: (state) => {
       const part = state.parts[partId];
       return part ? { ...markDirty(state, partId), parts: { ...state.parts, [partId]: { ...part, pivot: [0, 0] } } } : state;
+    }
+  };
+}
+
+export function createApplyPoseCommand(poseId: string): EditorCommand {
+  let previous: Readonly<Record<string, BoneTransform>> = {};
+  return {
+    id: `apply-pose:${poseId}`,
+    label: "Apply pose",
+    do: (state) => {
+      const pose = state.poses[poseId];
+      if (!pose) {
+        return state;
+      }
+      previous = Object.fromEntries(
+        Object.keys(pose.boneTransforms)
+          .map((boneId): [string, BoneTransform | undefined] => [boneId, state.bones[boneId]])
+          .filter((entry): entry is [string, BoneTransform] => Boolean(entry[1]))
+      );
+      return {
+        ...markDirty(state, poseId),
+        bones: { ...state.bones, ...pose.boneTransforms }
+      };
+    },
+    undo: (state) => ({ ...markDirty(state, poseId), bones: { ...state.bones, ...previous } })
+  };
+}
+
+export function createDuplicatePoseCommand(poseId: string, nextId: string): EditorCommand {
+  return {
+    id: `duplicate-pose:${poseId}:${nextId}`,
+    label: "Duplicate pose",
+    do: (state) => {
+      const pose = state.poses[poseId];
+      return pose ? { ...markDirty(state, nextId), poses: { ...state.poses, [nextId]: { ...pose, id: nextId, name: `${pose.name} Copy` } } } : state;
+    },
+    undo: (state) => {
+      const { [nextId]: _removed, ...poses } = state.poses;
+      return { ...markDirty(state, nextId), poses };
+    }
+  };
+}
+
+export function createMirrorPoseCommand(poseId: string, nextId: string): EditorCommand {
+  return {
+    id: `mirror-pose:${poseId}:${nextId}`,
+    label: "Mirror pose",
+    do: (state) => {
+      const pose = state.poses[poseId];
+      if (!pose) {
+        return state;
+      }
+      const boneTransforms = Object.fromEntries(Object.entries(pose.boneTransforms).map(([boneId, transform]) => [boneId, { ...transform, x: -transform.x, rotation: -transform.rotation }]));
+      return { ...markDirty(state, nextId), poses: { ...state.poses, [nextId]: { ...pose, id: nextId, name: `${pose.name} Mirrored`, boneTransforms } } };
+    },
+    undo: (state) => {
+      const { [nextId]: _removed, ...poses } = state.poses;
+      return { ...markDirty(state, nextId), poses };
     }
   };
 }
