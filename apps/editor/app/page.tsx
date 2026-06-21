@@ -15,6 +15,9 @@ import {
   createApplyPoseCommand,
   createDuplicatePoseCommand,
   createMirrorPoseCommand,
+  createAddKeyframeCommand,
+  createDeleteKeyframeCommand,
+  createMoveKeyframeCommand,
   executeCommand,
   initialEditorProject,
   redo,
@@ -41,6 +44,8 @@ export default function EditorPage() {
   const selectedPart = Object.values(editorState.project.parts).find((part) => part.boneId === selectedBone) ?? editorState.project.parts.bodyShape!;
   const poseIds = Object.keys(editorState.project.poses);
   const selectedPose = editorState.project.poses[poseIds[0]!]!;
+  const activeClip = editorState.project.animations.idle!;
+  const activeTrack = activeClip.tracks["body.scaleY"] ?? [];
   const runCommand = (command: Parameters<typeof executeCommand>[1]) => setEditorState((state) => executeCommand(state, command));
   const inspectorRows = useMemo(
     () => [
@@ -112,6 +117,15 @@ export default function EditorPage() {
           </button>
           <button type="button" onClick={() => runCommand(createMirrorPoseCommand(selectedPose.id, `${selectedPose.id}_mirror`))}>
             Mirror Pose
+          </button>
+          <button type="button" onClick={() => runCommand(createAddKeyframeCommand("idle", "body.scaleY", { id: `key${activeTrack.length}`, time: 0.6, value: 1.025, interpolation: "bezier" }))}>
+            Add Key
+          </button>
+          <button type="button" disabled={!activeTrack.length} onClick={() => runCommand(createMoveKeyframeCommand("idle", "body.scaleY", activeTrack[0]?.id ?? "", 0.12))}>
+            Move Key
+          </button>
+          <button type="button" disabled={!activeTrack.length} onClick={() => runCommand(createDeleteKeyframeCommand("idle", "body.scaleY", activeTrack[0]?.id ?? ""))}>
+            Delete Key
           </button>
           <button type="button">Play</button>
           <button type="button">Pause</button>
@@ -209,9 +223,10 @@ export default function EditorPage() {
           {sampleProject.tracks.map((track, index) => (
             <div className="track" key={track}>
               <span>{track}</span>
-              <i style={{ left: `${18 + index * 8}%` }} />
+              {(activeClip.tracks[track] ?? []).map((keyframe) => (
+                <i key={keyframe.id} style={{ left: `${(keyframe.time / activeClip.duration) * 100}%` }} />
+              ))}
               <i style={{ left: `${52 + index * 5}%` }} />
-              <i style={{ left: "86%" }} />
             </div>
           ))}
         </div>

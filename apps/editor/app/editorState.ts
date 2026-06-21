@@ -14,6 +14,7 @@ export interface EditorProjectState {
   readonly bones: Readonly<Record<string, BoneTransform>>;
   readonly parts: Readonly<Record<string, ShapePart>>;
   readonly poses: Readonly<Record<string, PoseDefinition>>;
+  readonly animations: Readonly<Record<string, AnimationClip>>;
   readonly dirty: boolean;
   readonly dirtyParts: readonly string[];
 }
@@ -32,6 +33,20 @@ export interface PoseDefinition {
   readonly name: string;
   readonly boneTransforms: Readonly<Record<string, BoneTransform>>;
   readonly tags: readonly string[];
+}
+
+export interface AnimationClip {
+  readonly id: string;
+  readonly duration: number;
+  readonly loop: boolean;
+  readonly tracks: Readonly<Record<string, readonly Keyframe[]>>;
+}
+
+export interface Keyframe {
+  readonly id: string;
+  readonly time: number;
+  readonly value: number;
+  readonly interpolation: "linear" | "step" | "hold" | "bezier";
 }
 
 export interface EditorCommand {
@@ -91,6 +106,11 @@ export const initialEditorProject: EditorProjectState = {
     walk_contact: { id: "walk_contact", name: "Walk contact", boneTransforms: { thighFront: { x: 7, y: -4, rotation: 1.25, scaleX: 1, scaleY: 1 } }, tags: ["walk"] },
     jump_peak: { id: "jump_peak", name: "Jump peak", boneTransforms: { body: { x: 0, y: -44, rotation: -0.04, scaleX: 1, scaleY: 1.04 } }, tags: ["jump"] },
     land_heavy: { id: "land_heavy", name: "Land heavy", boneTransforms: { body: { x: 0, y: -33, rotation: 0, scaleX: 1.14, scaleY: 0.82 } }, tags: ["land"] }
+  },
+  animations: {
+    idle: { id: "idle", duration: 1.2, loop: true, tracks: { "body.scaleY": [{ id: "idle-0", time: 0, value: 1, interpolation: "bezier" }] } },
+    walk: { id: "walk", duration: 0.72, loop: true, tracks: { "thighFront.rotation": [{ id: "walk-0", time: 0, value: 1.25, interpolation: "linear" }] } },
+    jump: { id: "jump", duration: 0.3, loop: false, tracks: {} }
   }
 };
 
@@ -314,6 +334,51 @@ export function createMirrorPoseCommand(poseId: string, nextId: string): EditorC
   };
 }
 
+export function createAddKeyframeCommand(clipId: string, trackId: string, keyframe: Keyframe): EditorCommand {
+  return {
+    id: `add-key:${clipId}:${trackId}:${keyframe.id}`,
+    label: "Add keyframe",
+    do: (state) => updateClipTrack(state, clipId, trackId, (keys) => [...keys, keyframe].sort((a, b) => a.time - b.time)),
+    undo: (state) => updateClipTrack(state, clipId, trackId, (keys) => keys.filter((key) => key.id !== keyframe.id))
+  };
+}
+
+export function createDeleteKeyframeCommand(clipId: string, trackId: string, keyframeId: string): EditorCommand {
+  let removed: Keyframe | undefined;
+  return {
+    id: `delete-key:${clipId}:${trackId}:${keyframeId}`,
+    label: "Delete keyframe",
+    do: (state) =>
+      updateClipTrack(state, clipId, trackId, (keys) => {
+        removed = keys.find((key) => key.id === keyframeId);
+        return keys.filter((key) => key.id !== keyframeId);
+      }),
+    undo: (state) => (removed ? updateClipTrack(state, clipId, trackId, (keys) => [...keys, removed!].sort((a, b) => a.time - b.time)) : state)
+  };
+}
+
+export function createMoveKeyframeCommand(clipId: string, trackId: string, keyframeId: string, nextTime: number): EditorCommand {
+  let previousTime = 0;
+  const move = (state: EditorProjectState, time: number) =>
+    updateClipTrack(state, clipId, trackId, (keys) =>
+      keys
+        .map((key) => {
+          if (key.id !== keyframeId) {
+            return key;
+          }
+          previousTime = key.time;
+          return { ...key, time };
+        })
+        .sort((a, b) => a.time - b.time)
+    );
+  return {
+    id: `move-key:${clipId}:${trackId}:${keyframeId}`,
+    label: "Move keyframe",
+    do: (state) => move(state, nextTime),
+    undo: (state) => move(state, previousTime)
+  };
+}
+
 function updateBone(state: EditorProjectState, boneId: string, updater: (bone: BoneTransform) => BoneTransform): EditorProjectState {
   const current = state.bones[boneId];
   if (!current) {
@@ -361,5 +426,25 @@ function renameBone(state: EditorProjectState, boneId: string, nextId: string): 
     hierarchy: state.hierarchy.map((item) => (item === boneId ? nextId : item)),
     parents: Object.fromEntries(Object.entries({ ...parents, [nextId]: parent ?? null }).map(([child, value]) => [child, value === boneId ? nextId : value])),
     bones: { ...bones, [nextId]: current }
+  };
+}
+
+function updateClipTrack(state: EditorProjectState, clipId: string, trackId: string, updater: (keys: readonly Keyframe[]) => readonly Keyframe[]): EditorProjectState {
+  const clip = state.animations[clipId];
+  if (!clip) {
+    return state;
+  }
+  return {
+    ...markDirty(state, clipId),
+    animations: {
+      ...state.animations,
+      [clipId]: {
+        ...clip,
+        tracks: {
+          ...clip.tracks,
+          [trackId]: updater(clip.tracks[trackId] ?? [])
+        }
+      }
+    }
   };
 }
