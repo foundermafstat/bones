@@ -59,6 +59,16 @@ const syncModes = new Set(["none", "normalizedTime", "phaseMatch"]);
 const proceduralAnimationTypes = new Set(["breathing", "secondaryMotion", "squashStretch", "footIK"]);
 const qualityPresets = new Set(["low", "medium", "high"]);
 
+interface ProjectReferences {
+  readonly projectId: string;
+  readonly rigIds: ReadonlySet<string>;
+  readonly boneIds: ReadonlySet<string>;
+  readonly partIds: ReadonlySet<string>;
+  readonly stateMachineIds: ReadonlySet<string>;
+  readonly bonesByRig: ReadonlyMap<string, ReadonlySet<string>>;
+  readonly partsByRig: ReadonlyMap<string, ReadonlySet<string>>;
+}
+
 export function validateRigProject(input: unknown): ValidationResult<RigProject> {
   const errors: ValidationIssue[] = [];
 
@@ -86,13 +96,15 @@ export function validateRigProject(input: unknown): ValidationResult<RigProject>
     input.rigs.forEach((rig, index) => validateRig(rig, `$.rigs[${index}]`, errors));
   }
 
+  const refs = collectProjectReferences(input);
+
   const animationIds = new Set<string>();
   if (input.animations !== undefined) {
     if (!Array.isArray(input.animations)) {
       errors.push({ path: "$.animations", message: "Animations must be an array when provided." });
     } else {
       input.animations.forEach((clip, index) => {
-        validateAnimationClip(clip, `$.animations[${index}]`, errors);
+        validateAnimationClip(clip, `$.animations[${index}]`, refs, errors);
         if (isRecord(clip) && typeof clip.id === "string") {
           addUnique(animationIds, clip.id, `$.animations[${index}].id`, "Animation clip id", errors);
         }
@@ -100,17 +112,11 @@ export function validateRigProject(input: unknown): ValidationResult<RigProject>
     }
   }
 
-  const rigIds = new Set(
-    Array.isArray(input.rigs)
-      ? input.rigs.flatMap((rig) => (isRecord(rig) && typeof rig.id === "string" ? [rig.id] : []))
-      : []
-  );
-
   if (input.poses !== undefined) {
     if (!Array.isArray(input.poses)) {
       errors.push({ path: "$.poses", message: "Poses must be an array when provided." });
     } else {
-      input.poses.forEach((pose, index) => validatePose(pose, `$.poses[${index}]`, rigIds, errors));
+      input.poses.forEach((pose, index) => validatePose(pose, `$.poses[${index}]`, refs, errors));
     }
   }
 
@@ -137,6 +143,61 @@ export function validateRigProject(input: unknown): ValidationResult<RigProject>
   }
 
   return errors.length > 0 ? invalid(errors) : { ok: true, value: input as unknown as RigProject };
+}
+
+function collectProjectReferences(input: Record<string, unknown>): ProjectReferences {
+  const rigs = Array.isArray(input.rigs) ? input.rigs.filter(isRecord) : [];
+  const rigIds = new Set<string>();
+  const boneIds = new Set<string>();
+  const partIds = new Set<string>();
+  const bonesByRig = new Map<string, Set<string>>();
+  const partsByRig = new Map<string, Set<string>>();
+
+  for (const rig of rigs) {
+    if (typeof rig.id !== "string") {
+      continue;
+    }
+    rigIds.add(rig.id);
+    const rigBoneIds = new Set<string>();
+    const rigPartIds = new Set<string>();
+    if (Array.isArray(rig.bones)) {
+      for (const bone of rig.bones.filter(isRecord)) {
+        if (typeof bone.id === "string") {
+          boneIds.add(bone.id);
+          rigBoneIds.add(bone.id);
+        }
+      }
+    }
+    if (Array.isArray(rig.parts)) {
+      for (const part of rig.parts.filter(isRecord)) {
+        if (typeof part.id === "string") {
+          partIds.add(part.id);
+          rigPartIds.add(part.id);
+        }
+      }
+    }
+    bonesByRig.set(rig.id, rigBoneIds);
+    partsByRig.set(rig.id, rigPartIds);
+  }
+
+  const stateMachineIds = new Set<string>();
+  if (Array.isArray(input.stateMachines)) {
+    for (const machine of input.stateMachines.filter(isRecord)) {
+      if (typeof machine.id === "string") {
+        stateMachineIds.add(machine.id);
+      }
+    }
+  }
+
+  return {
+    projectId: typeof input.id === "string" ? input.id : "",
+    rigIds,
+    boneIds,
+    partIds,
+    stateMachineIds,
+    bonesByRig,
+    partsByRig
+  };
 }
 
 export function assertRigProject(input: unknown): RigProject {
@@ -187,6 +248,8 @@ function validateRig(input: unknown, path: string, errors: ValidationIssue[]): v
         errors.push({ path: `${path}.bones[${index}].parentId`, message: "Bone cannot be its own parent." });
       }
     });
+
+    validateBoneGraph(input.bones, input.rootBoneId, path, errors);
   }
 
   if (input.parts !== undefined) {
@@ -239,6 +302,49 @@ function validateBone(input: unknown, path: string, errors: ValidationIssue[]): 
   validateStringArray(input.tags, `${path}.tags`, errors);
 }
 
+function validateBoneGraph(bonesInput: readonly unknown[], rootBoneId: unknown, path: string, errors: ValidationIssue[]): void {
+  const bones = bonesInput.filter(isRecord);
+  const parentless = bones.filter((bone) => bone.parentId === undefined);
+  if (parentless.length !== 1) {
+    errors.push({ path: `${path}.bones`, message: "Rig must contain exactly one root bone without parentId." });
+  }
+  const root = bones.find((bone) => bone.id === rootBoneId);
+  if (root && root.parentId !== undefined) {
+    errors.push({ path: `${path}.rootBoneId`, message: "Root bone must not have parentId." });
+  }
+
+  const parents = new Map<string, string | undefined>();
+  for (const bone of bones) {
+    if (typeof bone.id === "string") {
+      parents.set(bone.id, typeof bone.parentId === "string" ? bone.parentId : undefined);
+    }
+  }
+
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  const visit = (boneId: string): boolean => {
+    if (visited.has(boneId)) {
+      return false;
+    }
+    if (visiting.has(boneId)) {
+      return true;
+    }
+    visiting.add(boneId);
+    const parentId = parents.get(boneId);
+    const cycle = parentId ? visit(parentId) : false;
+    visiting.delete(boneId);
+    visited.add(boneId);
+    return cycle;
+  };
+
+  for (const boneId of parents.keys()) {
+    if (visit(boneId)) {
+      errors.push({ path: `${path}.bones`, message: "Bone hierarchy contains a cycle." });
+      return;
+    }
+  }
+}
+
 function validatePart(input: unknown, path: string, boneIds: ReadonlySet<string>, errors: ValidationIssue[]): void {
   if (!isRecord(input)) {
     errors.push({ path, message: "Part must be an object." });
@@ -278,6 +384,16 @@ function validatePart(input: unknown, path: string, boneIds: ReadonlySet<string>
   if (input.type === "mesh" && (!isRecord(input.mesh) || !Array.isArray(input.mesh.vertices) || !Array.isArray(input.mesh.indices))) {
     errors.push({ path: `${path}.mesh`, message: "Mesh parts must include vertices and indices arrays." });
   }
+  validatePartPayloadMatchesType(input, path, errors);
+}
+
+function validatePartPayloadMatchesType(input: Record<string, unknown>, path: string, errors: ValidationIssue[]): void {
+  const payloads = ["path", "procedural", "mesh", "svg"] as const;
+  for (const payload of payloads) {
+    if (payload !== input.type && input[payload] !== undefined) {
+      errors.push({ path: `${path}.${payload}`, message: `Part payload '${payload}' does not match part type '${input.type}'.` });
+    }
+  }
 }
 
 function validateProcedural(input: unknown, path: string, errors: ValidationIssue[]): void {
@@ -307,7 +423,7 @@ function validateFill(input: unknown, path: string, errors: ValidationIssue[]): 
   }
 }
 
-function validateAnimationClip(input: unknown, path: string, errors: ValidationIssue[]): void {
+function validateAnimationClip(input: unknown, path: string, refs: ProjectReferences, errors: ValidationIssue[]): void {
   if (!isRecord(input)) {
     errors.push({ path, message: "Animation clip must be an object." });
     return;
@@ -327,7 +443,13 @@ function validateAnimationClip(input: unknown, path: string, errors: ValidationI
     errors.push({ path: `${path}.tracks`, message: "Animation clip tracks must be an array." });
     return;
   }
-  input.tracks.forEach((track, index) => validateAnimationTrack(track, `${path}.tracks[${index}]`, input.duration, errors));
+  const trackIds = new Set<string>();
+  input.tracks.forEach((track, index) => {
+    validateAnimationTrack(track, `${path}.tracks[${index}]`, input.duration, refs, errors);
+    if (isRecord(track) && typeof track.id === "string") {
+      addUnique(trackIds, track.id, `${path}.tracks[${index}].id`, "Animation track id", errors);
+    }
+  });
   if (input.events !== undefined) {
     if (!Array.isArray(input.events)) {
       errors.push({ path: `${path}.events`, message: "Animation events must be an array." });
@@ -339,7 +461,13 @@ function validateAnimationClip(input: unknown, path: string, errors: ValidationI
     if (!Array.isArray(input.markers)) {
       errors.push({ path: `${path}.markers`, message: "Timeline markers must be an array." });
     } else {
-      input.markers.forEach((marker, index) => validateTimelineMarker(marker, `${path}.markers[${index}]`, input.duration, errors));
+      const markerIds = new Set<string>();
+      input.markers.forEach((marker, index) => {
+        validateTimelineMarker(marker, `${path}.markers[${index}]`, input.duration, errors);
+        if (isRecord(marker) && typeof marker.id === "string") {
+          addUnique(markerIds, marker.id, `${path}.markers[${index}].id`, "Timeline marker id", errors);
+        }
+      });
     }
   }
   if (input.rootMotion !== undefined && !isRecord(input.rootMotion)) {
@@ -375,7 +503,7 @@ function validateTimelineMarker(input: unknown, path: string, duration: unknown,
   }
 }
 
-function validateAnimationTrack(input: unknown, path: string, duration: unknown, errors: ValidationIssue[]): void {
+function validateAnimationTrack(input: unknown, path: string, duration: unknown, refs: ProjectReferences, errors: ValidationIssue[]): void {
   if (!isRecord(input)) {
     errors.push({ path, message: "Animation track must be an object." });
     return;
@@ -389,6 +517,7 @@ function validateAnimationTrack(input: unknown, path: string, duration: unknown,
       errors.push({ path: `${path}.target.kind`, message: "Unknown animation track target kind." });
     }
     expectNonEmptyString(input.target.id, `${path}.target.id`, errors);
+    validateTrackTargetReference(input.target, `${path}.target`, refs, errors);
   }
   if (typeof input.property !== "string" || !trackProperties.has(input.property)) {
     errors.push({ path: `${path}.property`, message: "Unknown animation track property." });
@@ -408,6 +537,24 @@ function validateAnimationTrack(input: unknown, path: string, duration: unknown,
       previousTime = keyframe.time;
     }
   });
+}
+
+function validateTrackTargetReference(target: Record<string, unknown>, path: string, refs: ProjectReferences, errors: ValidationIssue[]): void {
+  if (typeof target.kind !== "string" || typeof target.id !== "string") {
+    return;
+  }
+  if (target.kind === "bone" && !refs.boneIds.has(target.id)) {
+    errors.push({ path: `${path}.id`, message: `Animation track bone target '${target.id}' does not exist.` });
+  }
+  if (target.kind === "part" && !refs.partIds.has(target.id)) {
+    errors.push({ path: `${path}.id`, message: `Animation track part target '${target.id}' does not exist.` });
+  }
+  if (target.kind === "stateMachine" && !refs.stateMachineIds.has(target.id)) {
+    errors.push({ path: `${path}.id`, message: `Animation track state machine target '${target.id}' does not exist.` });
+  }
+  if (target.kind === "project" && target.id !== refs.projectId) {
+    errors.push({ path: `${path}.id`, message: `Animation track project target '${target.id}' does not match project id.` });
+  }
 }
 
 function validateKeyframe(input: unknown, path: string, duration: unknown, errors: ValidationIssue[]): void {
@@ -431,7 +578,7 @@ function validateKeyframe(input: unknown, path: string, duration: unknown, error
   }
 }
 
-function validatePose(input: unknown, path: string, rigIds: ReadonlySet<string>, errors: ValidationIssue[]): void {
+function validatePose(input: unknown, path: string, refs: ProjectReferences, errors: ValidationIssue[]): void {
   if (!isRecord(input)) {
     errors.push({ path, message: "Pose must be an object." });
     return;
@@ -439,7 +586,7 @@ function validatePose(input: unknown, path: string, rigIds: ReadonlySet<string>,
   expectNonEmptyString(input.id, `${path}.id`, errors);
   expectNonEmptyString(input.name, `${path}.name`, errors);
   expectNonEmptyString(input.rigId, `${path}.rigId`, errors);
-  if (typeof input.rigId === "string" && !rigIds.has(input.rigId)) {
+  if (typeof input.rigId === "string" && !refs.rigIds.has(input.rigId)) {
     errors.push({ path: `${path}.rigId`, message: `Pose rig '${input.rigId}' does not exist.` });
   }
   if (!isRecord(input.boneTransforms)) {
@@ -447,8 +594,24 @@ function validatePose(input: unknown, path: string, rigIds: ReadonlySet<string>,
     return;
   }
   Object.entries(input.boneTransforms).forEach(([boneId, transform]) => {
+    const rigBoneIds = typeof input.rigId === "string" ? refs.bonesByRig.get(input.rigId) : undefined;
+    if (rigBoneIds && !rigBoneIds.has(boneId)) {
+      errors.push({ path: `${path}.boneTransforms.${boneId}`, message: `Pose bone '${boneId}' does not exist in rig '${input.rigId}'.` });
+    }
     validateTransform(transform, `${path}.boneTransforms.${boneId}`, errors);
   });
+  if (input.partProperties !== undefined) {
+    if (!isRecord(input.partProperties)) {
+      errors.push({ path: `${path}.partProperties`, message: "Pose partProperties must be an object." });
+    } else {
+      const rigPartIds = typeof input.rigId === "string" ? refs.partsByRig.get(input.rigId) : undefined;
+      Object.keys(input.partProperties).forEach((partId) => {
+        if (rigPartIds && !rigPartIds.has(partId)) {
+          errors.push({ path: `${path}.partProperties.${partId}`, message: `Pose part '${partId}' does not exist in rig '${input.rigId}'.` });
+        }
+      });
+    }
+  }
 }
 
 function validateStateMachine(
@@ -503,9 +666,13 @@ function validateStateMachine(
     if (!Array.isArray(input.transitions)) {
       errors.push({ path: `${path}.transitions`, message: "State machine transitions must be an array." });
     } else {
-      input.transitions.forEach((transition, index) =>
-        validateTransition(transition, `${path}.transitions[${index}]`, stateIds, parameterIds, errors)
-      );
+      const transitionIds = new Set<string>();
+      input.transitions.forEach((transition, index) => {
+        validateTransition(transition, `${path}.transitions[${index}]`, stateIds, parameterIds, errors);
+        if (isRecord(transition) && typeof transition.id === "string") {
+          addUnique(transitionIds, transition.id, `${path}.transitions[${index}].id`, "Transition id", errors);
+        }
+      });
     }
   }
 }

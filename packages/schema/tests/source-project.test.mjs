@@ -236,6 +236,85 @@ test("returns clear errors for invalid projects", () => {
   assert.match(result.errors.map((error) => error.message).join("\n"), /Parameter defaultValue must match parameter type/);
 });
 
+test("validates production cross references", () => {
+  const invalid = {
+    ...minimalProject,
+    rigs: [
+      {
+        id: "rig.player",
+        name: "Player Rig",
+        rootBoneId: "root",
+        bones: [
+          { id: "root", name: "Root", parentId: "head", local: transform },
+          { id: "head", name: "Head", parentId: "root", local: transform }
+        ],
+        parts: [
+          {
+            id: "part.bad",
+            name: "Bad Part",
+            boneId: "head",
+            type: "path",
+            path: { commands: [{ type: "M", x: 0, y: 0 }], closed: false },
+            svg: { source: "<svg />" }
+          }
+        ]
+      }
+    ],
+    animations: [
+      {
+        id: "clip.bad",
+        name: "Bad",
+        duration: 1,
+        tracks: [
+          {
+            id: "track.missing",
+            target: { kind: "bone", id: "ghost" },
+            property: "transform.x",
+            keyframes: [{ time: 0, value: 1 }]
+          }
+        ]
+      }
+    ],
+    poses: [
+      {
+        id: "pose.bad",
+        name: "Bad Pose",
+        rigId: "rig.player",
+        boneTransforms: {
+          ghost: transform
+        },
+        partProperties: {
+          "part.ghost": { visible: true }
+        }
+      }
+    ],
+    stateMachines: [
+      {
+        id: "sm.bad",
+        name: "Bad",
+        initialStateId: "idle",
+        parameters: [{ id: "speed", type: "number", defaultValue: 0 }],
+        states: [{ id: "idle", name: "Idle", clipId: "clip.bad" }],
+        transitions: [
+          { id: "dup", fromStateId: "idle", toStateId: "idle", duration: 0.1 },
+          { id: "dup", fromStateId: "idle", toStateId: "idle", duration: 0.1 }
+        ]
+      }
+    ]
+  };
+
+  const result = validateRigProject(invalid);
+  const messages = result.errors.map((error) => error.message).join("\n");
+
+  assert.equal(result.ok, false);
+  assert.match(messages, /Root bone must not have parentId/);
+  assert.match(messages, /Bone hierarchy contains a cycle/);
+  assert.match(messages, /Part payload 'svg' does not match part type 'path'/);
+  assert.match(messages, /Animation track bone target 'ghost' does not exist/);
+  assert.match(messages, /Pose bone 'ghost' does not exist/);
+  assert.match(messages, /Transition id 'dup' is duplicated/);
+});
+
 test("assertRigProject throws SchemaValidationError", () => {
   assert.throws(
     () => assertRigProject({ ...minimalProject, runtimeTarget: "canvas-2d" }),
