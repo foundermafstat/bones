@@ -12,6 +12,7 @@ import type {
   RigInstanceOptions,
   RigStateMachineUpdate,
   RigUpdateState,
+  RuntimeAnimationEventDispatch,
   RuntimeCompiledRig
 } from "./types.js";
 import { RigLoader } from "./RigLoader.js";
@@ -36,6 +37,7 @@ export class RigInstance {
   private readonly stateMachine: RuntimeStateMachineController | undefined;
   private readonly procedural: ProceduralLayerStack | undefined;
   private readonly constraints: ConstraintSolver | undefined;
+  private readonly animationEventListeners = new Set<(event: RuntimeAnimationEventDispatch) => void>();
   private activeClip: number | undefined;
   private activeTransition: number | undefined;
 
@@ -117,6 +119,7 @@ export class RigInstance {
     if (constraintSample) {
       this.applySampleValues(constraintSample, true);
     }
+    this.emitAnimationEvents(this.mixer.events);
 
     return {
       elapsed: this.elapsed,
@@ -131,7 +134,8 @@ export class RigInstance {
       proceduralValues: proceduralSample?.values.length ?? 0,
       constraintValues: constraintSample?.values.length ?? 0,
       activeLayers: this.getActiveLayers(state),
-      ...(state ? { stateMachine: toRigStateMachineUpdate(state) } : {})
+      ...(state ? { stateMachine: toRigStateMachineUpdate(state) } : {}),
+      events: [...this.mixer.events]
     };
   }
 
@@ -146,6 +150,15 @@ export class RigInstance {
   applySample(sample: AnimationSample): void {
     this.applyDefaultTransforms();
     this.applySampleValues(sample, false);
+  }
+
+  on(event: "animationEvent", listener: (event: RuntimeAnimationEventDispatch) => void): () => void {
+    this.animationEventListeners.add(listener);
+    return () => this.off(event, listener);
+  }
+
+  off(event: "animationEvent", listener: (event: RuntimeAnimationEventDispatch) => void): void {
+    this.animationEventListeners.delete(listener);
   }
 
   private createStateMachine(options: RigInstanceOptions): RuntimeStateMachineController | undefined {
@@ -226,6 +239,17 @@ export class RigInstance {
         if (part) {
           applySampleValue(part.container, value, additive);
         }
+      }
+    }
+  }
+
+  private emitAnimationEvents(events: readonly RuntimeAnimationEventDispatch[]): void {
+    if (!events.length || !this.animationEventListeners.size) {
+      return;
+    }
+    for (const event of events) {
+      for (const listener of this.animationEventListeners) {
+        listener(event);
       }
     }
   }

@@ -122,6 +122,7 @@ export interface RigUpdateState {
   readonly constraintValues: number;
   readonly activeLayers: readonly RigActiveAnimationLayer[];
   readonly stateMachine?: RigStateMachineUpdate;
+  readonly events: readonly RuntimeAnimationEventDispatch[];
 }
 
 export interface RigActiveAnimationLayer {
@@ -177,6 +178,12 @@ export interface RuntimeAnimationEvent {
   readonly time: number;
   readonly type: string;
   readonly payload?: RuntimeSampleValue;
+}
+
+export interface RuntimeAnimationEventDispatch extends RuntimeAnimationEvent {
+  readonly clip: NumericId;
+  readonly localTime: number;
+  readonly normalizedTime: number;
 }
 
 export interface RuntimeAnimationTrack {

@@ -297,6 +297,36 @@ test("update passes transition easing and sync mode from state machine to mixer"
   ]);
 });
 
+test("update queues and emits animation events through subscriptions", () => {
+  const instance = new RigInstance({
+    ...compiledFixture,
+    animations: [
+      {
+        ...transformClip(0, "transform.x", 12, 12),
+        events: [{ time: 0.2, type: "dust", payload: { side: "left" } }]
+      }
+    ]
+  });
+  const received = [];
+  const unsubscribe = instance.on("animationEvent", (event) => received.push(event));
+
+  const state = instance.update(0.25, {});
+  unsubscribe();
+  instance.update(1, {});
+
+  assert.equal(state.events.length, 1);
+  assert.deepEqual(received, [
+    {
+      time: 0.2,
+      type: "dust",
+      payload: { side: "left" },
+      clip: 0,
+      localTime: 0.2,
+      normalizedTime: 0.2
+    }
+  ]);
+});
+
 function transformClip(id, property, from, to) {
   return {
     id,

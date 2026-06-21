@@ -85,3 +85,25 @@ test("applies transition easing to crossfade weight", () => {
   assert.equal(half.values[0].value, 2.5);
   assert.equal(mixer.transitionWeight, 0.25);
 });
+
+test("queues animation events emitted by active clips", () => {
+  const mixer = new AnimationMixer([
+    {
+      ...clip(0, 0),
+      events: [{ time: 0.25, type: "footstep", payload: { foot: "front" } }]
+    }
+  ]);
+  mixer.play(0);
+
+  mixer.update(0.3);
+
+  assert.equal(mixer.events.length, 1);
+  assert.deepEqual(mixer.events[0], {
+    time: 0.25,
+    type: "footstep",
+    payload: { foot: "front" },
+    clip: 0,
+    localTime: 0.25,
+    normalizedTime: 0.25
+  });
+});

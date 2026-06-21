@@ -3,12 +3,14 @@ import {
   createAnimationClipSampleCache,
   interpolateValue,
   sampleAnimationClip,
+  sampleAnimationEvents,
   type AnimationClipSampleCache
 } from "./AnimationSampler.js";
 import type {
   AnimationSample,
   AnimationSampleTrackValue,
   RuntimeAnimationClip,
+  RuntimeAnimationEventDispatch,
   RuntimeSampleValue,
   RuntimeTransitionEasing,
   RuntimeTrackProperty,
@@ -36,6 +38,7 @@ export interface CrossfadeOptions {
 
 export class AnimationMixer {
   readonly output: AnimationSample = createAnimationSample();
+  readonly events: RuntimeAnimationEventDispatch[] = [];
 
   private readonly clips = new Map<number, RuntimeAnimationClip>();
   private readonly clipCaches = new Map<number, AnimationClipSampleCache>();
@@ -89,19 +92,24 @@ export class AnimationMixer {
   }
 
   update(dt: number): AnimationSample {
+    this.events.length = 0;
     if (!this.baseClip) {
       this.output.values.length = 0;
       return this.output;
     }
 
+    const previousBaseTime = this.baseTime;
     this.baseTime += dt;
     const base = sampleAnimationClip(this.baseClip, this.baseTime, this.baseSample, this.clipCaches.get(this.baseClip.id));
+    collectDispatchEvents(this.baseClip, previousBaseTime, this.baseTime, this.events);
     copySample(base, this.output);
 
     if (this.fadeClip) {
+      const previousFadeTime = this.fadeTime;
       this.fadeTime += dt;
       this.fadeElapsed += dt;
       const fade = sampleAnimationClip(this.fadeClip, this.fadeTime, this.fadeSample, this.clipCaches.get(this.fadeClip.id));
+      collectDispatchEvents(this.fadeClip, previousFadeTime, this.fadeTime, this.events);
       const rawWeight = Math.min(1, this.fadeElapsed / this.fadeDuration);
       const weight = transitionEase(rawWeight, this.fadeEasing);
       blendInto(this.output, fade, weight);
@@ -119,7 +127,10 @@ export class AnimationMixer {
       const layer = this.layers[index]!;
       const clip = this.requireClip(layer.clipId);
       const sample = this.layerSamples[index] ?? createAnimationSample();
-      this.layerSamples[index] = sampleAnimationClip(clip, layer.time ?? this.baseTime, sample, this.clipCaches.get(clip.id));
+      const previousLayerTime = layer.time ?? previousBaseTime;
+      const nextLayerTime = layer.time ?? this.baseTime;
+      this.layerSamples[index] = sampleAnimationClip(clip, nextLayerTime, sample, this.clipCaches.get(clip.id));
+      collectDispatchEvents(clip, previousLayerTime, nextLayerTime, this.events);
       if (layer.additive) {
         addInto(this.output, sample, layer.weight ?? 1, layer.mask);
       } else {
@@ -212,6 +223,23 @@ function normalizedTime(clip: RuntimeAnimationClip, time: number): number {
     return 0;
   }
   return (time % clip.duration) / clip.duration;
+}
+
+function collectDispatchEvents(
+  clip: RuntimeAnimationClip,
+  previousTime: number,
+  nextTime: number,
+  out: RuntimeAnimationEventDispatch[]
+): void {
+  const sampled = sampleAnimationEvents(clip, previousTime, nextTime);
+  for (const event of sampled) {
+    out.push({
+      ...event,
+      clip: clip.id,
+      localTime: event.time,
+      normalizedTime: clip.duration > 0 ? event.time / clip.duration : 0
+    });
+  }
 }
 
 function transitionEase(t: number, easing: RuntimeTransitionEasing): number {
