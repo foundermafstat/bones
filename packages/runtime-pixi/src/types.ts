@@ -1,4 +1,6 @@
 import type { Container, Graphics, GraphicsContext, Mesh, MeshGeometry } from "pixi.js";
+import type { ConstraintSolverConfig, RaycastWorld } from "./ConstraintSolver.js";
+import type { ProceduralLayerConfig } from "./ProceduralLayers.js";
 
 export type NumericId = number;
 export type AnimationParameterValue = string | number | boolean;
@@ -79,6 +81,12 @@ export interface RuntimeCompiledPart {
 
 export interface RigInstanceOptions {
   readonly quality?: "low" | "medium" | "high";
+  readonly stateMachine?: NumericId | false;
+  readonly proceduralLayers?: readonly ProceduralLayerConfig[];
+  readonly constraints?: {
+    readonly config: ConstraintSolverConfig;
+    readonly world: RaycastWorld;
+  };
 }
 
 export interface BoneRuntime {
@@ -104,6 +112,14 @@ export interface RigUpdateState {
   readonly elapsed: number;
   readonly lastDelta: number;
   readonly params: AnimationParameters;
+  readonly activeClip?: NumericId;
+  readonly activeState?: NumericId;
+  readonly previousState?: NumericId;
+  readonly activeTransition?: NumericId;
+  readonly transitionWeight: number;
+  readonly sampledValues: number;
+  readonly proceduralValues: number;
+  readonly constraintValues: number;
 }
 
 export type RuntimeTrackTargetKind = "bone" | "part" | "project" | "stateMachine";

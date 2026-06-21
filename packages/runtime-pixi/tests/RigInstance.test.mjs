@@ -121,3 +121,117 @@ test("applySample applies sampled bone and part properties", () => {
   assert.equal(body.position.x, 12);
   assert.equal(part.alpha, 0.8);
 });
+
+test("update samples the first compiled animation when no state machine is active", () => {
+  const instance = new RigInstance({
+    ...compiledFixture,
+    animations: [transformClip(0, "transform.x", 12, 22)]
+  });
+  const body = instance.getBoneContainer(1);
+
+  const state = instance.update(0.5, { absSpeed: 3 });
+
+  assert.equal(body.position.x, 17);
+  assert.equal(state.activeClip, 0);
+  assert.equal(state.sampledValues, 1);
+  assert.equal(state.proceduralValues, 0);
+  assert.equal(state.constraintValues, 0);
+});
+
+test("update evaluates state machine and crossfades through the mixer", () => {
+  const instance = new RigInstance({
+    ...compiledFixture,
+    animations: [transformClip(0, "transform.x", 12, 12), transformClip(1, "transform.x", 42, 42)],
+    stateMachines: [
+      {
+        id: 0,
+        initialState: 0,
+        states: [
+          { id: 0, clip: 0 },
+          { id: 1, clip: 1 }
+        ],
+        transitions: [
+          {
+            id: 0,
+            from: 0,
+            to: 1,
+            duration: 0.1,
+            priority: 0,
+            canInterrupt: true,
+            conditions: [{ parameter: 0, operator: "==", value: true }]
+          }
+        ],
+        parameters: [{ id: 0, type: "boolean", defaultValue: false }],
+        parameterLookup: { go: 0 }
+      }
+    ]
+  });
+  const body = instance.getBoneContainer(1);
+
+  const transition = instance.update(0.05, { go: true });
+  assert.equal(transition.activeState, 1);
+  assert.equal(transition.activeTransition, 0);
+  assert.equal(transition.transitionWeight, 0.5);
+  assert.equal(body.position.x, 27);
+
+  const settled = instance.update(0.05, { go: false });
+  assert.equal(settled.activeState, 1);
+  assert.equal(settled.transitionWeight, 0);
+  assert.equal(body.position.x, 42);
+});
+
+test("update applies procedural and constraint samples after base animation", () => {
+  const world = {
+    raycastDown(x, y, distance) {
+      return { hit: true, x, y: y + distance - 2, normalX: 0, normalY: 1 };
+    }
+  };
+  const instance = new RigInstance(
+    {
+      ...compiledFixture,
+      animations: [transformClip(0, "transform.scaleX", 1.5, 1.5)]
+    },
+    {
+      stateMachine: false,
+      proceduralLayers: [
+        {
+          type: "squashStretch",
+          rules: [{ condition: "landHeavy", targetBone: 1, scaleX: 1.2, scaleY: 0.8, duration: 0.1 }]
+        }
+      ],
+      constraints: {
+        config: { feet: [{ footBone: 1, raycastOffsetX: 0, raycastHeight: 10, maxCorrection: 4, blend: 1 }] },
+        world
+      }
+    }
+  );
+  const body = instance.getBoneContainer(1);
+
+  const state = instance.update(0.01, { landHeavy: true, grounded: true, "bone.1.worldY": 10 });
+
+  assert.ok(body.scale.x > 1.5);
+  assert.ok(body.position.y > -20);
+  assert.equal(state.proceduralValues, 2);
+  assert.equal(state.constraintValues, 2);
+});
+
+function transformClip(id, property, from, to) {
+  return {
+    id,
+    duration: 1,
+    fps: 60,
+    loop: true,
+    tracks: [
+      {
+        id,
+        targetKind: "bone",
+        target: 1,
+        property,
+        keyframes: [
+          { time: 0, value: from, interpolation: "linear", curve: [0, 0, 1, 1] },
+          { time: 1, value: to, interpolation: "linear", curve: [0, 0, 1, 1] }
+        ]
+      }
+    ]
+  };
+}

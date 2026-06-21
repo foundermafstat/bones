@@ -1,4 +1,6 @@
 import { Container } from "pixi.js";
+import { AnimationMixer } from "./AnimationMixer.js";
+import { ConstraintSolver } from "./ConstraintSolver.js";
 import type {
   AnimationSample,
   AnimationSampleTrackValue,
@@ -12,6 +14,8 @@ import type {
 } from "./types.js";
 import { RigLoader } from "./RigLoader.js";
 import { createPartRenderable } from "./PixiPartRenderer.js";
+import { ProceduralLayerStack } from "./ProceduralLayers.js";
+import { type StateMachineEvaluation, RuntimeStateMachineController } from "./RuntimeStateMachine.js";
 
 export class RigInstance {
   readonly container: Container;
@@ -24,6 +28,14 @@ export class RigInstance {
   private elapsed = 0;
   private params: AnimationParameters = {};
   private lastDelta = 0;
+  private readonly boneById = new Map<number, BoneRuntime>();
+  private readonly partById = new Map<number, PartRuntime>();
+  private readonly mixer: AnimationMixer;
+  private readonly stateMachine: RuntimeStateMachineController | undefined;
+  private readonly procedural: ProceduralLayerStack | undefined;
+  private readonly constraints: ConstraintSolver | undefined;
+  private activeClip: number | undefined;
+  private activeTransition: number | undefined;
 
   constructor(compiledInput: RuntimeCompiledRig, options: RigInstanceOptions = {}) {
     this.compiled = RigLoader.fromCompiled(compiledInput);
@@ -39,6 +51,9 @@ export class RigInstance {
       length: bone.length,
       container: namedContainer(`bone:${bone.id}`)
     }));
+    for (const bone of this.bones) {
+      this.boneById.set(bone.id, bone);
+    }
 
     this.parts = this.compiled.rig.parts.map((part) => {
       const rendered = createPartRenderable(part);
@@ -63,6 +78,15 @@ export class RigInstance {
       }
       return runtimePart;
     });
+    for (const part of this.parts) {
+      this.partById.set(part.id, part);
+    }
+
+    this.mixer = new AnimationMixer(this.compiled.animations ?? []);
+    this.stateMachine = this.createStateMachine(options);
+    this.procedural = options.proceduralLayers?.length ? new ProceduralLayerStack(options.proceduralLayers) : undefined;
+    this.constraints = options.constraints ? new ConstraintSolver(options.constraints.config, options.constraints.world) : undefined;
+    this.startDefaultAnimation();
 
     this.buildHierarchy();
     this.applyDefaultTransforms();
@@ -72,36 +96,113 @@ export class RigInstance {
     this.lastDelta = dt;
     this.elapsed += dt;
     this.params = params;
+    const state = this.stateMachine?.update(dt, params);
+    if (state) {
+      this.syncMixerToState(state);
+    } else {
+      this.startDefaultAnimation();
+    }
+
+    const baseSample = this.mixer.update(dt);
+    const proceduralSample = this.procedural?.update(dt, params);
+    const constraintSample = this.constraints?.solve(params);
+
     this.applyDefaultTransforms();
+    this.applySampleValues(baseSample, false);
+    if (proceduralSample) {
+      this.applySampleValues(proceduralSample, true);
+    }
+    if (constraintSample) {
+      this.applySampleValues(constraintSample, true);
+    }
 
     return {
       elapsed: this.elapsed,
       lastDelta: this.lastDelta,
-      params: this.params
+      params: this.params,
+      ...(this.activeClip !== undefined ? { activeClip: this.activeClip } : {}),
+      ...(state ? { activeState: state.state.id } : {}),
+      ...(state?.previousState ? { previousState: state.previousState.id } : {}),
+      ...(state?.transition ? { activeTransition: state.transition.id } : {}),
+      transitionWeight: this.mixer.transitionWeight,
+      sampledValues: baseSample.values.length,
+      proceduralValues: proceduralSample?.values.length ?? 0,
+      constraintValues: constraintSample?.values.length ?? 0
     };
   }
 
   getBoneContainer(id: number): Container | undefined {
-    return this.bones.find((bone) => bone.id === id)?.container;
+    return this.boneById.get(id)?.container;
   }
 
   getPartContainer(id: number): Container | undefined {
-    return this.parts.find((part) => part.id === id)?.container;
+    return this.partById.get(id)?.container;
   }
 
   applySample(sample: AnimationSample): void {
     this.applyDefaultTransforms();
+    this.applySampleValues(sample, false);
+  }
 
+  private createStateMachine(options: RigInstanceOptions): RuntimeStateMachineController | undefined {
+    if (options.stateMachine === false) {
+      return undefined;
+    }
+    const machines = this.compiled.stateMachines ?? [];
+    const machineId = options.stateMachine ?? machines[0]?.id;
+    const machine = machines.find((item) => item.id === machineId);
+    return machine ? new RuntimeStateMachineController(machine) : undefined;
+  }
+
+  private startDefaultAnimation(): void {
+    if (this.activeClip !== undefined) {
+      return;
+    }
+    const clip = this.compiled.animations?.[0];
+    if (!clip) {
+      return;
+    }
+    this.mixer.play(clip.id);
+    this.activeClip = clip.id;
+  }
+
+  private syncMixerToState(state: StateMachineEvaluation): void {
+    const clip = state.blendTree?.lowerClip ?? state.clip;
+    if (clip < 0) {
+      return;
+    }
+
+    if (this.activeClip === undefined) {
+      this.mixer.play(clip);
+    } else if (state.transition && this.activeTransition !== state.transition.id) {
+      this.mixer.crossfadeTo(clip, {
+        duration: state.transition.duration,
+        phaseMatch: state.transition.syncMode === "phaseMatch" || state.transition.syncMode === "normalizedTime"
+      });
+    } else if (!state.transition && this.activeClip !== clip) {
+      this.mixer.play(clip);
+    }
+
+    const blendTreeLayers =
+      state.blendTree && state.blendTree.upperClip !== state.blendTree.lowerClip && state.blendTree.weight > 0
+        ? [{ clipId: state.blendTree.upperClip, weight: state.blendTree.weight }]
+        : [];
+    this.mixer.setLayers(blendTreeLayers);
+    this.activeClip = clip;
+    this.activeTransition = state.transition?.id;
+  }
+
+  private applySampleValues(sample: AnimationSample, additive: boolean): void {
     for (const value of sample.values) {
       if (value.targetKind === "bone") {
-        const bone = this.bones.find((item) => item.id === value.target);
+        const bone = this.boneById.get(value.target);
         if (bone) {
-          applySampleValue(bone.container, value);
+          applySampleValue(bone.container, value, additive);
         }
       } else if (value.targetKind === "part") {
-        const part = this.parts.find((item) => item.id === value.target);
+        const part = this.partById.get(value.target);
         if (part) {
-          applySampleValue(part.container, value);
+          applySampleValue(part.container, value, additive);
         }
       }
     }
@@ -160,7 +261,7 @@ function applyTransform(container: Container, transform: PackedTransform2D): voi
   container.skew.set(transform[5], transform[6]);
 }
 
-function applySampleValue(container: Container, sample: AnimationSampleTrackValue): void {
+function applySampleValue(container: Container, sample: AnimationSampleTrackValue, additive = false): void {
   const value = sample.value;
   if (sample.property === "visible" && typeof value === "boolean") {
     container.visible = value;
@@ -178,18 +279,18 @@ function applySampleValue(container: Container, sample: AnimationSampleTrackValu
     return;
   }
   if (sample.property === "transform.x") {
-    container.position.x = value;
+    container.position.x = additive ? container.position.x + value : value;
   } else if (sample.property === "transform.y") {
-    container.position.y = value;
+    container.position.y = additive ? container.position.y + value : value;
   } else if (sample.property === "transform.rotation") {
-    container.rotation = value;
+    container.rotation = additive ? container.rotation + value : value;
   } else if (sample.property === "transform.scaleX") {
-    container.scale.x = value;
+    container.scale.x = additive ? container.scale.x + value : value;
   } else if (sample.property === "transform.scaleY") {
-    container.scale.y = value;
+    container.scale.y = additive ? container.scale.y + value : value;
   } else if (sample.property === "transform.skewX") {
-    container.skew.x = value;
+    container.skew.x = additive ? container.skew.x + value : value;
   } else if (sample.property === "transform.skewY") {
-    container.skew.y = value;
+    container.skew.y = additive ? container.skew.y + value : value;
   }
 }
