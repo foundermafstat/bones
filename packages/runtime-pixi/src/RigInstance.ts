@@ -107,15 +107,15 @@ export class RigInstance {
       this.startDefaultAnimation();
     }
 
-    const baseSample = this.mixer.update(dt);
-    const proceduralSample = this.procedural?.update(dt, params);
-    const constraintSample = this.constraints?.solve(params);
-
     this.applyDefaultTransforms();
+    const baseSample = this.mixer.update(dt);
     this.applySampleValues(baseSample, false);
+    const proceduralSample = this.procedural?.update(dt, params);
     if (proceduralSample) {
       this.applySampleValues(proceduralSample, true);
     }
+    const constraintParams = this.constraints ? this.withBoneWorldParams(params) : params;
+    const constraintSample = this.constraints?.solve(constraintParams);
     if (constraintSample) {
       this.applySampleValues(constraintSample, true);
     }
@@ -137,6 +137,15 @@ export class RigInstance {
       ...(state ? { stateMachine: toRigStateMachineUpdate(state) } : {}),
       events: [...this.mixer.events]
     };
+  }
+
+  private withBoneWorldParams(params: AnimationParameters): AnimationParameters {
+    const next: Record<string, unknown> = { ...params };
+    for (const bone of this.bones) {
+      next[`bone.${bone.id}.worldX`] = bone.container.worldTransform.tx;
+      next[`bone.${bone.id}.worldY`] = bone.container.worldTransform.ty;
+    }
+    return next as AnimationParameters;
   }
 
   getBoneContainer(id: number): Container | undefined {

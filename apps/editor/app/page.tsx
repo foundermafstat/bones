@@ -560,8 +560,9 @@ export default function EditorPage() {
                 <CardHeader>
                   <CardTitle>Constraints</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <p className="text-xs text-muted-foreground">Foot IK placeholder</p>
+                <CardContent className="grid gap-1">
+                  <p className="text-xs text-muted-foreground">{editorState.project.procedural.footIk.footChains.map((chain) => `${chain.thighBone ?? "?"}/${chain.shinBone ?? "?"}/${chain.footBone}`).join(", ")}</p>
+                  <p className="text-xs text-muted-foreground">max {editorState.project.procedural.footIk.maxCorrection}px / blend {editorState.project.procedural.footIk.blend}</p>
                 </CardContent>
               </Card>
               <Card size="sm">

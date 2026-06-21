@@ -215,6 +215,35 @@ test("update applies procedural and constraint samples after base animation", ()
   assert.equal(state.constraintValues, 2);
 });
 
+test("constraints derive bone world params, rotate to surface normal, gate jump, and lock feet", () => {
+  let hit = true;
+  const world = {
+    raycastDown(x, y, distance) {
+      return hit ? { hit: true, x, y: y + distance - 3, normalX: 0.5, normalY: 1 } : { hit: false, x, y, normalX: 0, normalY: 1 };
+    }
+  };
+  const instance = new RigInstance(compiledFixture, {
+    stateMachine: false,
+    constraints: {
+      config: { feet: [{ footBone: 1, shinBone: 2, thighBone: 3, raycastOffsetX: 0, raycastHeight: 10, maxCorrection: 6, blend: 1 }] },
+      world
+    }
+  });
+  const foot = instance.getBoneContainer(1);
+
+  const grounded = instance.update(0.01, { grounded: true });
+  assert.equal(grounded.constraintValues, 4);
+  assert.ok(foot.position.y > -20);
+  assert.ok(Math.abs(foot.rotation) > 0.1);
+
+  const jumping = instance.update(0.01, { grounded: true, jumpPressed: true });
+  assert.equal(jumping.constraintValues, 0);
+
+  hit = false;
+  const locked = instance.update(0.01, { grounded: true, "foot.1.locked": true });
+  assert.equal(locked.constraintValues, 4);
+});
+
 test("update exposes state machine blend tree as mixer layers", () => {
   const instance = new RigInstance({
     ...compiledFixture,

@@ -34,11 +34,12 @@ export class ConstraintSolver {
   };
 
   constructor(private readonly config: ConstraintSolverConfig, private readonly world: RaycastWorld) {}
+  private readonly lockedCorrections = new Map<number, { y: number; rotation: number }>();
 
   solve(params: AnimationParameters = {}): AnimationSample {
     this.output.values.length = 0;
     const grounded = params.grounded === true;
-    if (!grounded) {
+    if (!grounded || params.jumpPressed === true || params.falling === true) {
       return this.output;
     }
 
@@ -48,14 +49,22 @@ export class ConstraintSolver {
       const rayX = baseX + foot.raycastOffsetX;
       const rayY = baseY - foot.raycastHeight;
       const hit = this.world.raycastDown(rayX, rayY, foot.raycastHeight * 2);
-      if (!hit.hit) {
+      const locked = params[`foot.${foot.footBone}.locked`] === true;
+      if (!hit.hit && !locked) {
         continue;
       }
 
-      const correction = clamp(hit.y - baseY, -foot.maxCorrection, foot.maxCorrection) * clamp(foot.blend, 0, 1);
+      const previous = this.lockedCorrections.get(foot.footBone);
+      const correction = hit.hit ? clamp(hit.y - baseY, -foot.maxCorrection, foot.maxCorrection) * clamp(foot.blend, 0, 1) : previous?.y;
+      if (correction === undefined) {
+        continue;
+      }
       this.pushValue(foot.footBone, "transform.y", correction);
-      const rotation = Math.atan2(hit.normalX, hit.normalY) * clamp(foot.blend, 0, 1);
+      const rotation = hit.hit ? Math.atan2(hit.normalX, hit.normalY) * clamp(foot.blend, 0, 1) : previous?.rotation ?? 0;
       this.pushValue(foot.footBone, "transform.rotation", rotation);
+      if (locked || hit.hit) {
+        this.lockedCorrections.set(foot.footBone, { y: correction, rotation });
+      }
 
       if (foot.shinBone !== undefined) {
         this.pushValue(foot.shinBone, "transform.y", correction * 0.5);
