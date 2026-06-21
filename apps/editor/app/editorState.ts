@@ -47,6 +47,7 @@ export interface Keyframe {
   readonly time: number;
   readonly value: number;
   readonly interpolation: "linear" | "step" | "hold" | "bezier";
+  readonly curve?: readonly [number, number, number, number];
 }
 
 export interface EditorCommand {
@@ -376,6 +377,32 @@ export function createMoveKeyframeCommand(clipId: string, trackId: string, keyfr
     label: "Move keyframe",
     do: (state) => move(state, nextTime),
     undo: (state) => move(state, previousTime)
+  };
+}
+
+export function createChangeCurveCommand(
+  clipId: string,
+  trackId: string,
+  keyframeId: string,
+  interpolation: Keyframe["interpolation"],
+  curve: readonly [number, number, number, number]
+): EditorCommand {
+  let previous: Keyframe | undefined;
+  const change = (state: EditorProjectState, next: { interpolation: Keyframe["interpolation"]; curve: readonly [number, number, number, number] }) =>
+    updateClipTrack(state, clipId, trackId, (keys) =>
+      keys.map((key) => {
+        if (key.id !== keyframeId) {
+          return key;
+        }
+        previous = key;
+        return { ...key, interpolation: next.interpolation, curve: next.curve };
+      })
+    );
+  return {
+    id: `curve:${clipId}:${trackId}:${keyframeId}`,
+    label: "Change curve",
+    do: (state) => change(state, { interpolation, curve }),
+    undo: (state) => (previous ? change(state, { interpolation: previous.interpolation, curve: previous.curve ?? [0, 0, 1, 1] }) : state)
   };
 }
 

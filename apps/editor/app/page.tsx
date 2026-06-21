@@ -18,6 +18,7 @@ import {
   createAddKeyframeCommand,
   createDeleteKeyframeCommand,
   createMoveKeyframeCommand,
+  createChangeCurveCommand,
   executeCommand,
   initialEditorProject,
   redo,
@@ -127,6 +128,9 @@ export default function EditorPage() {
           <button type="button" disabled={!activeTrack.length} onClick={() => runCommand(createDeleteKeyframeCommand("idle", "body.scaleY", activeTrack[0]?.id ?? ""))}>
             Delete Key
           </button>
+          <button type="button" disabled={!activeTrack.length} onClick={() => runCommand(createChangeCurveCommand("idle", "body.scaleY", activeTrack[0]?.id ?? "", "bezier", [0.2, 0.8, 0.2, 1]))}>
+            Ease
+          </button>
           <button type="button">Play</button>
           <button type="button">Pause</button>
           <button type="button">Record</button>
@@ -211,6 +215,10 @@ export default function EditorPage() {
           <section>
             <h2>Pose Library</h2>
             <p>{poseIds.map((poseId) => editorState.project.poses[poseId]?.name).join(", ")}</p>
+          </section>
+          <section>
+            <h2>Curve</h2>
+            <p>{activeTrack.map((key) => `${key.id}: ${key.interpolation}`).join(", ")}</p>
           </section>
         </aside>
       </section>
