@@ -21,6 +21,7 @@ export interface RuntimeCompiledRig {
   readonly name: string;
   readonly rig: RuntimeCompiledRigData;
   readonly animations?: readonly RuntimeAnimationClip[];
+  readonly stateMachines?: readonly RuntimeStateMachine[];
 }
 
 export interface RuntimeCompiledRigData {
@@ -147,6 +148,55 @@ export interface AnimationSample {
   normalizedTime: number;
   localTime: number;
   readonly values: AnimationSampleTrackValue[];
+}
+
+export interface RuntimeStateMachine {
+  readonly id: NumericId;
+  readonly initialState: NumericId;
+  readonly states: readonly RuntimeState[];
+  readonly transitions: readonly RuntimeTransition[];
+  readonly parameters: readonly RuntimeParameter[];
+  readonly stateLookup?: Readonly<Record<string, NumericId>>;
+  readonly parameterLookup?: Readonly<Record<string, NumericId>>;
+}
+
+export interface RuntimeState {
+  readonly id: NumericId;
+  readonly clip: NumericId;
+  readonly blendTree?: RuntimeBlendTree1D;
+}
+
+export interface RuntimeBlendTree1D {
+  readonly type: "1d";
+  readonly parameter: NumericId;
+  readonly children: readonly RuntimeBlendTreeChild[];
+}
+
+export interface RuntimeBlendTreeChild {
+  readonly threshold: number;
+  readonly clip: NumericId;
+}
+
+export interface RuntimeTransition {
+  readonly id: NumericId;
+  readonly from: NumericId;
+  readonly to: NumericId;
+  readonly duration: number;
+  readonly priority: number;
+  readonly canInterrupt: boolean;
+  readonly conditions: readonly RuntimeCondition[];
+}
+
+export interface RuntimeParameter {
+  readonly id: NumericId;
+  readonly type: "number" | "boolean" | "string";
+  readonly defaultValue: AnimationParameterValue;
+}
+
+export interface RuntimeCondition {
+  readonly parameter: NumericId;
+  readonly operator: "==" | "!=" | ">" | ">=" | "<" | "<=";
+  readonly value: AnimationParameterValue;
 }
 
 export type RuntimePathCommand =
