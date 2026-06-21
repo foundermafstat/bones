@@ -46,11 +46,18 @@ const trackProperties = new Set([
   "visible",
   "opacity",
   "drawOrder",
-  "procedural.params"
+  "procedural.params",
+  "deform",
+  "event",
+  "collider"
 ]);
-const interpolations = new Set(["linear", "step", "hold", "bezier"]);
+const interpolations = new Set(["linear", "step", "hold", "bezier", "spring"]);
 const parameterTypes = new Set(["number", "boolean", "string"]);
 const conditionOperators = new Set(["==", "!=", ">", ">=", "<", "<="]);
+const transitionEasings = new Set(["linear", "easeIn", "easeOut", "easeInOut", "cubicBezier", "spring", "overshoot", "anticipation"]);
+const syncModes = new Set(["none", "normalizedTime", "phaseMatch"]);
+const proceduralAnimationTypes = new Set(["breathing", "secondaryMotion", "squashStretch", "footIK"]);
+const qualityPresets = new Set(["low", "medium", "high"]);
 
 export function validateRigProject(input: unknown): ValidationResult<RigProject> {
   const errors: ValidationIssue[] = [];
@@ -62,7 +69,16 @@ export function validateRigProject(input: unknown): ValidationResult<RigProject>
   expectExact(input.schemaVersion, BONES_SCHEMA_VERSION, "$.schemaVersion", "Unsupported schemaVersion.", errors);
   expectExact(input.runtimeTarget, BONES_RUNTIME_TARGET, "$.runtimeTarget", "Unsupported runtimeTarget.", errors);
   expectNonEmptyString(input.id, "$.id", errors);
+  if (input.projectId !== undefined) {
+    expectNonEmptyString(input.projectId, "$.projectId", errors);
+  }
   expectNonEmptyString(input.name, "$.name", errors);
+  if (input.units !== undefined) {
+    expectExact(input.units, "pixels", "$.units", "Unsupported units.", errors);
+  }
+  if (input.defaultFrameRate !== undefined) {
+    expectNumber(input.defaultFrameRate, "$.defaultFrameRate", errors, { minExclusive: 0 });
+  }
 
   if (!Array.isArray(input.rigs) || input.rigs.length === 0) {
     errors.push({ path: "$.rigs", message: "Project must contain at least one rig." });
@@ -106,6 +122,18 @@ export function validateRigProject(input: unknown): ValidationResult<RigProject>
         validateStateMachine(machine, `$.stateMachines[${index}]`, animationIds, errors)
       );
     }
+  }
+
+  if (input.proceduralPresets !== undefined) {
+    if (!Array.isArray(input.proceduralPresets)) {
+      errors.push({ path: "$.proceduralPresets", message: "Procedural presets must be an array when provided." });
+    } else {
+      input.proceduralPresets.forEach((preset, index) => validateProceduralPreset(preset, `$.proceduralPresets[${index}]`, errors));
+    }
+  }
+
+  if (input.preview !== undefined) {
+    validatePreview(input.preview, "$.preview", errors);
   }
 
   return errors.length > 0 ? invalid(errors) : { ok: true, value: input as unknown as RigProject };
@@ -187,10 +215,28 @@ function validateBone(input: unknown, path: string, errors: ValidationIssue[]): 
   if (input.parentId !== undefined) {
     expectNonEmptyString(input.parentId, `${path}.parentId`, errors);
   }
-  validateTransform(input.transform, `${path}.transform`, errors);
+  if (input.local === undefined && input.transform === undefined) {
+    errors.push({ path: `${path}.local`, message: "Bone must include canonical local transform or legacy transform." });
+  }
+  if (input.local !== undefined) {
+    validateTransform(input.local, `${path}.local`, errors);
+  }
+  if (input.transform !== undefined) {
+    validateTransform(input.transform, `${path}.transform`, errors);
+  }
   if (input.length !== undefined) {
     expectNumber(input.length, `${path}.length`, errors, { min: 0 });
   }
+  if (input.inheritRotation !== undefined && typeof input.inheritRotation !== "boolean") {
+    errors.push({ path: `${path}.inheritRotation`, message: "inheritRotation must be a boolean." });
+  }
+  if (input.inheritScale !== undefined && typeof input.inheritScale !== "boolean") {
+    errors.push({ path: `${path}.inheritScale`, message: "inheritScale must be a boolean." });
+  }
+  if (input.mirrorGroup !== undefined) {
+    expectNonEmptyString(input.mirrorGroup, `${path}.mirrorGroup`, errors);
+  }
+  validateStringArray(input.tags, `${path}.tags`, errors);
 }
 
 function validatePart(input: unknown, path: string, boneIds: ReadonlySet<string>, errors: ValidationIssue[]): void {
@@ -213,6 +259,12 @@ function validatePart(input: unknown, path: string, boneIds: ReadonlySet<string>
   }
   if (input.transform !== undefined) {
     validateTransform(input.transform, `${path}.transform`, errors);
+  }
+  if (input.local !== undefined) {
+    validateTransform(input.local, `${path}.local`, errors);
+  }
+  if (input.fill !== undefined) {
+    validateFill(input.fill, `${path}.fill`, errors);
   }
   if (input.type === "procedural") {
     validateProcedural(input.procedural, `${path}.procedural`, errors);
@@ -241,6 +293,20 @@ function validateProcedural(input: unknown, path: string, errors: ValidationIssu
   }
 }
 
+function validateFill(input: unknown, path: string, errors: ValidationIssue[]): void {
+  if (!isRecord(input)) {
+    errors.push({ path, message: "Fill must be an object." });
+    return;
+  }
+  if (input.type !== undefined && input.type !== "solid") {
+    errors.push({ path: `${path}.type`, message: "Only solid fill is supported." });
+  }
+  expectNonEmptyString(input.color, `${path}.color`, errors);
+  if (input.alpha !== undefined) {
+    expectNumber(input.alpha, `${path}.alpha`, errors, { min: 0, max: 1 });
+  }
+}
+
 function validateAnimationClip(input: unknown, path: string, errors: ValidationIssue[]): void {
   if (!isRecord(input)) {
     errors.push({ path, message: "Animation clip must be an object." });
@@ -253,11 +319,60 @@ function validateAnimationClip(input: unknown, path: string, errors: ValidationI
   if (input.fps !== undefined) {
     expectNumber(input.fps, `${path}.fps`, errors, { minExclusive: 0 });
   }
+  if (input.frameRate !== undefined) {
+    expectNumber(input.frameRate, `${path}.frameRate`, errors, { minExclusive: 0 });
+  }
+  validateStringArray(input.tags, `${path}.tags`, errors);
   if (!Array.isArray(input.tracks)) {
     errors.push({ path: `${path}.tracks`, message: "Animation clip tracks must be an array." });
     return;
   }
   input.tracks.forEach((track, index) => validateAnimationTrack(track, `${path}.tracks[${index}]`, input.duration, errors));
+  if (input.events !== undefined) {
+    if (!Array.isArray(input.events)) {
+      errors.push({ path: `${path}.events`, message: "Animation events must be an array." });
+    } else {
+      input.events.forEach((event, index) => validateAnimationEvent(event, `${path}.events[${index}]`, input.duration, errors));
+    }
+  }
+  if (input.markers !== undefined) {
+    if (!Array.isArray(input.markers)) {
+      errors.push({ path: `${path}.markers`, message: "Timeline markers must be an array." });
+    } else {
+      input.markers.forEach((marker, index) => validateTimelineMarker(marker, `${path}.markers[${index}]`, input.duration, errors));
+    }
+  }
+  if (input.rootMotion !== undefined && !isRecord(input.rootMotion)) {
+    errors.push({ path: `${path}.rootMotion`, message: "Root motion must be an object." });
+  }
+}
+
+function validateAnimationEvent(input: unknown, path: string, duration: unknown, errors: ValidationIssue[]): void {
+  if (!isRecord(input)) {
+    errors.push({ path, message: "Animation event must be an object." });
+    return;
+  }
+  expectNumber(input.time, `${path}.time`, errors, { min: 0 });
+  if (typeof input.time === "number" && typeof duration === "number" && input.time > duration) {
+    errors.push({ path: `${path}.time`, message: "Animation event time cannot exceed clip duration." });
+  }
+  expectNonEmptyString(input.type, `${path}.type`, errors);
+  if (input.payload !== undefined && !isRecord(input.payload)) {
+    errors.push({ path: `${path}.payload`, message: "Animation event payload must be an object." });
+  }
+}
+
+function validateTimelineMarker(input: unknown, path: string, duration: unknown, errors: ValidationIssue[]): void {
+  if (!isRecord(input)) {
+    errors.push({ path, message: "Timeline marker must be an object." });
+    return;
+  }
+  expectNonEmptyString(input.id, `${path}.id`, errors);
+  expectNonEmptyString(input.label, `${path}.label`, errors);
+  expectNumber(input.time, `${path}.time`, errors, { min: 0 });
+  if (typeof input.time === "number" && typeof duration === "number" && input.time > duration) {
+    errors.push({ path: `${path}.time`, message: "Timeline marker time cannot exceed clip duration." });
+  }
 }
 
 function validateAnimationTrack(input: unknown, path: string, duration: unknown, errors: ValidationIssue[]): void {
@@ -429,6 +544,12 @@ function validateTransition(
   expectNonEmptyString(input.fromStateId, `${path}.fromStateId`, errors);
   expectNonEmptyString(input.toStateId, `${path}.toStateId`, errors);
   expectNumber(input.duration, `${path}.duration`, errors, { min: 0 });
+  if (input.easing !== undefined && (typeof input.easing !== "string" || !transitionEasings.has(input.easing))) {
+    errors.push({ path: `${path}.easing`, message: "Unknown transition easing." });
+  }
+  if (input.syncMode !== undefined && (typeof input.syncMode !== "string" || !syncModes.has(input.syncMode))) {
+    errors.push({ path: `${path}.syncMode`, message: "Unknown transition syncMode." });
+  }
   if (typeof input.fromStateId === "string" && !stateIds.has(input.fromStateId)) {
     errors.push({ path: `${path}.fromStateId`, message: `Transition source state '${input.fromStateId}' does not exist.` });
   }
@@ -443,6 +564,36 @@ function validateTransition(
         validateCondition(condition, `${path}.conditions[${index}]`, parameterIds, errors)
       );
     }
+  }
+}
+
+function validateProceduralPreset(input: unknown, path: string, errors: ValidationIssue[]): void {
+  if (!isRecord(input)) {
+    errors.push({ path, message: "Procedural preset must be an object." });
+    return;
+  }
+  expectNonEmptyString(input.id, `${path}.id`, errors);
+  if (typeof input.type !== "string" || !proceduralAnimationTypes.has(input.type)) {
+    errors.push({ path: `${path}.type`, message: "Unknown procedural animation preset type." });
+  }
+  if (input.enabled !== undefined && typeof input.enabled !== "boolean") {
+    errors.push({ path: `${path}.enabled`, message: "Procedural preset enabled must be boolean." });
+  }
+}
+
+function validatePreview(input: unknown, path: string, errors: ValidationIssue[]): void {
+  if (!isRecord(input)) {
+    errors.push({ path, message: "Preview settings must be an object." });
+    return;
+  }
+  if (input.quality !== undefined && (typeof input.quality !== "string" || !qualityPresets.has(input.quality))) {
+    errors.push({ path: `${path}.quality`, message: "Preview quality must be low, medium, or high." });
+  }
+  if (input.ldtkPath !== undefined) {
+    expectNonEmptyString(input.ldtkPath, `${path}.ldtkPath`, errors);
+  }
+  if (input.spawnPointId !== undefined) {
+    expectNonEmptyString(input.spawnPointId, `${path}.spawnPointId`, errors);
   }
 }
 
@@ -483,6 +634,15 @@ function validateTransform(input: unknown, path: string, errors: ValidationIssue
   }
   if (input.skewY !== undefined) {
     expectNumber(input.skewY, `${path}.skewY`, errors);
+  }
+}
+
+function validateStringArray(value: unknown, path: string, errors: ValidationIssue[]): void {
+  if (value === undefined) {
+    return;
+  }
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    errors.push({ path, message: "Expected an array of strings." });
   }
 }
 

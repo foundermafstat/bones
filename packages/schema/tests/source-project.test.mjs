@@ -5,6 +5,7 @@ import {
   BONES_SCHEMA_VERSION,
   SchemaValidationError,
   assertRigProject,
+  migrateRigProject,
   rigProjectJsonSchema,
   validateRigProject
 } from "../dist/index.js";
@@ -55,14 +56,17 @@ test("validates a minimal source project", () => {
 test("validates rig, animation, pose, procedural part, and state machine", () => {
   const project = {
     ...minimalProject,
+    projectId: "player",
+    units: "pixels",
+    defaultFrameRate: 60,
     rigs: [
       {
         id: "rig.player",
         name: "Player Rig",
         rootBoneId: "root",
         bones: [
-          { id: "root", name: "Root", transform },
-          { id: "head", name: "Head", parentId: "root", transform: { ...transform, y: -40 } }
+          { id: "root", name: "Root", local: transform, mirrorGroup: "center", tags: ["root"] },
+          { id: "head", name: "Head", parentId: "root", local: { ...transform, y: -40 }, inheritRotation: true, inheritScale: true }
         ],
         parts: [
           {
@@ -71,7 +75,7 @@ test("validates rig, animation, pose, procedural part, and state machine", () =>
             boneId: "head",
             type: "procedural",
             opacity: 1,
-            fill: { color: "#111111", alpha: 1 },
+            fill: { type: "solid", color: "#111111", alpha: 1 },
             procedural: {
               preset: "organic-blob",
               params: { radius: 18, asymmetry: 0.2 }
@@ -89,7 +93,9 @@ test("validates rig, animation, pose, procedural part, and state machine", () =>
         id: "clip.idle",
         name: "Idle",
         duration: 1,
+        frameRate: 60,
         loop: true,
+        tags: ["idle"],
         tracks: [
           {
             id: "track.head.y",
@@ -100,7 +106,10 @@ test("validates rig, animation, pose, procedural part, and state machine", () =>
               { time: 1, value: -42, interpolation: "linear" }
             ]
           }
-        ]
+        ],
+        events: [{ time: 0.5, type: "breath", payload: { intensity: 1 } }],
+        markers: [{ id: "mid", time: 0.5, label: "Mid" }],
+        rootMotion: { yTrack: "track.head.y" }
       }
     ],
     poses: [
@@ -127,11 +136,37 @@ test("validates rig, animation, pose, procedural part, and state machine", () =>
             fromStateId: "idle",
             toStateId: "idle",
             duration: 0.1,
+            easing: "easeOut",
+            syncMode: "phaseMatch",
             conditions: [{ parameterId: "speed", operator: ">=", value: 0 }]
           }
         ]
       }
-    ]
+    ],
+    proceduralPresets: [
+      {
+        id: "breathing.default",
+        type: "breathing",
+        enabled: true,
+        frequency: 0.8,
+        amplitude: 1,
+        affectedBones: { head: { y: -0.5 } }
+      },
+      {
+        id: "footik.default",
+        type: "footIK",
+        enabled: false,
+        feet: [{ footBone: "head" }],
+        maxCorrection: 8,
+        blend: 0.75
+      }
+    ],
+    preview: {
+      ldtkPath: "levels/test.ldtk",
+      quality: "medium",
+      showCollisionDebug: true,
+      showAnimationStateDebug: true
+    }
   };
 
   assert.equal(validateRigProject(project).ok, true);
@@ -206,4 +241,13 @@ test("assertRigProject throws SchemaValidationError", () => {
     () => assertRigProject({ ...minimalProject, runtimeTarget: "canvas-2d" }),
     (error) => error instanceof SchemaValidationError && /Unsupported runtimeTarget/.test(error.message)
   );
+});
+
+test("migrates source project defaults for production metadata", () => {
+  const result = migrateRigProject(minimalProject);
+
+  assert.equal(result.migrated, true);
+  assert.equal(result.project.projectId, minimalProject.id);
+  assert.equal(result.project.units, "pixels");
+  assert.equal(result.project.defaultFrameRate, 60);
 });

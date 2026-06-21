@@ -45,7 +45,7 @@ export function compileRig(projectInput: unknown, options: CompileOptions = {}):
       bones: rig.bones.map((bone) => ({
         id: lookupRequired(lookups.bones, bone.id, "bone"),
         parent: bone.parentId ? lookupRequired(lookups.bones, bone.parentId, "bone") : -1,
-        local: packTransform(bone.transform),
+        local: packTransform(bone.local ?? bone.transform ?? identityTransform),
         length: bone.length ?? 0
       })),
       parts: (rig.parts ?? []).map((part) => {
@@ -56,7 +56,7 @@ export function compileRig(projectInput: unknown, options: CompileOptions = {}):
           drawOrder: part.drawOrder ?? 0,
           visible: part.visible ?? true,
           opacity: part.opacity ?? 1,
-          local: packTransform(part.transform ?? identityTransform),
+          local: packTransform(part.local ?? part.transform ?? identityTransform),
           ...(part.fill ? { fill: { color: part.fill.color, alpha: part.fill.alpha ?? 1 } } : {}),
           ...(part.path
             ? { path: { closed: part.path.closed ?? false, commands: part.path.commands as unknown as readonly JsonValue[] } }

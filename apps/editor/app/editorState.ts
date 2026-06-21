@@ -53,7 +53,7 @@ export interface Keyframe {
   readonly id: string;
   readonly time: number;
   readonly value: number;
-  readonly interpolation: "linear" | "step" | "hold" | "bezier";
+  readonly interpolation: "linear" | "step" | "hold" | "bezier" | "spring";
   readonly curve?: readonly [number, number, number, number];
 }
 

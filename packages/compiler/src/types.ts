@@ -98,7 +98,7 @@ export interface CompiledAnimationTrackV1 {
 export interface CompiledKeyframeV1 {
   readonly time: number;
   readonly value: JsonValue;
-  readonly interpolation: "linear" | "step" | "hold" | "bezier";
+  readonly interpolation: "linear" | "step" | "hold" | "bezier" | "spring";
   readonly curve: readonly [number, number, number, number];
 }
 

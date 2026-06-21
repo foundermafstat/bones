@@ -15,7 +15,10 @@ export const rigProjectJsonSchema = {
     schemaVersion: { const: BONES_SCHEMA_VERSION },
     runtimeTarget: { const: BONES_RUNTIME_TARGET },
     id: { $ref: "#/$defs/nonEmptyString" },
+    projectId: { $ref: "#/$defs/nonEmptyString" },
     name: { $ref: "#/$defs/nonEmptyString" },
+    units: { const: "pixels" },
+    defaultFrameRate: { type: "number", exclusiveMinimum: 0 },
     rigs: {
       type: "array",
       minItems: 1,
@@ -33,6 +36,11 @@ export const rigProjectJsonSchema = {
       type: "array",
       items: { $ref: "#/$defs/stateMachine" }
     },
+    proceduralPresets: {
+      type: "array",
+      items: { $ref: "#/$defs/proceduralAnimationPreset" }
+    },
+    preview: { $ref: "#/$defs/previewSettings" },
     editor: { $ref: "#/$defs/editorMetadata" }
   },
   $defs: {
@@ -74,15 +82,21 @@ export const rigProjectJsonSchema = {
     bone: {
       type: "object",
       additionalProperties: false,
-      required: ["id", "name", "transform"],
+      required: ["id", "name"],
       properties: {
         id: { $ref: "#/$defs/nonEmptyString" },
         name: { $ref: "#/$defs/nonEmptyString" },
         parentId: { $ref: "#/$defs/nonEmptyString" },
+        local: { $ref: "#/$defs/transform2d" },
         transform: { $ref: "#/$defs/transform2d" },
         length: { type: "number", minimum: 0 },
+        inheritRotation: { type: "boolean" },
+        inheritScale: { type: "boolean" },
+        mirrorGroup: { $ref: "#/$defs/nonEmptyString" },
+        tags: { type: "array", items: { type: "string" } },
         editor: { $ref: "#/$defs/editorMetadata" }
-      }
+      },
+      anyOf: [{ required: ["local"] }, { required: ["transform"] }]
     },
     part: {
       type: "object",
@@ -96,6 +110,7 @@ export const rigProjectJsonSchema = {
         drawOrder: { type: "number" },
         visible: { type: "boolean" },
         opacity: { type: "number", minimum: 0, maximum: 1 },
+        local: { $ref: "#/$defs/transform2d" },
         transform: { $ref: "#/$defs/transform2d" },
         fill: { $ref: "#/$defs/fill" },
         path: { $ref: "#/$defs/pathShape" },
@@ -110,6 +125,7 @@ export const rigProjectJsonSchema = {
       additionalProperties: false,
       required: ["color"],
       properties: {
+        type: { const: "solid" },
         color: { type: "string", minLength: 1 },
         alpha: { type: "number", minimum: 0, maximum: 1 }
       }
@@ -169,8 +185,21 @@ export const rigProjectJsonSchema = {
         name: { $ref: "#/$defs/nonEmptyString" },
         duration: { type: "number", exclusiveMinimum: 0 },
         fps: { type: "number", exclusiveMinimum: 0 },
+        frameRate: { type: "number", exclusiveMinimum: 0 },
         loop: { type: "boolean" },
         tracks: { type: "array", items: { $ref: "#/$defs/animationTrack" } },
+        events: { type: "array", items: { $ref: "#/$defs/animationEvent" } },
+        markers: { type: "array", items: { $ref: "#/$defs/timelineMarker" } },
+        rootMotion: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            xTrack: { type: "string" },
+            yTrack: { type: "string" },
+            rotationTrack: { type: "string" }
+          }
+        },
+        tags: { type: "array", items: { type: "string" } },
         editor: { $ref: "#/$defs/editorMetadata" }
       }
     },
@@ -201,7 +230,10 @@ export const rigProjectJsonSchema = {
             "visible",
             "opacity",
             "drawOrder",
-            "procedural.params"
+            "procedural.params",
+            "deform",
+            "event",
+            "collider"
           ]
         },
         keyframes: { type: "array", minItems: 1, items: { $ref: "#/$defs/keyframe" } }
@@ -214,7 +246,7 @@ export const rigProjectJsonSchema = {
       properties: {
         time: { type: "number", minimum: 0 },
         value: {},
-        interpolation: { enum: ["linear", "step", "hold", "bezier"] },
+        interpolation: { enum: ["linear", "step", "hold", "bezier", "spring"] },
         curve: {
           type: "array",
           prefixItems: [{ type: "number" }, { type: "number" }, { type: "number" }, { type: "number" }],
@@ -222,6 +254,27 @@ export const rigProjectJsonSchema = {
           maxItems: 4
         },
         editor: { $ref: "#/$defs/editorMetadata" }
+      }
+    },
+    animationEvent: {
+      type: "object",
+      additionalProperties: false,
+      required: ["time", "type"],
+      properties: {
+        time: { type: "number", minimum: 0 },
+        type: { $ref: "#/$defs/nonEmptyString" },
+        payload: { type: "object" }
+      }
+    },
+    timelineMarker: {
+      type: "object",
+      additionalProperties: false,
+      required: ["id", "time", "label"],
+      properties: {
+        id: { $ref: "#/$defs/nonEmptyString" },
+        time: { type: "number", minimum: 0 },
+        label: { $ref: "#/$defs/nonEmptyString" },
+        color: { type: "string" }
       }
     },
     pose: {
@@ -249,9 +302,46 @@ export const rigProjectJsonSchema = {
         name: { $ref: "#/$defs/nonEmptyString" },
         initialStateId: { $ref: "#/$defs/nonEmptyString" },
         states: { type: "array", minItems: 1, items: { type: "object" } },
-        transitions: { type: "array", items: { type: "object" } },
+        transitions: { type: "array", items: { $ref: "#/$defs/transition" } },
         parameters: { type: "array", items: { type: "object" } },
         editor: { $ref: "#/$defs/editorMetadata" }
+      }
+    },
+    transition: {
+      type: "object",
+      additionalProperties: true,
+      required: ["id", "fromStateId", "toStateId", "duration"],
+      properties: {
+        id: { $ref: "#/$defs/nonEmptyString" },
+        fromStateId: { $ref: "#/$defs/nonEmptyString" },
+        toStateId: { $ref: "#/$defs/nonEmptyString" },
+        duration: { type: "number", minimum: 0 },
+        easing: { enum: ["linear", "easeIn", "easeOut", "easeInOut", "cubicBezier", "spring", "overshoot", "anticipation"] },
+        priority: { type: "number" },
+        canInterrupt: { type: "boolean" },
+        syncMode: { enum: ["none", "normalizedTime", "phaseMatch"] }
+      }
+    },
+    proceduralAnimationPreset: {
+      type: "object",
+      additionalProperties: true,
+      required: ["id", "type", "enabled"],
+      properties: {
+        id: { $ref: "#/$defs/nonEmptyString" },
+        type: { enum: ["breathing", "secondaryMotion", "squashStretch", "footIK"] },
+        enabled: { type: "boolean" }
+      }
+    },
+    previewSettings: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        ldtkPath: { $ref: "#/$defs/nonEmptyString" },
+        spawnPointId: { $ref: "#/$defs/nonEmptyString" },
+        quality: { enum: ["low", "medium", "high"] },
+        showCollisionDebug: { type: "boolean" },
+        showAnimationStateDebug: { type: "boolean" },
+        showSkeleton: { type: "boolean" }
       }
     },
     editorMetadata: {

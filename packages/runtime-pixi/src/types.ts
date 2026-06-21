@@ -110,7 +110,7 @@ export type RuntimeTrackProperty =
   | "opacity"
   | "drawOrder"
   | "procedural.params";
-export type RuntimeKeyframeInterpolation = "linear" | "step" | "hold" | "bezier";
+export type RuntimeKeyframeInterpolation = "linear" | "step" | "hold" | "bezier" | "spring";
 export type RuntimeSampleValue = string | number | boolean | null | readonly RuntimeSampleValue[] | { readonly [key: string]: RuntimeSampleValue };
 
 export interface RuntimeAnimationClip {

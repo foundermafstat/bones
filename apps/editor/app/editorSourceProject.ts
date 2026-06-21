@@ -32,7 +32,10 @@ export function toSourceProject(project: EditorProjectState): RigProject {
     schemaVersion: BONES_SCHEMA_VERSION,
     runtimeTarget: BONES_RUNTIME_TARGET,
     id: projectId,
+    projectId,
     name: project.name,
+    units: "pixels",
+    defaultFrameRate: 60,
     rigs: [
       {
         id: rigId,
@@ -92,7 +95,7 @@ export function fromSourceProject(sourceInput: unknown): EditorProjectState {
   }
 
   const hierarchy = readStringArray(rig.editor?.custom?.hierarchy) ?? orderBones(rig.bones, rig.rootBoneId);
-  const bones = Object.fromEntries(rig.bones.map((bone) => [bone.id, fromTransform(bone.transform)]));
+  const bones = Object.fromEntries(rig.bones.map((bone) => [bone.id, fromTransform(bone.local ?? bone.transform ?? identityTransform())]));
   const parents = Object.fromEntries(rig.bones.map((bone) => [bone.id, bone.parentId ?? null]));
   const parts = Object.fromEntries((rig.parts ?? []).map((part) => [part.id, fromSourcePart(part)]));
   const machine = source.stateMachines?.[0];
@@ -145,7 +148,7 @@ function toSourceBone(project: EditorProjectState, boneId: string): BoneDefiniti
     id: boneId,
     name: boneId,
     ...(project.parents[boneId] ? { parentId: project.parents[boneId] ?? undefined } : {}),
-    transform: toTransform(project.bones[boneId] ?? identityTransform())
+    local: toTransform(project.bones[boneId] ?? identityTransform())
   };
 }
 
@@ -167,8 +170,8 @@ function toSourcePart(part: ShapePart): PartDefinition {
     boneId: part.boneId,
     type: part.type,
     drawOrder: part.zIndex ?? 0,
-    transform: identityTransform(),
-    fill: { color: "#050505", alpha: 1 },
+    local: identityTransform(),
+    fill: { type: "solid", color: "#050505", alpha: 1 },
     ...(part.type === "path" ? { path: { closed: true, commands: pointsToPath(part.points) } } : {}),
     ...(part.type === "procedural" ? { procedural: { preset: part.preset ?? "organic-blob" } } : {}),
     ...(part.type === "svg" ? { svg: { source: part.assetPath ?? part.id } } : {}),

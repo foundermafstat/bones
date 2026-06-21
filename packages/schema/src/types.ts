@@ -11,11 +11,16 @@ export interface RigProject {
   readonly schemaVersion: BonesSchemaVersion;
   readonly runtimeTarget: BonesRuntimeTarget;
   readonly id: string;
+  readonly projectId?: string;
   readonly name: string;
+  readonly units?: "pixels";
+  readonly defaultFrameRate?: number;
   readonly rigs: readonly RigDefinition[];
   readonly animations?: readonly AnimationClip[];
   readonly poses?: readonly PoseDefinition[];
   readonly stateMachines?: readonly AnimationStateMachine[];
+  readonly proceduralPresets?: readonly ProceduralAnimationPreset[];
+  readonly preview?: PreviewSettings;
   readonly editor?: EditorMetadata;
 }
 
@@ -32,8 +37,13 @@ export interface BoneDefinition {
   readonly id: string;
   readonly name: string;
   readonly parentId?: string;
-  readonly transform: Transform2D;
+  readonly local?: Transform2D;
+  readonly transform?: Transform2D;
   readonly length?: number;
+  readonly inheritRotation?: boolean;
+  readonly inheritScale?: boolean;
+  readonly mirrorGroup?: string;
+  readonly tags?: readonly string[];
   readonly editor?: EditorMetadata;
 }
 
@@ -57,6 +67,7 @@ export interface PartDefinition {
   readonly drawOrder?: number;
   readonly visible?: boolean;
   readonly opacity?: number;
+  readonly local?: Transform2D;
   readonly transform?: Transform2D;
   readonly fill?: FillStyle;
   readonly path?: PathShape;
@@ -67,6 +78,7 @@ export interface PartDefinition {
 }
 
 export interface FillStyle {
+  readonly type?: "solid";
   readonly color: string;
   readonly alpha?: number;
 }
@@ -117,8 +129,13 @@ export interface AnimationClip {
   readonly name: string;
   readonly duration: number;
   readonly fps?: number;
+  readonly frameRate?: number;
   readonly loop?: boolean;
   readonly tracks: readonly AnimationTrack[];
+  readonly events?: readonly AnimationEvent[];
+  readonly markers?: readonly TimelineMarker[];
+  readonly rootMotion?: RootMotionDefinition;
+  readonly tags?: readonly string[];
   readonly editor?: EditorMetadata;
 }
 
@@ -140,7 +157,10 @@ export type AnimationTrackProperty =
   | "visible"
   | "opacity"
   | "drawOrder"
-  | "procedural.params";
+  | "procedural.params"
+  | "deform"
+  | "event"
+  | "collider";
 
 export interface AnimationTrack {
   readonly id: string;
@@ -149,7 +169,7 @@ export interface AnimationTrack {
   readonly keyframes: readonly Keyframe[];
 }
 
-export type KeyframeInterpolation = "linear" | "step" | "hold" | "bezier";
+export type KeyframeInterpolation = "linear" | "step" | "hold" | "bezier" | "spring";
 
 export interface Keyframe {
   readonly time: number;
@@ -157,6 +177,25 @@ export interface Keyframe {
   readonly interpolation?: KeyframeInterpolation;
   readonly curve?: readonly [number, number, number, number];
   readonly editor?: EditorMetadata;
+}
+
+export interface AnimationEvent {
+  readonly time: number;
+  readonly type: string;
+  readonly payload?: Readonly<Record<string, JsonValue>>;
+}
+
+export interface TimelineMarker {
+  readonly id: string;
+  readonly time: number;
+  readonly label: string;
+  readonly color?: string;
+}
+
+export interface RootMotionDefinition {
+  readonly xTrack?: string;
+  readonly yTrack?: string;
+  readonly rotationTrack?: string;
 }
 
 export interface PoseDefinition {
@@ -208,10 +247,22 @@ export interface AnimationTransition {
   readonly fromStateId: string;
   readonly toStateId: string;
   readonly duration: number;
+  readonly easing?: TransitionEasing;
   readonly priority?: number;
   readonly canInterrupt?: boolean;
+  readonly syncMode?: "none" | "normalizedTime" | "phaseMatch";
   readonly conditions?: readonly AnimationCondition[];
 }
+
+export type TransitionEasing =
+  | "linear"
+  | "easeIn"
+  | "easeOut"
+  | "easeInOut"
+  | "cubicBezier"
+  | "spring"
+  | "overshoot"
+  | "anticipation";
 
 export type AnimationParameterType = "number" | "boolean" | "string";
 
@@ -227,6 +278,76 @@ export interface AnimationCondition {
   readonly parameterId: string;
   readonly operator: AnimationConditionOperator;
   readonly value: string | number | boolean;
+}
+
+export type ProceduralAnimationPreset =
+  | BreathingPreset
+  | SecondaryMotionPreset
+  | SquashStretchPreset
+  | FootIkPreset;
+
+export interface BreathingPreset {
+  readonly id: string;
+  readonly type: "breathing";
+  readonly enabled: boolean;
+  readonly frequency: number;
+  readonly amplitude: number;
+  readonly affectedBones: Readonly<Record<string, Partial<Transform2D>>>;
+}
+
+export interface SecondaryMotionPreset {
+  readonly id: string;
+  readonly type: "secondaryMotion";
+  readonly enabled: boolean;
+  readonly target: string;
+  readonly stiffness: number;
+  readonly damping: number;
+  readonly velocityInfluence: number;
+  readonly gravityInfluence?: number;
+  readonly windInfluence?: number;
+  readonly maxOffset?: number;
+}
+
+export interface SquashStretchPreset {
+  readonly id: string;
+  readonly type: "squashStretch";
+  readonly enabled: boolean;
+  readonly targetBone: string;
+  readonly landingImpactScale: number;
+  readonly rules?: readonly SquashStretchRule[];
+}
+
+export interface SquashStretchRule {
+  readonly condition: string;
+  readonly scaleX: number;
+  readonly scaleY: number;
+  readonly duration: number;
+}
+
+export interface FootIkPreset {
+  readonly id: string;
+  readonly type: "footIK";
+  readonly enabled: boolean;
+  readonly feet: readonly FootIkFoot[];
+  readonly maxCorrection: number;
+  readonly blend: number;
+}
+
+export interface FootIkFoot {
+  readonly footBone: string;
+  readonly shinBone?: string;
+  readonly thighBone?: string;
+  readonly raycastOffsetX?: number;
+  readonly raycastHeight?: number;
+}
+
+export interface PreviewSettings {
+  readonly ldtkPath?: string;
+  readonly spawnPointId?: string;
+  readonly quality?: "low" | "medium" | "high";
+  readonly showCollisionDebug?: boolean;
+  readonly showAnimationStateDebug?: boolean;
+  readonly showSkeleton?: boolean;
 }
 
 export interface EditorMetadata {
