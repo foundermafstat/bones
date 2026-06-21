@@ -1,7 +1,17 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import type { AnimationClip, BoneTransform, EditorProjectState, ShapePart } from "./editorState";
+import { compileRig } from "@bones/compiler";
+import {
+  RigInstance,
+  sampleAnimationClip,
+  type RuntimeAnimationClip,
+  type RuntimeCompiledRig
+} from "@bones/runtime-pixi";
+import type { PartDefinition, PathCommand, RigProject, Transform2D } from "@bones/schema";
+import { parsePathData, type PathCommand as VectorPathCommand } from "@bones/vector-core";
+import { useEffect, useRef, useState } from "react";
+import type { EditorProjectState, ShapePart } from "./editorState";
+import { toSourceProject } from "./editorSourceProject";
 
 interface PixiPreviewProps {
   readonly clipId: number;
@@ -10,16 +20,20 @@ interface PixiPreviewProps {
   readonly showSkeleton: boolean;
 }
 
-const clipOrder = ["idle", "walk", "jump", "fall", "land"] as const;
-const transformChannels = new Set(["x", "y", "rotation", "scaleX", "scaleY"]);
-
-type TransformSample = Partial<Record<keyof BoneTransform, number>>;
+const identityTransform: Transform2D = {
+  x: 0,
+  y: 0,
+  rotation: 0,
+  scaleX: 1,
+  scaleY: 1
+};
 
 export function PixiPreview({ clipId, playing, project, showSkeleton }: PixiPreviewProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
-  const stateRef = useRef({ clipId, playing, project, showSkeleton });
+  const stateRef = useRef({ clipId, playing, showSkeleton });
+  const [error, setError] = useState<string | null>(null);
 
-  stateRef.current = { clipId, playing, project, showSkeleton };
+  stateRef.current = { clipId, playing, showSkeleton };
 
   useEffect(() => {
     const host = hostRef.current;
@@ -31,89 +45,70 @@ export function PixiPreview({ clipId, playing, project, showSkeleton }: PixiPrev
     let cleanup: (() => void) | undefined;
 
     async function mountPreview() {
-      const pixi = await import("pixi.js");
-      if (cancelled || !hostRef.current) {
-        return;
-      }
-
-      const app = new pixi.Application();
-      await app.init({
-        resizeTo: hostRef.current,
-        backgroundAlpha: 0,
-        antialias: true
-      });
-
-      if (cancelled || !hostRef.current) {
-        app.destroy(true);
-        return;
-      }
-
-      hostRef.current.appendChild(app.canvas);
-
-      const rigRoot = new pixi.Container();
-      const skeleton = new pixi.Graphics();
-      const boneContainers = new Map<string, InstanceType<typeof pixi.Container>>();
-      rigRoot.sortableChildren = true;
-      app.stage.addChild(rigRoot);
-
-      for (const boneId of project.hierarchy) {
-        const container = new pixi.Container();
-        container.label = boneId;
-        container.sortableChildren = true;
-        boneContainers.set(boneId, container);
-      }
-
-      for (const boneId of project.hierarchy) {
-        const parentId = project.parents[boneId];
-        const container = boneContainers.get(boneId);
-        if (!container) {
-          continue;
-        }
-        (parentId ? boneContainers.get(parentId) : rigRoot)?.addChild(container);
-      }
-
-      const svgParts = Object.values(project.parts).filter((part) => part.type === "svg" && part.assetPath);
-      await Promise.all(svgParts.map((part) => addSvgPart(pixi, boneContainers, part)));
-      rigRoot.addChild(skeleton);
-      skeleton.zIndex = 100;
-
-      let time = 0;
-      let activeClipId = stateRef.current.clipId;
-      const tick = (ticker: { deltaMS: number }) => {
-        const current = stateRef.current;
-        if (current.clipId !== activeClipId) {
-          activeClipId = current.clipId;
-          time = 0;
-        }
-        if (current.playing) {
-          time += ticker.deltaMS / 1000;
+      try {
+        setError(null);
+        const [pixi, compiled] = await Promise.all([import("pixi.js"), compilePreviewRig(project)]);
+        if (cancelled || !hostRef.current) {
+          return;
         }
 
-        const scale = Math.min(app.screen.width / 460, app.screen.height / 560) * 0.92;
-        rigRoot.position.set(app.screen.width * 0.5, app.screen.height * 0.88);
-        rigRoot.scale.set(scale);
+        const app = new pixi.Application();
+        await app.init({
+          resizeTo: hostRef.current,
+          backgroundAlpha: 0,
+          antialias: true
+        });
 
-        const samples = sampleAnimation(current.project, current.clipId, time);
-        for (const boneId of current.project.hierarchy) {
-          const container = boneContainers.get(boneId);
-          const base = current.project.bones[boneId];
-          if (!container || !base) {
-            continue;
+        if (cancelled || !hostRef.current) {
+          app.destroy(true);
+          return;
+        }
+
+        const rig = new RigInstance(compiled, { quality: "medium" });
+        const skeleton = new pixi.Graphics();
+        skeleton.zIndex = 1000;
+        rig.container.sortableChildren = true;
+        rig.container.addChild(skeleton);
+
+        hostRef.current.appendChild(app.canvas);
+        app.stage.addChild(rig.container);
+
+        let time = 0;
+        let activeClipId = stateRef.current.clipId;
+        const tick = (ticker: { deltaMS: number }) => {
+          const current = stateRef.current;
+          if (current.clipId !== activeClipId) {
+            activeClipId = current.clipId;
+            time = 0;
           }
-          const sample = samples[boneId];
-          container.position.set(sample?.x ?? base.x, sample?.y ?? base.y);
-          container.rotation = sample?.rotation ?? base.rotation;
-          container.scale.set(sample?.scaleX ?? base.scaleX, sample?.scaleY ?? base.scaleY);
+          if (current.playing) {
+            time += ticker.deltaMS / 1000;
+          }
+
+          const scale = Math.min(app.screen.width / 460, app.screen.height / 560) * 0.92;
+          rig.container.position.set(app.screen.width * 0.5, app.screen.height * 0.88);
+          rig.container.scale.set(scale);
+
+          const clip = getPreviewClip(compiled, current.clipId);
+          if (clip) {
+            rig.applySample(sampleAnimationClip(clip, time));
+          } else {
+            rig.update(0);
+          }
+
+          drawSkeleton(skeleton, rig, compiled, project, current.showSkeleton);
+        };
+
+        app.ticker.add(tick);
+        cleanup = () => {
+          app.ticker.remove(tick);
+          app.destroy(true, { children: true });
+        };
+      } catch (previewError) {
+        if (!cancelled) {
+          setError(previewError instanceof Error ? previewError.message : "Preview failed to compile.");
         }
-
-        drawSkeleton(skeleton, rigRoot, boneContainers, current.project, current.showSkeleton);
-      };
-
-      app.ticker.add(tick);
-      cleanup = () => {
-        app.ticker.remove(tick);
-        app.destroy(true, { children: true });
-      };
+      }
     }
 
     void mountPreview();
@@ -123,81 +118,77 @@ export function PixiPreview({ clipId, playing, project, showSkeleton }: PixiPrev
       cleanup?.();
       host.replaceChildren();
     };
-  }, [project.hierarchy, project.parents, project.parts]);
+  }, [project]);
 
-  return <div className="pixiPreviewHost" ref={hostRef} aria-label="Animated SVG rig preview" />;
+  return (
+    <>
+      <div className="pixiPreviewHost" ref={hostRef} aria-label="Compiled runtime rig preview" />
+      {error ? (
+        <div className="absolute left-3 top-3 max-w-md rounded-md border border-destructive/30 bg-background/95 px-3 py-2 text-xs text-destructive shadow-sm">
+          {error}
+        </div>
+      ) : null}
+    </>
+  );
 }
 
-async function addSvgPart(
-  pixi: typeof import("pixi.js"),
-  boneContainers: Map<string, InstanceType<typeof pixi.Container>>,
-  part: ShapePart
-) {
-  if (!part.assetPath) {
-    return;
-  }
-
-  const texture = await pixi.Assets.load(part.assetPath);
-  const sprite = new pixi.Sprite(texture);
-  const anchor = part.anchor ?? [0.5, 0.5];
-  const offset = part.offset ?? [0, 0];
-  sprite.anchor.set(anchor[0], anchor[1]);
-  if (part.width) {
-    sprite.width = part.width;
-  }
-  sprite.position.set(offset[0], offset[1]);
-  sprite.zIndex = part.zIndex ?? 0;
-  boneContainers.get(part.boneId)?.addChild(sprite);
+async function compilePreviewRig(project: EditorProjectState): Promise<RuntimeCompiledRig> {
+  const source = await inlinePreviewSvgAssets(toSourceProject(project), project.parts);
+  return compileRig(source) as unknown as RuntimeCompiledRig;
 }
 
-function sampleAnimation(project: EditorProjectState, clipId: number, time: number): Record<string, TransformSample> {
-  const clipKey = clipOrder[clipId] ?? "idle";
-  const clip = project.animations[clipKey] ?? project.animations.idle;
-  if (!clip) {
-    return {};
+async function inlinePreviewSvgAssets(
+  source: RigProject,
+  editorParts: Readonly<Record<string, ShapePart>>
+): Promise<RigProject> {
+  const rigs = await Promise.all(
+    source.rigs.map(async (rig) => ({
+      ...rig,
+      parts: await Promise.all((rig.parts ?? []).map((part) => inlinePreviewSvgPart(part, editorParts[part.id])))
+    }))
+  );
+
+  return { ...source, rigs };
+}
+
+async function inlinePreviewSvgPart(part: PartDefinition, editorPart: ShapePart | undefined): Promise<PartDefinition> {
+  if (part.type !== "svg" || !part.svg?.source || !part.svg.source.startsWith("/")) {
+    return part;
   }
 
-  const localTime = clip.loop ? time % clip.duration : Math.min(time, clip.duration);
-  const samples: Record<string, TransformSample> = {};
-  for (const [trackId, keyframes] of Object.entries(clip.tracks)) {
-    const splitIndex = trackId.lastIndexOf(".");
-    const boneId = trackId.slice(0, splitIndex);
-    const channel = trackId.slice(splitIndex + 1);
-    if (!project.bones[boneId] || !transformChannels.has(channel)) {
-      continue;
+  const response = await fetch(part.svg.source);
+  if (!response.ok) {
+    throw new Error(`Failed to load preview SVG '${part.svg.source}': ${response.status}`);
+  }
+
+  const svgSource = await response.text();
+  const viewBox = readSvgViewBox(svgSource);
+  const pathData = readSvgPathData(svgSource);
+  if (!pathData) {
+    throw new Error(`Preview SVG '${part.svg.source}' does not contain a path.`);
+  }
+
+  const { svg: _svg, ...pathPart } = part;
+  return {
+    ...pathPart,
+    type: "path",
+    local: editorPart ? svgLocalTransform(editorPart, viewBox) : (part.local ?? identityTransform),
+    path: {
+      closed: true,
+      commands: parsePathData(pathData).map(toSchemaPathCommand)
     }
-    samples[boneId] = { ...samples[boneId], [channel]: sampleTrack(clip, keyframes, localTime) };
-  }
-  return samples;
+  };
 }
 
-function sampleTrack(clip: AnimationClip, keyframes: readonly AnimationClip["tracks"][string][number][], time: number): number {
-  if (!keyframes.length) {
-    return 0;
-  }
-  const sorted = [...keyframes].sort((a, b) => a.time - b.time);
-  if (time <= sorted[0]!.time) {
-    return sorted[0]!.value;
-  }
-  for (let index = 1; index < sorted.length; index += 1) {
-    const next = sorted[index]!;
-    const previous = sorted[index - 1]!;
-    if (time <= next.time) {
-      if (previous.interpolation === "step" || previous.interpolation === "hold") {
-        return previous.value;
-      }
-      const span = Math.max(0.0001, next.time - previous.time);
-      const t = (time - previous.time) / span;
-      return previous.value + (next.value - previous.value) * t;
-    }
-  }
-  return clip.loop ? sorted[0]!.value : sorted[sorted.length - 1]!.value;
+function getPreviewClip(compiled: RuntimeCompiledRig, clipId: number): RuntimeAnimationClip | undefined {
+  const clips = compiled.animations ?? [];
+  return clips[clipId] ?? clips[0];
 }
 
 function drawSkeleton(
   skeleton: import("pixi.js").Graphics,
-  rigRoot: import("pixi.js").Container,
-  boneContainers: Map<string, import("pixi.js").Container>,
+  rig: RigInstance,
+  compiled: RuntimeCompiledRig,
   project: EditorProjectState,
   visible: boolean
 ) {
@@ -207,28 +198,107 @@ function drawSkeleton(
     return;
   }
 
+  const lookups = compiled.lookups?.bones ?? {};
   for (const boneId of project.hierarchy) {
     const parentId = project.parents[boneId];
-    const bone = boneContainers.get(boneId);
-    const parent = parentId ? boneContainers.get(parentId) : undefined;
+    if (!parentId) {
+      continue;
+    }
+    const bone = getRuntimeBone(rig, lookups[boneId]);
+    const parent = getRuntimeBone(rig, lookups[parentId]);
     if (!bone || !parent) {
       continue;
     }
-    const from = rigRoot.toLocal(parent.getGlobalPosition());
-    const to = rigRoot.toLocal(bone.getGlobalPosition());
+    const from = rig.container.toLocal(parent.getGlobalPosition());
+    const to = rig.container.toLocal(bone.getGlobalPosition());
     skeleton.moveTo(from.x, from.y);
     skeleton.lineTo(to.x, to.y);
   }
 
   skeleton.stroke({ color: 0x4f8cff, alpha: 0.78, width: 2 });
   for (const boneId of project.hierarchy) {
-    const bone = boneContainers.get(boneId);
+    const bone = getRuntimeBone(rig, lookups[boneId]);
     if (!bone) {
       continue;
     }
-    const point = rigRoot.toLocal(bone.getGlobalPosition());
+    const point = rig.container.toLocal(bone.getGlobalPosition());
     skeleton.circle(point.x, point.y, boneId === project.selectedBoneId ? 5 : 3);
   }
   skeleton.fill({ color: 0xffffff, alpha: 0.9 });
   skeleton.stroke({ color: 0x1b4dcc, alpha: 0.9, width: 1 });
+}
+
+function getRuntimeBone(rig: RigInstance, id: number | undefined) {
+  return typeof id === "number" ? rig.getBoneContainer(id) : undefined;
+}
+
+function svgLocalTransform(part: ShapePart, viewBox: readonly [number, number, number, number] | undefined): Transform2D {
+  if (!viewBox || !part.width) {
+    return {
+      ...identityTransform,
+      x: part.offset?.[0] ?? 0,
+      y: part.offset?.[1] ?? 0
+    };
+  }
+
+  const [, , width, height] = viewBox;
+  const scale = width > 0 ? part.width / width : 1;
+  const anchor = part.anchor ?? [0, 0];
+  const offset = part.offset ?? [0, 0];
+
+  return {
+    x: offset[0] - anchor[0] * width * scale,
+    y: offset[1] - anchor[1] * height * scale,
+    rotation: 0,
+    scaleX: scale,
+    scaleY: scale
+  };
+}
+
+function readSvgViewBox(source: string): readonly [number, number, number, number] | undefined {
+  const viewBox = source.match(/\bviewBox=["']([^"']+)["']/i)?.[1];
+  if (viewBox) {
+    const values = viewBox
+      .trim()
+      .split(/[\s,]+/)
+      .map((value) => Number(value));
+    if (values.length === 4 && values.every(Number.isFinite)) {
+      return [values[0]!, values[1]!, values[2]!, values[3]!];
+    }
+  }
+
+  const width = readSvgLength(source, "width");
+  const height = readSvgLength(source, "height");
+  return width && height ? [0, 0, width, height] : undefined;
+}
+
+function readSvgPathData(source: string): string | undefined {
+  return source.match(/<path\b[^>]*\bd=["']([^"']+)["'][^>]*>/i)?.[1];
+}
+
+function toSchemaPathCommand(command: VectorPathCommand): PathCommand {
+  if (command.cmd === "M" || command.cmd === "L") {
+    return { type: command.cmd, x: command.x, y: command.y };
+  }
+  if (command.cmd === "Q") {
+    return { type: "Q", cx: command.cpx, cy: command.cpy, x: command.x, y: command.y };
+  }
+  if (command.cmd === "C") {
+    return {
+      type: "C",
+      c1x: command.cp1x,
+      c1y: command.cp1y,
+      c2x: command.cp2x,
+      c2y: command.cp2y,
+      x: command.x,
+      y: command.y
+    };
+  }
+  return { type: "Z" };
+}
+
+function readSvgLength(source: string, attribute: "width" | "height"): number | undefined {
+  const value = source.match(new RegExp(`\\b${attribute}=["']([0-9.]+)`, "i"))?.[1];
+  const parsed = value ? Number(value) : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : undefined;
 }

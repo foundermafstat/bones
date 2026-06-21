@@ -22,6 +22,15 @@ export interface RuntimeCompiledRig {
   readonly rig: RuntimeCompiledRigData;
   readonly animations?: readonly RuntimeAnimationClip[];
   readonly stateMachines?: readonly RuntimeStateMachine[];
+  readonly lookups?: RuntimeLookupTables;
+}
+
+export interface RuntimeLookupTables {
+  readonly rigs: Readonly<Record<string, NumericId>>;
+  readonly bones: Readonly<Record<string, NumericId>>;
+  readonly parts: Readonly<Record<string, NumericId>>;
+  readonly animations: Readonly<Record<string, NumericId>>;
+  readonly stateMachines: Readonly<Record<string, NumericId>>;
 }
 
 export interface RuntimeCompiledRigData {
@@ -109,7 +118,10 @@ export type RuntimeTrackProperty =
   | "visible"
   | "opacity"
   | "drawOrder"
-  | "procedural.params";
+  | "procedural.params"
+  | "deform"
+  | "event"
+  | "collider";
 export type RuntimeKeyframeInterpolation = "linear" | "step" | "hold" | "bezier" | "spring";
 export type RuntimeSampleValue = string | number | boolean | null | readonly RuntimeSampleValue[] | { readonly [key: string]: RuntimeSampleValue };
 
@@ -182,8 +194,10 @@ export interface RuntimeTransition {
   readonly from: NumericId;
   readonly to: NumericId;
   readonly duration: number;
+  readonly easing?: "linear" | "easeIn" | "easeOut" | "easeInOut" | "cubicBezier" | "spring" | "overshoot" | "anticipation";
   readonly priority: number;
   readonly canInterrupt: boolean;
+  readonly syncMode?: "none" | "normalizedTime" | "phaseMatch";
   readonly conditions: readonly RuntimeCondition[];
 }
 
