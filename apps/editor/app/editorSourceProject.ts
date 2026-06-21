@@ -157,6 +157,8 @@ function toSourcePart(part: ShapePart): PartDefinition {
     custom: {
       pivot: [...part.pivot],
       points: part.points.map((point) => [...point]),
+      pathCommands: part.pathCommands ? part.pathCommands.map((command) => ({ ...command })) : null,
+      svgViewBox: part.svgViewBox ? [...part.svgViewBox] : null,
       width: part.width ?? null,
       anchor: part.anchor ? [...part.anchor] : null,
       offset: part.offset ? [...part.offset] : null,
@@ -164,17 +166,18 @@ function toSourcePart(part: ShapePart): PartDefinition {
     }
   };
 
+  const exportedType = part.pathCommands ? "path" : part.type;
   return {
     id: part.id,
     name: part.id,
     boneId: part.boneId,
-    type: part.type,
+    type: exportedType,
     drawOrder: part.zIndex ?? 0,
-    local: identityTransform(),
+    local: part.pathCommands ? partLocalTransform(part) : identityTransform(),
     fill: { type: "solid", color: "#050505", alpha: 1 },
-    ...(part.type === "path" ? { path: { closed: true, commands: pointsToPath(part.points) } } : {}),
-    ...(part.type === "procedural" ? { procedural: { preset: part.preset ?? "organic-blob" } } : {}),
-    ...(part.type === "svg" ? { svg: { source: part.assetPath ?? part.id } } : {}),
+    ...(exportedType === "path" ? { path: { closed: true, commands: part.pathCommands ?? pointsToPath(part.points) } } : {}),
+    ...(exportedType === "procedural" ? { procedural: { preset: part.preset ?? "organic-blob" } } : {}),
+    ...(exportedType === "svg" ? { svg: { source: part.assetPath ?? part.id } } : {}),
     editor
   };
 }
@@ -185,14 +188,18 @@ function fromSourcePart(part: PartDefinition): ShapePart {
   const width = numberValue(custom?.width);
   const anchor = readNumberPair(custom?.anchor);
   const offset = readNumberPair(custom?.offset);
+  const svgViewBox = readViewBox(custom?.svgViewBox);
+  const pathCommands = readPathCommands(custom?.pathCommands) ?? part.path?.commands;
   return {
     id: part.id,
     boneId: part.boneId,
     type: part.type === "mesh" ? "path" : part.type,
     pivot: readNumberPair(custom?.pivot) ?? [0, 0],
     points: readPointList(custom?.points) ?? pathToPoints(part.path?.commands ?? []),
+    ...(pathCommands ? { pathCommands } : {}),
     preset: part.procedural?.preset === "tapered-limb" || part.procedural?.preset === "organic-blob" || part.procedural?.preset === "capsule" ? part.procedural.preset : undefined,
     ...(assetPath ? { assetPath } : {}),
+    ...(svgViewBox ? { svgViewBox } : {}),
     ...(width ? { width } : {}),
     ...(anchor ? { anchor } : {}),
     ...(offset ? { offset } : {}),
@@ -328,6 +335,23 @@ function identityTransform(): Transform2D {
   return { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 };
 }
 
+function partLocalTransform(part: ShapePart): Transform2D {
+  if (!part.svgViewBox || !part.width) {
+    return identityTransform();
+  }
+  const [, , width, height] = part.svgViewBox;
+  const scale = width > 0 ? part.width / width : 1;
+  const anchor = part.anchor ?? [0, 0];
+  const offset = part.offset ?? [0, 0];
+  return {
+    x: offset[0] - anchor[0] * width * scale,
+    y: offset[1] - anchor[1] * height * scale,
+    rotation: 0,
+    scaleX: scale,
+    scaleY: scale
+  };
+}
+
 function proceduralToJson(procedural: ProceduralPresetState) {
   return {
     breathing: {
@@ -381,8 +405,46 @@ function readPointList(value: unknown): readonly (readonly [number, number])[] |
   return points.every(Boolean) ? (points as readonly (readonly [number, number])[]) : undefined;
 }
 
+function readPathCommands(value: unknown): readonly PathCommand[] | undefined {
+  return Array.isArray(value) && value.every(isPathCommand) ? value : undefined;
+}
+
+function isPathCommand(value: unknown): value is PathCommand {
+  if (!isRecord(value) || typeof value.type !== "string") {
+    return false;
+  }
+  if ((value.type === "M" || value.type === "L") && typeof value.x === "number" && typeof value.y === "number") {
+    return true;
+  }
+  if (value.type === "Q") {
+    return typeof value.cx === "number" && typeof value.cy === "number" && typeof value.x === "number" && typeof value.y === "number";
+  }
+  if (value.type === "C") {
+    return (
+      typeof value.c1x === "number" &&
+      typeof value.c1y === "number" &&
+      typeof value.c2x === "number" &&
+      typeof value.c2y === "number" &&
+      typeof value.x === "number" &&
+      typeof value.y === "number"
+    );
+  }
+  return value.type === "Z";
+}
+
 function readNumberPair(value: unknown): readonly [number, number] | undefined {
   return Array.isArray(value) && typeof value[0] === "number" && typeof value[1] === "number" ? [value[0], value[1]] : undefined;
+}
+
+function readViewBox(value: unknown): readonly [number, number, number, number] | undefined {
+  return Array.isArray(value) &&
+    value.length === 4 &&
+    typeof value[0] === "number" &&
+    typeof value[1] === "number" &&
+    typeof value[2] === "number" &&
+    typeof value[3] === "number"
+    ? [value[0], value[1], value[2], value[3]]
+    : undefined;
 }
 
 function stringValue(value: unknown): string | undefined {

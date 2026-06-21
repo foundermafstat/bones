@@ -6,6 +6,7 @@ import {
   createTaperedLimbPath,
   createSvgPathSource,
   getPathDirection,
+  importSvgPaths,
   isPathClosed,
   mirrorPath,
   normalizePath,
@@ -112,4 +113,18 @@ test("keeps SVG as an imported source model", () => {
     source: "M0 0L1 1",
     viewBox: [0, 0, 1, 1]
   });
+});
+
+test("imports SVG path data into editable vector commands", () => {
+  const imported = importSvgPaths('<svg viewBox="0 0 10 20"><path fill="#050505" d="M 0 0 L 10 0 L 10 20 Z"/></svg>');
+
+  assert.deepEqual(imported.viewBox, [0, 0, 10, 20]);
+  assert.equal(imported.paths.length, 1);
+  assert.equal(imported.paths[0].fill, "#050505");
+  assert.deepEqual(imported.paths[0].commands, [
+    { cmd: "M", x: 0, y: 0 },
+    { cmd: "L", x: 10, y: 0 },
+    { cmd: "L", x: 10, y: 20 },
+    { cmd: "Z" }
+  ]);
 });

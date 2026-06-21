@@ -1,3 +1,5 @@
+import type { PathCommand } from "@bones/schema";
+
 export interface BoneTransform {
   readonly x: number;
   readonly y: number;
@@ -27,8 +29,10 @@ export interface ShapePart {
   readonly type: "procedural" | "path" | "svg";
   readonly pivot: readonly [number, number];
   readonly points: readonly (readonly [number, number])[];
+  readonly pathCommands?: readonly PathCommand[];
   readonly preset: "tapered-limb" | "organic-blob" | "capsule" | undefined;
   readonly assetPath?: string;
+  readonly svgViewBox?: readonly [number, number, number, number];
   readonly width?: number;
   readonly anchor?: readonly [number, number];
   readonly offset?: readonly [number, number];
@@ -343,7 +347,7 @@ export function createEditPathPointCommand(partId: string, index: number, point:
     } else {
       points.splice(index, 1);
     }
-    const nextPart: ShapePart = { ...part, type: "path", points };
+    const nextPart: ShapePart = withPointPath(part, points);
     return { ...markDirty(state, partId), parts: { ...state.parts, [partId]: nextPart } };
   };
   return {
@@ -357,9 +361,16 @@ export function createEditPathPointCommand(partId: string, index: number, point:
 export function createMirrorPathCommand(partId: string): EditorCommand {
   const mirror = (state: EditorProjectState) => {
     const part = state.parts[partId];
-    return part ? { ...markDirty(state, partId), parts: { ...state.parts, [partId]: { ...part, points: part.points.map(([x, y]) => [-x, y] as const) } } } : state;
+    return part
+      ? { ...markDirty(state, partId), parts: { ...state.parts, [partId]: withPointPath(part, part.points.map(([x, y]) => [-x, y] as const)) } }
+      : state;
   };
   return { id: `mirror-path:${partId}`, label: "Mirror path", do: mirror, undo: mirror };
+}
+
+function withPointPath(part: ShapePart, points: readonly (readonly [number, number])[]): ShapePart {
+  const { pathCommands: _pathCommands, ...pointPart } = part;
+  return { ...pointPart, type: "path", points };
 }
 
 export function createSetPartPivotCommand(partId: string, pivot: readonly [number, number]): EditorCommand {
