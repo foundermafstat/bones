@@ -6,4 +6,5 @@ export * from "./RigLoader.js";
 export * from "./RuntimeStateMachine.js";
 export * from "./PixiPartRenderer.js";
 export * from "./ProceduralLayers.js";
+export * from "./Profiler.js";
 export * from "./types.js";

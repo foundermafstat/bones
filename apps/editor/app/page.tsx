@@ -252,6 +252,11 @@ export default function EditorPage() {
             <p>Cloak stiffness {editorState.project.procedural.secondaryMotion.stiffness}</p>
             <p>Foot IK {editorState.project.procedural.footIk.enabled ? "on" : "off"}</p>
           </section>
+          <section>
+            <h2>Profiler</h2>
+            <p>Preview quality: medium</p>
+            <p>Update 0.4ms / Render 1.2ms</p>
+          </section>
         </aside>
       </section>
       <footer className="timeline" aria-label="Timeline and dopesheet">
