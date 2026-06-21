@@ -5,6 +5,9 @@ import type { CSSProperties } from "react";
 import {
   createMoveBoneCommand,
   createRotateBoneCommand,
+  createAddBoneCommand,
+  createDeleteBoneCommand,
+  createRenameBoneCommand,
   executeCommand,
   initialEditorProject,
   redo,
@@ -15,8 +18,6 @@ import {
 const modes = ["Rig", "Shape", "Pose", "Timeline", "Curve", "State Machine", "Procedural", "Preview"] as const;
 
 const sampleProject = {
-  name: "Shadow Hero",
-  hierarchy: ["root", "body", "head", "upperArmFront", "forearmFront", "handFront", "thighFront", "shinFront", "footFront", "cloak"],
   tracks: ["body.scaleY", "head.y", "thighFront.rotation", "thighBack.rotation", "cloak.x"]
 };
 
@@ -35,6 +36,7 @@ export default function EditorPage() {
     () => [
       ["Mode", mode],
       ["Selection", selectedBone],
+      ["Parent", editorState.project.parents[selectedBone] ?? "none"],
       ["X", String(selectedTransform.x)],
       ["Y", String(selectedTransform.y)],
       ["Rotation", selectedTransform.rotation.toFixed(2)],
@@ -71,6 +73,15 @@ export default function EditorPage() {
           <button type="button" onClick={() => runCommand(createRotateBoneCommand(selectedBone, 0.1))}>
             Rotate
           </button>
+          <button type="button" onClick={() => runCommand(createAddBoneCommand(selectedBone, `bone${editorState.project.hierarchy.length}`))}>
+            Add Bone
+          </button>
+          <button type="button" onClick={() => runCommand(createRenameBoneCommand(selectedBone, `${selectedBone}Renamed`))}>
+            Rename
+          </button>
+          <button type="button" disabled={selectedBone === "root"} onClick={() => runCommand(createDeleteBoneCommand(selectedBone))}>
+            Delete
+          </button>
           <button type="button">Play</button>
           <button type="button">Pause</button>
           <button type="button">Record</button>
@@ -87,10 +98,11 @@ export default function EditorPage() {
         <aside className="panel hierarchyPanel">
           <header>Hierarchy</header>
           <ol>
-            {sampleProject.hierarchy.map((item, index) => (
+            {editorState.project.hierarchy.map((item, index) => (
               <li
                 key={item}
                 className={item === selectedBone ? "selected" : ""}
+                onClick={() => setEditorState((state) => ({ ...state, project: { ...state.project, selectedBoneId: item } }))}
                 style={{ "--depth": item === "root" ? 0 : index > 2 ? 2 : 1 } as DepthStyle}
               >
                 {item}
