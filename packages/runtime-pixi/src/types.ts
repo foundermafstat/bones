@@ -1,4 +1,4 @@
-import type { Container } from "pixi.js";
+import type { Container, Graphics, GraphicsContext, Mesh, MeshGeometry } from "pixi.js";
 
 export type NumericId = number;
 export type AnimationParameterValue = string | number | boolean;
@@ -44,6 +44,26 @@ export interface RuntimeCompiledPart {
   readonly visible: boolean;
   readonly opacity: number;
   readonly local: PackedTransform2D;
+  readonly fill?: {
+    readonly color: string;
+    readonly alpha: number;
+  };
+  readonly path?: {
+    readonly closed: boolean;
+    readonly commands: readonly RuntimePathCommand[];
+  };
+  readonly procedural?: {
+    readonly preset: string;
+    readonly params: Readonly<Record<string, string | number | boolean>>;
+  };
+  readonly mesh?: {
+    readonly vertices: readonly number[];
+    readonly indices: readonly number[];
+  };
+  readonly svg?: {
+    readonly source: string;
+    readonly viewBox?: readonly [number, number, number, number];
+  };
 }
 
 export interface RigInstanceOptions {
@@ -65,6 +85,8 @@ export interface PartRuntime {
   readonly drawOrder: number;
   readonly local: PackedTransform2D;
   readonly container: Container;
+  readonly renderable?: Graphics | Mesh<MeshGeometry>;
+  readonly graphicsContext?: GraphicsContext;
 }
 
 export interface RigUpdateState {
@@ -72,3 +94,43 @@ export interface RigUpdateState {
   readonly lastDelta: number;
   readonly params: AnimationParameters;
 }
+
+export type RuntimePathCommand =
+  | { readonly cmd: "M"; readonly x: number; readonly y: number }
+  | { readonly cmd: "L"; readonly x: number; readonly y: number }
+  | { readonly cmd: "Q"; readonly cpx: number; readonly cpy: number; readonly x: number; readonly y: number }
+  | {
+      readonly cmd: "C";
+      readonly cp1x: number;
+      readonly cp1y: number;
+      readonly cp2x: number;
+      readonly cp2y: number;
+      readonly x: number;
+      readonly y: number;
+    }
+  | { readonly cmd: "Z" }
+  | { readonly type: "M"; readonly x: number; readonly y: number }
+  | { readonly type: "L"; readonly x: number; readonly y: number }
+  | {
+      readonly type: "Q";
+      readonly cpx?: number;
+      readonly cpy?: number;
+      readonly c1x?: number;
+      readonly c1y?: number;
+      readonly x: number;
+      readonly y: number;
+    }
+  | {
+      readonly type: "C";
+      readonly cp1x?: number;
+      readonly cp1y?: number;
+      readonly cp2x?: number;
+      readonly cp2y?: number;
+      readonly c1x?: number;
+      readonly c1y?: number;
+      readonly c2x?: number;
+      readonly c2y?: number;
+      readonly x: number;
+      readonly y: number;
+    }
+  | { readonly type: "Z" };

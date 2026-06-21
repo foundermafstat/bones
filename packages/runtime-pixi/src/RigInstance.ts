@@ -9,6 +9,7 @@ import type {
   RuntimeCompiledRig
 } from "./types.js";
 import { RigLoader } from "./RigLoader.js";
+import { createPartRenderable } from "./PixiPartRenderer.js";
 
 export class RigInstance {
   readonly container: Container;
@@ -37,14 +38,29 @@ export class RigInstance {
       container: namedContainer(`bone:${bone.id}`)
     }));
 
-    this.parts = this.compiled.rig.parts.map((part) => ({
-      id: part.id,
-      bone: part.bone,
-      type: part.type,
-      drawOrder: part.drawOrder,
-      local: part.local,
-      container: namedContainer(`part:${part.id}`)
-    }));
+    this.parts = this.compiled.rig.parts.map((part) => {
+      const rendered = createPartRenderable(part);
+      const container = namedContainer(`part:${part.id}`);
+      if (rendered) {
+        container.addChild(rendered.renderable);
+      }
+      const runtimePart: PartRuntime = {
+        id: part.id,
+        bone: part.bone,
+        type: part.type,
+        drawOrder: part.drawOrder,
+        local: part.local,
+        container
+      };
+      if (rendered) {
+        return {
+          ...runtimePart,
+          renderable: rendered.renderable,
+          ...(rendered.graphicsContext ? { graphicsContext: rendered.graphicsContext } : {})
+        };
+      }
+      return runtimePart;
+    });
 
     this.buildHierarchy();
     this.applyDefaultTransforms();

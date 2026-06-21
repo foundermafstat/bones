@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { Container } from "pixi.js";
+import { Container, Graphics, GraphicsContext } from "pixi.js";
 import { RigInstance, RigLoader } from "../dist/index.js";
 
 const compiledFixture = {
@@ -25,7 +25,17 @@ const compiledFixture = {
         drawOrder: 2,
         visible: true,
         opacity: 0.8,
-        local: [1, 2, 0.1, 1, 1, 0, 0]
+        local: [1, 2, 0.1, 1, 1, 0, 0],
+        fill: { color: "#050505", alpha: 1 },
+        path: {
+          closed: true,
+          commands: [
+            { cmd: "M", x: 0, y: 0 },
+            { cmd: "L", x: 10, y: 0 },
+            { cmd: "L", x: 10, y: 10 },
+            { cmd: "Z" }
+          ]
+        }
       }
     ]
   }
@@ -65,11 +75,16 @@ test("RigInstance creates Pixi Container hierarchy and default transforms", () =
   assert.equal(part.alpha, 0.8);
   assert.equal(part.visible, true);
   assert.equal(part.zIndex, 2);
+  assert.ok(instance.parts[0].renderable instanceof Graphics);
+  assert.ok(instance.parts[0].graphicsContext instanceof GraphicsContext);
+  assert.equal(part.children[0], instance.parts[0].renderable);
 });
 
 test("update stores params and reapplies default transforms without animation", () => {
   const instance = new RigInstance(compiledFixture);
   const body = instance.getBoneContainer(1);
+  const graphics = instance.parts[0].renderable;
+  const context = instance.parts[0].graphicsContext;
   body.position.set(999, 999);
 
   const state = instance.update(0.016, { absSpeed: 10, grounded: true });
@@ -78,4 +93,6 @@ test("update stores params and reapplies default transforms without animation", 
   assert.deepEqual(state.params, { absSpeed: 10, grounded: true });
   assert.equal(body.position.x, 12);
   assert.equal(body.position.y, -20);
+  assert.equal(instance.parts[0].renderable, graphics);
+  assert.equal(instance.parts[0].graphicsContext, context);
 });
