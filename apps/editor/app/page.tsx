@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type MouseEvent, type PointerEvent } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,6 +35,8 @@ import {
   createBindProceduralPartCommand,
   createEditPathPointCommand,
   createMirrorPathCommand,
+  createSetPartDrawOrderCommand,
+  createSetPartPathCommand,
   createSetPartPivotCommand,
   createApplyPoseCommand,
   createDuplicatePoseCommand,
@@ -53,6 +55,7 @@ import {
 } from "./editorState";
 import { loadDraft, saveDraft, serializeEditorProject } from "./projectIo";
 import { PixiPreview } from "./PixiPreview";
+import { vectorizeSvgPart } from "./editorVectorImport";
 
 const modes = ["Rig", "Shape", "Pose", "Timeline", "Curve", "State Machine", "Procedural", "Preview"] as const;
 
@@ -89,6 +92,8 @@ export default function EditorPage() {
   const [mode, setMode] = useState<EditorMode>("Rig");
   const [previewPlaying, setPreviewPlaying] = useState(true);
   const [previewClipId, setPreviewClipId] = useState(0);
+  const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
+  const [dragPoint, setDragPoint] = useState<{ readonly index: number; readonly point: readonly [number, number] } | null>(null);
   const [editorState, setEditorState] = useState<EditorStateContainer>({
     project: initialEditorProject,
     history: { past: [], future: [] }
@@ -96,11 +101,19 @@ export default function EditorPage() {
   const selectedBone = editorState.project.selectedBoneId;
   const selectedTransform = editorState.project.bones[selectedBone] ?? initialEditorProject.bones.body!;
   const selectedPart = Object.values(editorState.project.parts).find((part) => part.boneId === selectedBone) ?? editorState.project.parts.bodyShape!;
+  const shapePoints = dragPoint
+    ? selectedPart.points.map((point, index) => (index === dragPoint.index ? dragPoint.point : point))
+    : selectedPart.points;
+  const shapeViewBox = useMemo(() => getShapeViewBox(shapePoints), [shapePoints]);
   const poseIds = Object.keys(editorState.project.poses);
   const selectedPose = editorState.project.poses[poseIds[0]!]!;
   const activeClip = editorState.project.animations.idle!;
   const activeTrack = activeClip.tracks["body.scaleY"] ?? [];
   const runCommand = (command: Parameters<typeof executeCommand>[1]) => setEditorState((state) => executeCommand(state, command));
+  const vectorizeSelectedPart = async () => {
+    const vectorPart = await vectorizeSvgPart(selectedPart);
+    runCommand(createSetPartPathCommand(vectorPart.id, vectorPart.points, vectorPart.pathCommands, vectorPart.svgViewBox));
+  };
   const toolbarGroups: { label: string; actions: ToolbarAction[] }[] = [
     {
       label: "History",
@@ -122,6 +135,7 @@ export default function EditorPage() {
     {
       label: "Shape",
       actions: [
+        { label: "Vectorize", disabled: selectedPart.type !== "svg", onClick: () => void vectorizeSelectedPart() },
         { label: "Bind", onClick: () => runCommand(createBindProceduralPartCommand(`${selectedBone}Shape`, selectedBone, "tapered-limb")) },
         { label: "Pen", onClick: () => runCommand(createEditPathPointCommand(selectedPart.id, selectedPart.points.length, [12, 4])) },
         { label: "Mirror", onClick: () => runCommand(createMirrorPathCommand(selectedPart.id)) },
@@ -308,6 +322,57 @@ export default function EditorPage() {
           </CardHeader>
           <CardContent className="relative min-h-0 flex-1 overflow-hidden bg-[linear-gradient(var(--border)_1px,transparent_1px),linear-gradient(90deg,var(--border)_1px,transparent_1px)] bg-[size:24px_24px] p-0" aria-label="PixiJS canvas viewport">
             <PixiPreview clipId={previewClipId} playing={previewPlaying} project={editorState.project} showSkeleton={mode !== "Preview"} />
+            {mode === "Shape" && shapePoints.length > 0 ? (
+              <svg
+                aria-label="Shape point editor"
+                className="absolute inset-0 z-10 size-full touch-none"
+                tabIndex={0}
+                viewBox={`${shapeViewBox.x} ${shapeViewBox.y} ${shapeViewBox.width} ${shapeViewBox.height}`}
+                onDoubleClick={(event) => {
+                  const point = svgPointFromEvent(event, shapeViewBox);
+                  runCommand(createEditPathPointCommand(selectedPart.id, selectedPart.points.length, point));
+                  setSelectedPointIndex(selectedPart.points.length);
+                }}
+                onKeyDown={(event) => {
+                  if ((event.key === "Backspace" || event.key === "Delete") && selectedPointIndex !== null) {
+                    event.preventDefault();
+                    runCommand(createEditPathPointCommand(selectedPart.id, selectedPointIndex));
+                    setSelectedPointIndex(null);
+                  }
+                }}
+                onPointerMove={(event) => {
+                  if (dragPoint) {
+                    setDragPoint({ index: dragPoint.index, point: svgPointFromEvent(event, shapeViewBox) });
+                  }
+                }}
+                onPointerUp={() => {
+                  if (dragPoint) {
+                    runCommand(createEditPathPointCommand(selectedPart.id, dragPoint.index, dragPoint.point));
+                    setDragPoint(null);
+                  }
+                }}
+              >
+                <polyline fill="rgba(79,140,255,0.12)" points={shapePoints.map(([x, y]) => `${x},${y}`).join(" ")} stroke="#4f8cff" strokeWidth={2} vectorEffect="non-scaling-stroke" />
+                {shapePoints.map(([x, y], index) => (
+                  <circle
+                    cx={x}
+                    cy={y}
+                    fill={index === selectedPointIndex ? "#ffffff" : "#4f8cff"}
+                    key={`${selectedPart.id}-${index}`}
+                    r={index === selectedPointIndex ? 5 : 4}
+                    stroke="#1b4dcc"
+                    strokeWidth={1.5}
+                    vectorEffect="non-scaling-stroke"
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      event.currentTarget.setPointerCapture(event.pointerId);
+                      setSelectedPointIndex(index);
+                      setDragPoint({ index, point: [x, y] });
+                    }}
+                  />
+                ))}
+              </svg>
+            ) : null}
           </CardContent>
         </Card>
 
@@ -338,6 +403,20 @@ export default function EditorPage() {
                   <ReadOnlyField label="Asset" value={selectedPart.assetPath?.split("/").pop() ?? "none"} />
                   <ReadOnlyField label="Pivot" value={selectedPart.pivot.join(", ")} />
                   <ReadOnlyField label="Points" value={String(selectedPart.points.length)} />
+                  <div className="grid grid-cols-2 gap-1">
+                    <Button size="sm" type="button" variant="outline" onClick={() => void vectorizeSelectedPart()} disabled={selectedPart.type !== "svg"}>
+                      Vectorize
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createMirrorPathCommand(selectedPart.id))} disabled={!selectedPart.points.length}>
+                      Mirror
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetPartPivotCommand(selectedPart.id, [0, 0]))}>
+                      Pivot 0
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetPartDrawOrderCommand(selectedPart.id, (selectedPart.zIndex ?? 0) + 1))}>
+                      Layer +
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
               <Card size="sm">
@@ -421,4 +500,39 @@ export default function EditorPage() {
       </Card>
     </main>
   );
+}
+
+interface ShapeViewBox {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+function getShapeViewBox(points: readonly (readonly [number, number])[]): ShapeViewBox {
+  if (!points.length) {
+    return { x: -64, y: -64, width: 128, height: 128 };
+  }
+  const xs = points.map(([x]) => x);
+  const ys = points.map(([, y]) => y);
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  const maxX = Math.max(...xs);
+  const maxY = Math.max(...ys);
+  const width = Math.max(1, maxX - minX);
+  const height = Math.max(1, maxY - minY);
+  const padding = Math.max(width, height) * 0.15 + 12;
+  return {
+    x: minX - padding,
+    y: minY - padding,
+    width: width + padding * 2,
+    height: height + padding * 2
+  };
+}
+
+function svgPointFromEvent(event: PointerEvent<SVGSVGElement> | MouseEvent<SVGSVGElement>, viewBox: ShapeViewBox): readonly [number, number] {
+  const rect = event.currentTarget.getBoundingClientRect();
+  const x = viewBox.x + ((event.clientX - rect.left) / Math.max(1, rect.width)) * viewBox.width;
+  const y = viewBox.y + ((event.clientY - rect.top) / Math.max(1, rect.height)) * viewBox.height;
+  return [Number(x.toFixed(2)), Number(y.toFixed(2))];
 }

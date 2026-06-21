@@ -335,7 +335,7 @@ export function createBindProceduralPartCommand(partId: string, boneId: string, 
   };
 }
 
-export function createEditPathPointCommand(partId: string, index: number, point: readonly [number, number]): EditorCommand {
+export function createEditPathPointCommand(partId: string, index: number, point?: readonly [number, number]): EditorCommand {
   const update = (state: EditorProjectState, nextPoint: readonly [number, number] | undefined) => {
     const part = state.parts[partId];
     if (!part) {
@@ -368,22 +368,76 @@ export function createMirrorPathCommand(partId: string): EditorCommand {
   return { id: `mirror-path:${partId}`, label: "Mirror path", do: mirror, undo: mirror };
 }
 
+export function createSetPartPathCommand(
+  partId: string,
+  points: readonly (readonly [number, number])[],
+  pathCommands?: readonly PathCommand[],
+  svgViewBox?: readonly [number, number, number, number]
+): EditorCommand {
+  let previous: ShapePart | undefined;
+  return {
+    id: `set-part-path:${partId}`,
+    label: "Set part path",
+    do: (state) => {
+      const part = state.parts[partId];
+      previous = part;
+      if (!part) {
+        return state;
+      }
+      const { pathCommands: _pathCommands, svgViewBox: _svgViewBox, ...basePart } = part;
+      return {
+        ...markDirty(state, partId),
+        parts: {
+          ...state.parts,
+          [partId]: {
+            ...basePart,
+            type: "path",
+            points,
+            ...(pathCommands ? { pathCommands } : {}),
+            ...(svgViewBox ? { svgViewBox } : {})
+          }
+        }
+      };
+    },
+    undo: (state) => (previous ? { ...markDirty(state, partId), parts: { ...state.parts, [partId]: previous } } : state)
+  };
+}
+
 function withPointPath(part: ShapePart, points: readonly (readonly [number, number])[]): ShapePart {
   const { pathCommands: _pathCommands, ...pointPart } = part;
   return { ...pointPart, type: "path", points };
 }
 
 export function createSetPartPivotCommand(partId: string, pivot: readonly [number, number]): EditorCommand {
+  let previous: readonly [number, number] = [0, 0];
   return {
     id: `set-pivot:${partId}:${pivot.join(",")}`,
     label: "Set pivot",
     do: (state) => {
       const part = state.parts[partId];
+      previous = part?.pivot ?? previous;
       return part ? { ...markDirty(state, partId), parts: { ...state.parts, [partId]: { ...part, pivot } } } : state;
     },
     undo: (state) => {
       const part = state.parts[partId];
-      return part ? { ...markDirty(state, partId), parts: { ...state.parts, [partId]: { ...part, pivot: [0, 0] } } } : state;
+      return part ? { ...markDirty(state, partId), parts: { ...state.parts, [partId]: { ...part, pivot: previous } } } : state;
+    }
+  };
+}
+
+export function createSetPartDrawOrderCommand(partId: string, zIndex: number): EditorCommand {
+  let previous = 0;
+  return {
+    id: `set-draw-order:${partId}:${zIndex}`,
+    label: "Set draw order",
+    do: (state) => {
+      const part = state.parts[partId];
+      previous = part?.zIndex ?? previous;
+      return part ? { ...markDirty(state, partId), parts: { ...state.parts, [partId]: { ...part, zIndex } } } : state;
+    },
+    undo: (state) => {
+      const part = state.parts[partId];
+      return part ? { ...markDirty(state, partId), parts: { ...state.parts, [partId]: { ...part, zIndex: previous } } } : state;
     }
   };
 }
