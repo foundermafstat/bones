@@ -1,0 +1,656 @@
+{
+  "source": "source.png",
+  "sourceSize": {
+    "width": 1448,
+    "height": 1086
+  },
+  "threshold": 80,
+  "fill": "#050505",
+  "parts": [
+    {
+      "id": "part_01_rear_head_hair",
+      "file": "part_01_rear_head_hair.svg",
+      "sourceBBox": {
+        "x": 482,
+        "y": 60,
+        "width": 169,
+        "height": 168
+      },
+      "assetSize": {
+        "width": 177,
+        "height": 176
+      },
+      "area": 17810
+    },
+    {
+      "id": "part_02_assembled_side_reference",
+      "file": "part_02_assembled_side_reference.svg",
+      "sourceBBox": {
+        "x": 49,
+        "y": 83,
+        "width": 319,
+        "height": 596
+      },
+      "assetSize": {
+        "width": 327,
+        "height": 604
+      },
+      "area": 84127
+    },
+    {
+      "id": "part_03_left_shoulder_cap",
+      "file": "part_03_left_shoulder_cap.svg",
+      "sourceBBox": {
+        "x": 727,
+        "y": 97,
+        "width": 71,
+        "height": 67
+      },
+      "assetSize": {
+        "width": 79,
+        "height": 75
+      },
+      "area": 3305
+    },
+    {
+      "id": "part_04_right_shoulder_cap",
+      "file": "part_04_right_shoulder_cap.svg",
+      "sourceBBox": {
+        "x": 903,
+        "y": 104,
+        "width": 60,
+        "height": 65
+      },
+      "assetSize": {
+        "width": 68,
+        "height": 73
+      },
+      "area": 2882
+    },
+    {
+      "id": "part_05_large_cape",
+      "file": "part_05_large_cape.svg",
+      "sourceBBox": {
+        "x": 1065,
+        "y": 139,
+        "width": 319,
+        "height": 330
+      },
+      "assetSize": {
+        "width": 327,
+        "height": 338
+      },
+      "area": 54607
+    },
+    {
+      "id": "part_06_left_upper_arm",
+      "file": "part_06_left_upper_arm.svg",
+      "sourceBBox": {
+        "x": 734,
+        "y": 180,
+        "width": 58,
+        "height": 95
+      },
+      "assetSize": {
+        "width": 66,
+        "height": 103
+      },
+      "area": 3885
+    },
+    {
+      "id": "part_07_right_upper_arm",
+      "file": "part_07_right_upper_arm.svg",
+      "sourceBBox": {
+        "x": 906,
+        "y": 184,
+        "width": 55,
+        "height": 89
+      },
+      "assetSize": {
+        "width": 63,
+        "height": 97
+      },
+      "area": 3290
+    },
+    {
+      "id": "part_08_back_torso",
+      "file": "part_08_back_torso.svg",
+      "sourceBBox": {
+        "x": 495,
+        "y": 239,
+        "width": 124,
+        "height": 140
+      },
+      "assetSize": {
+        "width": 132,
+        "height": 148
+      },
+      "area": 12713
+    },
+    {
+      "id": "part_09_right_elbow_cuff_small",
+      "file": "part_09_right_elbow_cuff_small.svg",
+      "sourceBBox": {
+        "x": 934,
+        "y": 257,
+        "width": 28,
+        "height": 22
+      },
+      "assetSize": {
+        "width": 36,
+        "height": 30
+      },
+      "area": 365
+    },
+    {
+      "id": "part_10_left_forearm",
+      "file": "part_10_left_forearm.svg",
+      "sourceBBox": {
+        "x": 731,
+        "y": 296,
+        "width": 53,
+        "height": 108
+      },
+      "assetSize": {
+        "width": 61,
+        "height": 116
+      },
+      "area": 3689
+    },
+    {
+      "id": "part_11_right_forearm",
+      "file": "part_11_right_forearm.svg",
+      "sourceBBox": {
+        "x": 916,
+        "y": 299,
+        "width": 52,
+        "height": 106
+      },
+      "assetSize": {
+        "width": 60,
+        "height": 114
+      },
+      "area": 3667
+    },
+    {
+      "id": "part_12_reference_belt_segment",
+      "file": "part_12_reference_belt_segment.svg",
+      "sourceBBox": {
+        "x": 249,
+        "y": 352,
+        "width": 74,
+        "height": 25
+      },
+      "assetSize": {
+        "width": 82,
+        "height": 33
+      },
+      "area": 1227
+    },
+    {
+      "id": "part_13_pelvis_shorts",
+      "file": "part_13_pelvis_shorts.svg",
+      "sourceBBox": {
+        "x": 515,
+        "y": 394,
+        "width": 107,
+        "height": 75
+      },
+      "assetSize": {
+        "width": 115,
+        "height": 83
+      },
+      "area": 6107
+    },
+    {
+      "id": "part_14_left_hand",
+      "file": "part_14_left_hand.svg",
+      "sourceBBox": {
+        "x": 744,
+        "y": 400,
+        "width": 57,
+        "height": 60
+      },
+      "assetSize": {
+        "width": 65,
+        "height": 68
+      },
+      "area": 2471
+    },
+    {
+      "id": "part_15_right_hand",
+      "file": "part_15_right_hand.svg",
+      "sourceBBox": {
+        "x": 897,
+        "y": 401,
+        "width": 59,
+        "height": 69
+      },
+      "assetSize": {
+        "width": 67,
+        "height": 77
+      },
+      "area": 2470
+    },
+    {
+      "id": "part_16_reference_side_hand",
+      "file": "part_16_reference_side_hand.svg",
+      "sourceBBox": {
+        "x": 325,
+        "y": 413,
+        "width": 23,
+        "height": 45
+      },
+      "assetSize": {
+        "width": 31,
+        "height": 53
+      },
+      "area": 733
+    },
+    {
+      "id": "part_17_left_thigh",
+      "file": "part_17_left_thigh.svg",
+      "sourceBBox": {
+        "x": 739,
+        "y": 498,
+        "width": 59,
+        "height": 97
+      },
+      "assetSize": {
+        "width": 67,
+        "height": 105
+      },
+      "area": 4490
+    },
+    {
+      "id": "part_18_right_thigh",
+      "file": "part_18_right_thigh.svg",
+      "sourceBBox": {
+        "x": 903,
+        "y": 498,
+        "width": 56,
+        "height": 96
+      },
+      "assetSize": {
+        "width": 64,
+        "height": 104
+      },
+      "area": 4181
+    },
+    {
+      "id": "part_19_left_full_leg_boot",
+      "file": "part_19_left_full_leg_boot.svg",
+      "sourceBBox": {
+        "x": 476,
+        "y": 500,
+        "width": 79,
+        "height": 180
+      },
+      "assetSize": {
+        "width": 87,
+        "height": 188
+      },
+      "area": 7837
+    },
+    {
+      "id": "part_20_right_full_leg_boot",
+      "file": "part_20_right_full_leg_boot.svg",
+      "sourceBBox": {
+        "x": 596,
+        "y": 501,
+        "width": 60,
+        "height": 179
+      },
+      "assetSize": {
+        "width": 68,
+        "height": 187
+      },
+      "area": 7125
+    },
+    {
+      "id": "part_21_left_knee_connector",
+      "file": "part_21_left_knee_connector.svg",
+      "sourceBBox": {
+        "x": 730,
+        "y": 512,
+        "width": 10,
+        "height": 34
+      },
+      "assetSize": {
+        "width": 18,
+        "height": 42
+      },
+      "area": 239
+    },
+    {
+      "id": "part_22_left_leg_side_connector",
+      "file": "part_22_left_leg_side_connector.svg",
+      "sourceBBox": {
+        "x": 484,
+        "y": 514,
+        "width": 12,
+        "height": 36
+      },
+      "assetSize": {
+        "width": 20,
+        "height": 44
+      },
+      "area": 312
+    },
+    {
+      "id": "part_23_loose_hair_front",
+      "file": "part_23_loose_hair_front.svg",
+      "sourceBBox": {
+        "x": 1065,
+        "y": 517,
+        "width": 184,
+        "height": 176
+      },
+      "assetSize": {
+        "width": 192,
+        "height": 184
+      },
+      "area": 19236
+    },
+    {
+      "id": "part_24_left_lower_leg",
+      "file": "part_24_left_lower_leg.svg",
+      "sourceBBox": {
+        "x": 738,
+        "y": 588,
+        "width": 42,
+        "height": 73
+      },
+      "assetSize": {
+        "width": 50,
+        "height": 81
+      },
+      "area": 2317
+    },
+    {
+      "id": "part_25_right_lower_leg",
+      "file": "part_25_right_lower_leg.svg",
+      "sourceBBox": {
+        "x": 920,
+        "y": 588,
+        "width": 42,
+        "height": 73
+      },
+      "assetSize": {
+        "width": 50,
+        "height": 81
+      },
+      "area": 2322
+    },
+    {
+      "id": "part_26_left_boot",
+      "file": "part_26_left_boot.svg",
+      "sourceBBox": {
+        "x": 726,
+        "y": 674,
+        "width": 77,
+        "height": 44
+      },
+      "assetSize": {
+        "width": 85,
+        "height": 52
+      },
+      "area": 2437
+    },
+    {
+      "id": "part_27_right_boot",
+      "file": "part_27_right_boot.svg",
+      "sourceBBox": {
+        "x": 919,
+        "y": 674,
+        "width": 78,
+        "height": 44
+      },
+      "assetSize": {
+        "width": 86,
+        "height": 52
+      },
+      "area": 2461
+    },
+    {
+      "id": "part_28_rear_right_boot",
+      "file": "part_28_rear_right_boot.svg",
+      "sourceBBox": {
+        "x": 612,
+        "y": 676,
+        "width": 82,
+        "height": 40
+      },
+      "assetSize": {
+        "width": 90,
+        "height": 48
+      },
+      "area": 2379
+    },
+    {
+      "id": "part_29_rear_left_boot",
+      "file": "part_29_rear_left_boot.svg",
+      "sourceBBox": {
+        "x": 476,
+        "y": 677,
+        "width": 77,
+        "height": 41
+      },
+      "assetSize": {
+        "width": 85,
+        "height": 49
+      },
+      "area": 2351
+    },
+    {
+      "id": "part_30_hood_profile_left",
+      "file": "part_30_hood_profile_left.svg",
+      "sourceBBox": {
+        "x": 360,
+        "y": 770,
+        "width": 138,
+        "height": 227
+      },
+      "assetSize": {
+        "width": 146,
+        "height": 235
+      },
+      "area": 20156
+    },
+    {
+      "id": "part_31_horn_upper_left",
+      "file": "part_31_horn_upper_left.svg",
+      "sourceBBox": {
+        "x": 161,
+        "y": 771,
+        "width": 51,
+        "height": 108
+      },
+      "assetSize": {
+        "width": 59,
+        "height": 116
+      },
+      "area": 2479
+    },
+    {
+      "id": "part_32_hood_profile_right",
+      "file": "part_32_hood_profile_right.svg",
+      "sourceBBox": {
+        "x": 549,
+        "y": 773,
+        "width": 128,
+        "height": 224
+      },
+      "assetSize": {
+        "width": 136,
+        "height": 232
+      },
+      "area": 17979
+    },
+    {
+      "id": "part_33_horn_upper_right",
+      "file": "part_33_horn_upper_right.svg",
+      "sourceBBox": {
+        "x": 68,
+        "y": 778,
+        "width": 55,
+        "height": 101
+      },
+      "assetSize": {
+        "width": 63,
+        "height": 109
+      },
+      "area": 2288
+    },
+    {
+      "id": "part_34_horn_upper_center",
+      "file": "part_34_horn_upper_center.svg",
+      "sourceBBox": {
+        "x": 246,
+        "y": 778,
+        "width": 44,
+        "height": 100
+      },
+      "assetSize": {
+        "width": 52,
+        "height": 108
+      },
+      "area": 2047
+    },
+    {
+      "id": "part_35_feather_tail_large",
+      "file": "part_35_feather_tail_large.svg",
+      "sourceBBox": {
+        "x": 1197,
+        "y": 791,
+        "width": 106,
+        "height": 207
+      },
+      "assetSize": {
+        "width": 114,
+        "height": 215
+      },
+      "area": 8367
+    },
+    {
+      "id": "part_36_tattered_cuff_right",
+      "file": "part_36_tattered_cuff_right.svg",
+      "sourceBBox": {
+        "x": 913,
+        "y": 809,
+        "width": 134,
+        "height": 196
+      },
+      "assetSize": {
+        "width": 142,
+        "height": 204
+      },
+      "area": 15494
+    },
+    {
+      "id": "part_37_tattered_cuff_left",
+      "file": "part_37_tattered_cuff_left.svg",
+      "sourceBBox": {
+        "x": 733,
+        "y": 817,
+        "width": 138,
+        "height": 187
+      },
+      "assetSize": {
+        "width": 146,
+        "height": 195
+      },
+      "area": 12781
+    },
+    {
+      "id": "part_38_arrow_tail_small",
+      "file": "part_38_arrow_tail_small.svg",
+      "sourceBBox": {
+        "x": 1341,
+        "y": 818,
+        "width": 53,
+        "height": 172
+      },
+      "assetSize": {
+        "width": 61,
+        "height": 180
+      },
+      "area": 3025
+    },
+    {
+      "id": "part_39_slim_tail",
+      "file": "part_39_slim_tail.svg",
+      "sourceBBox": {
+        "x": 1110,
+        "y": 840,
+        "width": 41,
+        "height": 158
+      },
+      "assetSize": {
+        "width": 49,
+        "height": 166
+      },
+      "area": 2910
+    },
+    {
+      "id": "part_40_horn_lower_left",
+      "file": "part_40_horn_lower_left.svg",
+      "sourceBBox": {
+        "x": 67,
+        "y": 904,
+        "width": 31,
+        "height": 81
+      },
+      "assetSize": {
+        "width": 39,
+        "height": 89
+      },
+      "area": 1260
+    },
+    {
+      "id": "part_41_horn_lower_center_left",
+      "file": "part_41_horn_lower_center_left.svg",
+      "sourceBBox": {
+        "x": 151,
+        "y": 905,
+        "width": 33,
+        "height": 81
+      },
+      "assetSize": {
+        "width": 41,
+        "height": 89
+      },
+      "area": 1216
+    },
+    {
+      "id": "part_42_horn_lower_center_right",
+      "file": "part_42_horn_lower_center_right.svg",
+      "sourceBBox": {
+        "x": 212,
+        "y": 905,
+        "width": 28,
+        "height": 64
+      },
+      "assetSize": {
+        "width": 36,
+        "height": 72
+      },
+      "area": 877
+    },
+    {
+      "id": "part_43_horn_lower_right",
+      "file": "part_43_horn_lower_right.svg",
+      "sourceBBox": {
+        "x": 266,
+        "y": 905,
+        "width": 25,
+        "height": 64
+      },
+      "assetSize": {
+        "width": 33,
+        "height": 72
+      },
+      "area": 858
+    }
+  ]
+}

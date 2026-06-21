@@ -24,10 +24,15 @@ export interface EditorProjectState {
 export interface ShapePart {
   readonly id: string;
   readonly boneId: string;
-  readonly type: "procedural" | "path";
+  readonly type: "procedural" | "path" | "svg";
   readonly pivot: readonly [number, number];
   readonly points: readonly (readonly [number, number])[];
   readonly preset: "tapered-limb" | "organic-blob" | "capsule" | undefined;
+  readonly assetPath?: string;
+  readonly width?: number;
+  readonly anchor?: readonly [number, number];
+  readonly offset?: readonly [number, number];
+  readonly zIndex?: number;
 }
 
 export interface PoseDefinition {
@@ -96,55 +101,108 @@ export interface EditorStateContainer {
 export const initialEditorProject: EditorProjectState = {
   name: "Shadow Hero",
   selectedBoneId: "body",
-  hierarchy: ["root", "body", "head", "upperArmFront", "forearmFront", "handFront", "thighFront", "shinFront", "footFront", "cloak"],
+  hierarchy: ["root", "cloak", "body", "head", "upperArmBack", "forearmBack", "handBack", "upperArmFront", "forearmFront", "handFront", "pelvis", "thighBack", "shinBack", "footBack", "thighFront", "shinFront", "footFront"],
   parents: {
     root: null,
+    cloak: "body",
     body: "root",
     head: "body",
+    upperArmBack: "body",
+    forearmBack: "upperArmBack",
+    handBack: "forearmBack",
     upperArmFront: "body",
     forearmFront: "upperArmFront",
     handFront: "forearmFront",
-    thighFront: "root",
+    pelvis: "body",
+    thighBack: "pelvis",
+    shinBack: "thighBack",
+    footBack: "shinBack",
+    thighFront: "pelvis",
     shinFront: "thighFront",
-    footFront: "shinFront",
-    cloak: "body"
+    footFront: "shinFront"
   },
   dirty: false,
   dirtyParts: [],
   bones: {
     root: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 },
-    body: { x: 0, y: -36, rotation: 0, scaleX: 1, scaleY: 1 },
-    head: { x: 0, y: -32, rotation: 0, scaleX: 1, scaleY: 1 },
-    upperArmFront: { x: 12, y: -20, rotation: 0.45, scaleX: 1, scaleY: 1 },
-    forearmFront: { x: 20, y: 0, rotation: 0.35, scaleX: 1, scaleY: 1 },
-    handFront: { x: 18, y: 0, rotation: 0, scaleX: 1, scaleY: 1 },
-    thighFront: { x: 7, y: -4, rotation: 1.65, scaleX: 1, scaleY: 1 },
-    shinFront: { x: 24, y: 0, rotation: 0.18, scaleX: 1, scaleY: 1 },
-    footFront: { x: 22, y: 0, rotation: -1.1, scaleX: 1, scaleY: 1 },
-    cloak: { x: 0, y: -26, rotation: 0, scaleX: 1, scaleY: 1 }
+    cloak: { x: -74, y: 4, rotation: 0.04, scaleX: 1, scaleY: 1 },
+    body: { x: 0, y: -250, rotation: 0, scaleX: 1, scaleY: 1 },
+    head: { x: 0, y: -94, rotation: 0, scaleX: 1, scaleY: 1 },
+    upperArmBack: { x: -44, y: -34, rotation: 0.08, scaleX: 1, scaleY: 1 },
+    forearmBack: { x: -5, y: 70, rotation: -0.08, scaleX: 1, scaleY: 1 },
+    handBack: { x: 0, y: 68, rotation: 0, scaleX: 1, scaleY: 1 },
+    upperArmFront: { x: 48, y: -34, rotation: -0.05, scaleX: 1, scaleY: 1 },
+    forearmFront: { x: 5, y: 70, rotation: 0.08, scaleX: 1, scaleY: 1 },
+    handFront: { x: 0, y: 68, rotation: 0, scaleX: 1, scaleY: 1 },
+    pelvis: { x: 0, y: 88, rotation: 0, scaleX: 1, scaleY: 1 },
+    thighBack: { x: -27, y: 20, rotation: 0.04, scaleX: 1, scaleY: 1 },
+    shinBack: { x: 0, y: 82, rotation: -0.02, scaleX: 1, scaleY: 1 },
+    footBack: { x: -4, y: 78, rotation: -0.18, scaleX: 1, scaleY: 1 },
+    thighFront: { x: 28, y: 20, rotation: -0.04, scaleX: 1, scaleY: 1 },
+    shinFront: { x: 0, y: 82, rotation: 0.02, scaleX: 1, scaleY: 1 },
+    footFront: { x: 5, y: 78, rotation: 0.12, scaleX: 1, scaleY: 1 }
   },
   parts: {
-    bodyShape: { id: "bodyShape", boneId: "body", type: "procedural", pivot: [0, 0], points: [], preset: "organic-blob" },
-    armShape: { id: "armShape", boneId: "upperArmFront", type: "procedural", pivot: [0, 0], points: [], preset: "tapered-limb" }
+    cloakShape: { id: "cloakShape", boneId: "cloak", type: "svg", pivot: [0, 0], points: [], preset: undefined, assetPath: "/assets/shadow-hero-silhouette/part_05_large_cape.svg", width: 238, anchor: [0.62, 0.1], zIndex: 1 },
+    headShape: { id: "headShape", boneId: "head", type: "svg", pivot: [0, 0], points: [], preset: undefined, assetPath: "/assets/shadow-hero-silhouette/part_01_rear_head_hair.svg", width: 118, anchor: [0.5, 0.72], zIndex: 8 },
+    bodyShape: { id: "bodyShape", boneId: "body", type: "svg", pivot: [0, 0], points: [], preset: undefined, assetPath: "/assets/shadow-hero-silhouette/part_08_back_torso.svg", width: 94, anchor: [0.5, 0.36], zIndex: 5 },
+    pelvisShape: { id: "pelvisShape", boneId: "pelvis", type: "svg", pivot: [0, 0], points: [], preset: undefined, assetPath: "/assets/shadow-hero-silhouette/part_13_pelvis_shorts.svg", width: 88, anchor: [0.5, 0.18], zIndex: 6 },
+    upperArmBackShape: { id: "upperArmBackShape", boneId: "upperArmBack", type: "svg", pivot: [0, 0], points: [], preset: undefined, assetPath: "/assets/shadow-hero-silhouette/part_06_left_upper_arm.svg", width: 43, anchor: [0.5, 0.08], zIndex: 3 },
+    forearmBackShape: { id: "forearmBackShape", boneId: "forearmBack", type: "svg", pivot: [0, 0], points: [], preset: undefined, assetPath: "/assets/shadow-hero-silhouette/part_10_left_forearm.svg", width: 42, anchor: [0.48, 0.08], zIndex: 3 },
+    handBackShape: { id: "handBackShape", boneId: "handBack", type: "svg", pivot: [0, 0], points: [], preset: undefined, assetPath: "/assets/shadow-hero-silhouette/part_14_left_hand.svg", width: 44, anchor: [0.52, 0.12], zIndex: 3 },
+    upperArmFrontShape: { id: "upperArmFrontShape", boneId: "upperArmFront", type: "svg", pivot: [0, 0], points: [], preset: undefined, assetPath: "/assets/shadow-hero-silhouette/part_07_right_upper_arm.svg", width: 42, anchor: [0.5, 0.08], zIndex: 7 },
+    forearmFrontShape: { id: "forearmFrontShape", boneId: "forearmFront", type: "svg", pivot: [0, 0], points: [], preset: undefined, assetPath: "/assets/shadow-hero-silhouette/part_11_right_forearm.svg", width: 42, anchor: [0.5, 0.08], zIndex: 7 },
+    handFrontShape: { id: "handFrontShape", boneId: "handFront", type: "svg", pivot: [0, 0], points: [], preset: undefined, assetPath: "/assets/shadow-hero-silhouette/part_15_right_hand.svg", width: 46, anchor: [0.48, 0.12], zIndex: 7 },
+    thighBackShape: { id: "thighBackShape", boneId: "thighBack", type: "svg", pivot: [0, 0], points: [], preset: undefined, assetPath: "/assets/shadow-hero-silhouette/part_17_left_thigh.svg", width: 54, anchor: [0.5, 0.05], zIndex: 3 },
+    shinBackShape: { id: "shinBackShape", boneId: "shinBack", type: "svg", pivot: [0, 0], points: [], preset: undefined, assetPath: "/assets/shadow-hero-silhouette/part_24_left_lower_leg.svg", width: 44, anchor: [0.5, 0.06], zIndex: 3 },
+    footBackShape: { id: "footBackShape", boneId: "footBack", type: "svg", pivot: [0, 0], points: [], preset: undefined, assetPath: "/assets/shadow-hero-silhouette/part_26_left_boot.svg", width: 70, anchor: [0.52, 0.16], zIndex: 3 },
+    thighFrontShape: { id: "thighFrontShape", boneId: "thighFront", type: "svg", pivot: [0, 0], points: [], preset: undefined, assetPath: "/assets/shadow-hero-silhouette/part_18_right_thigh.svg", width: 52, anchor: [0.5, 0.05], zIndex: 4 },
+    shinFrontShape: { id: "shinFrontShape", boneId: "shinFront", type: "svg", pivot: [0, 0], points: [], preset: undefined, assetPath: "/assets/shadow-hero-silhouette/part_25_right_lower_leg.svg", width: 44, anchor: [0.5, 0.06], zIndex: 4 },
+    footFrontShape: { id: "footFrontShape", boneId: "footFront", type: "svg", pivot: [0, 0], points: [], preset: undefined, assetPath: "/assets/shadow-hero-silhouette/part_27_right_boot.svg", width: 70, anchor: [0.48, 0.16], zIndex: 4 }
   },
   poses: {
     idle_neutral: { id: "idle_neutral", name: "Idle neutral", boneTransforms: {}, tags: ["idle"] },
-    breath_in: { id: "breath_in", name: "Breath in", boneTransforms: { body: { x: 0, y: -37, rotation: 0, scaleX: 1, scaleY: 1.025 } }, tags: ["idle"] },
-    walk_contact: { id: "walk_contact", name: "Walk contact", boneTransforms: { thighFront: { x: 7, y: -4, rotation: 1.25, scaleX: 1, scaleY: 1 } }, tags: ["walk"] },
-    jump_peak: { id: "jump_peak", name: "Jump peak", boneTransforms: { body: { x: 0, y: -44, rotation: -0.04, scaleX: 1, scaleY: 1.04 } }, tags: ["jump"] },
-    land_heavy: { id: "land_heavy", name: "Land heavy", boneTransforms: { body: { x: 0, y: -33, rotation: 0, scaleX: 1.14, scaleY: 0.82 } }, tags: ["land"] }
+    breath_in: { id: "breath_in", name: "Breath in", boneTransforms: { body: { x: 0, y: -250, rotation: 0, scaleX: 1, scaleY: 1.025 } }, tags: ["idle"] },
+    walk_contact: { id: "walk_contact", name: "Walk contact", boneTransforms: { thighFront: { x: 28, y: 20, rotation: -0.28, scaleX: 1, scaleY: 1 } }, tags: ["walk"] },
+    jump_peak: { id: "jump_peak", name: "Jump peak", boneTransforms: { body: { x: 0, y: -286, rotation: -0.04, scaleX: 1, scaleY: 1.08 } }, tags: ["jump"] },
+    land_heavy: { id: "land_heavy", name: "Land heavy", boneTransforms: { body: { x: 0, y: -250, rotation: 0, scaleX: 1.08, scaleY: 0.9 } }, tags: ["land"] }
   },
   animations: {
-    idle: { id: "idle", duration: 1.2, loop: true, tracks: { "body.scaleY": [{ id: "idle-0", time: 0, value: 1, interpolation: "bezier" }] } },
-    walk: { id: "walk", duration: 0.72, loop: true, tracks: { "thighFront.rotation": [{ id: "walk-0", time: 0, value: 1.25, interpolation: "linear" }] } },
-    jump: { id: "jump", duration: 0.3, loop: false, tracks: {} }
+    idle: {
+      id: "idle",
+      duration: 1.2,
+      loop: true,
+      tracks: {
+        "body.scaleY": [{ id: "idle-body-0", time: 0, value: 1, interpolation: "bezier" }, { id: "idle-body-1", time: 0.6, value: 1.025, interpolation: "bezier" }, { id: "idle-body-2", time: 1.2, value: 1, interpolation: "bezier" }],
+        "head.rotation": [{ id: "idle-head-0", time: 0, value: -0.025, interpolation: "linear" }, { id: "idle-head-1", time: 0.6, value: 0.025, interpolation: "linear" }, { id: "idle-head-2", time: 1.2, value: -0.025, interpolation: "linear" }],
+        "cloak.rotation": [{ id: "idle-cloak-0", time: 0, value: -0.05, interpolation: "linear" }, { id: "idle-cloak-1", time: 0.6, value: 0.055, interpolation: "linear" }, { id: "idle-cloak-2", time: 1.2, value: -0.05, interpolation: "linear" }]
+      }
+    },
+    walk: {
+      id: "walk",
+      duration: 0.72,
+      loop: true,
+      tracks: {
+        "body.y": [{ id: "walk-body-0", time: 0, value: -250, interpolation: "linear" }, { id: "walk-body-1", time: 0.36, value: -244, interpolation: "linear" }, { id: "walk-body-2", time: 0.72, value: -250, interpolation: "linear" }],
+        "upperArmFront.rotation": [{ id: "walk-arm-f-0", time: 0, value: -0.24, interpolation: "linear" }, { id: "walk-arm-f-1", time: 0.36, value: 0.22, interpolation: "linear" }, { id: "walk-arm-f-2", time: 0.72, value: -0.24, interpolation: "linear" }],
+        "upperArmBack.rotation": [{ id: "walk-arm-b-0", time: 0, value: 0.25, interpolation: "linear" }, { id: "walk-arm-b-1", time: 0.36, value: -0.22, interpolation: "linear" }, { id: "walk-arm-b-2", time: 0.72, value: 0.25, interpolation: "linear" }],
+        "thighFront.rotation": [{ id: "walk-thigh-f-0", time: 0, value: -0.28, interpolation: "linear" }, { id: "walk-thigh-f-1", time: 0.36, value: 0.22, interpolation: "linear" }, { id: "walk-thigh-f-2", time: 0.72, value: -0.28, interpolation: "linear" }],
+        "thighBack.rotation": [{ id: "walk-thigh-b-0", time: 0, value: 0.22, interpolation: "linear" }, { id: "walk-thigh-b-1", time: 0.36, value: -0.28, interpolation: "linear" }, { id: "walk-thigh-b-2", time: 0.72, value: 0.22, interpolation: "linear" }],
+        "cloak.rotation": [{ id: "walk-cloak-0", time: 0, value: 0.1, interpolation: "linear" }, { id: "walk-cloak-1", time: 0.36, value: -0.06, interpolation: "linear" }, { id: "walk-cloak-2", time: 0.72, value: 0.1, interpolation: "linear" }]
+      }
+    },
+    jump: { id: "jump", duration: 0.46, loop: false, tracks: { "body.y": [{ id: "jump-body-0", time: 0, value: -244, interpolation: "linear" }, { id: "jump-body-1", time: 0.46, value: -286, interpolation: "linear" }], "body.scaleY": [{ id: "jump-scale-0", time: 0, value: 0.9, interpolation: "linear" }, { id: "jump-scale-1", time: 0.46, value: 1.08, interpolation: "linear" }] } },
+    fall: { id: "fall", duration: 0.6, loop: true, tracks: { "body.y": [{ id: "fall-body-0", time: 0, value: -280, interpolation: "linear" }, { id: "fall-body-1", time: 0.6, value: -252, interpolation: "linear" }], "cloak.rotation": [{ id: "fall-cloak-0", time: 0, value: -0.18, interpolation: "linear" }, { id: "fall-cloak-1", time: 0.6, value: -0.04, interpolation: "linear" }] } },
+    land: { id: "land", duration: 0.34, loop: false, tracks: { "body.scaleX": [{ id: "land-x-0", time: 0, value: 1.14, interpolation: "linear" }, { id: "land-x-1", time: 0.34, value: 1, interpolation: "linear" }], "body.scaleY": [{ id: "land-y-0", time: 0, value: 0.82, interpolation: "linear" }, { id: "land-y-1", time: 0.34, value: 1, interpolation: "linear" }] } }
   },
   stateMachine: {
     initialStateId: "idle",
     states: [
       { id: "idle", clipId: "idle" },
       { id: "walk", clipId: "walk" },
-      { id: "jump", clipId: "jump" }
+      { id: "jump", clipId: "jump" },
+      { id: "fall", clipId: "fall" },
+      { id: "land", clipId: "land" }
     ],
     transitions: [{ id: "idle-walk", fromStateId: "idle", toStateId: "walk", duration: 0.18, priority: 0, canInterrupt: true, syncMode: "phaseMatch" }],
     parameters: { absSpeed: 0, velocityY: 0, grounded: true, jumpPressed: false, facing: 1, wallContact: "none", timeInState: 0 }

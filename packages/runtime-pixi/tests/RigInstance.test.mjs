@@ -96,3 +96,28 @@ test("update stores params and reapplies default transforms without animation", 
   assert.equal(instance.parts[0].renderable, graphics);
   assert.equal(instance.parts[0].graphicsContext, context);
 });
+
+test("applySample applies sampled bone and part properties", () => {
+  const instance = new RigInstance(compiledFixture);
+  const body = instance.getBoneContainer(1);
+  const part = instance.getPartContainer(0);
+
+  instance.applySample({
+    localTime: 0.5,
+    normalizedTime: 0.5,
+    values: [
+      { targetKind: "bone", target: 1, property: "transform.x", value: 22 },
+      { targetKind: "bone", target: 1, property: "transform.scaleY", value: 1.25 },
+      { targetKind: "part", target: 0, property: "opacity", value: 0.35 }
+    ]
+  });
+
+  assert.equal(body.position.x, 22);
+  assert.equal(body.position.y, -20);
+  assert.equal(body.scale.y, 1.25);
+  assert.equal(part.alpha, 0.35);
+
+  instance.applySample({ localTime: 0, normalizedTime: 0, values: [] });
+  assert.equal(body.position.x, 12);
+  assert.equal(part.alpha, 0.8);
+});

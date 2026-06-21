@@ -1,7 +1,31 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { CSSProperties } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   createMoveBoneCommand,
   createRotateBoneCommand,
@@ -28,6 +52,7 @@ import {
   type EditorStateContainer
 } from "./editorState";
 import { loadDraft, saveDraft, serializeEditorProject } from "./projectIo";
+import { PixiPreview } from "./PixiPreview";
 
 const modes = ["Rig", "Shape", "Pose", "Timeline", "Curve", "State Machine", "Procedural", "Preview"] as const;
 
@@ -35,10 +60,35 @@ const sampleProject = {
   tracks: ["body.scaleY", "head.y", "thighFront.rotation", "thighBack.rotation", "cloak.x"]
 };
 
-type DepthStyle = CSSProperties & { "--depth": number };
+const previewClips = [
+  { id: 0, name: "Idle" },
+  { id: 1, name: "Walk" },
+  { id: 2, name: "Jump" },
+  { id: 3, name: "Fall" },
+  { id: 4, name: "Land" }
+] as const;
+
+type EditorMode = (typeof modes)[number];
+type ToolbarAction = {
+  label: string;
+  disabled?: boolean;
+  variant?: "default" | "destructive";
+  onClick?: () => void;
+};
+
+function ReadOnlyField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid grid-cols-[72px_minmax(0,1fr)] items-center gap-2">
+      <Label className="truncate text-xs text-muted-foreground">{label}</Label>
+      <Input className="h-7 text-xs" readOnly value={value} />
+    </div>
+  );
+}
 
 export default function EditorPage() {
-  const [mode, setMode] = useState<(typeof modes)[number]>("Rig");
+  const [mode, setMode] = useState<EditorMode>("Rig");
+  const [previewPlaying, setPreviewPlaying] = useState(true);
+  const [previewClipId, setPreviewClipId] = useState(0);
   const [editorState, setEditorState] = useState<EditorStateContainer>({
     project: initialEditorProject,
     history: { past: [], future: [] }
@@ -51,7 +101,63 @@ export default function EditorPage() {
   const activeClip = editorState.project.animations.idle!;
   const activeTrack = activeClip.tracks["body.scaleY"] ?? [];
   const runCommand = (command: Parameters<typeof executeCommand>[1]) => setEditorState((state) => executeCommand(state, command));
-  const inspectorRows = useMemo(
+  const toolbarGroups: { label: string; actions: ToolbarAction[] }[] = [
+    {
+      label: "History",
+      actions: [
+        { label: "Undo", disabled: !editorState.history.past.length, onClick: () => setEditorState(undo) },
+        { label: "Redo", disabled: !editorState.history.future.length, onClick: () => setEditorState(redo) }
+      ]
+    },
+    {
+      label: "Rig",
+      actions: [
+        { label: "Move", onClick: () => runCommand(createMoveBoneCommand(selectedBone, 2, 0)) },
+        { label: "Rotate", onClick: () => runCommand(createRotateBoneCommand(selectedBone, 0.1)) },
+        { label: "Add Bone", onClick: () => runCommand(createAddBoneCommand(selectedBone, `bone${editorState.project.hierarchy.length}`)) },
+        { label: "Rename", onClick: () => runCommand(createRenameBoneCommand(selectedBone, `${selectedBone}Renamed`)) },
+        { label: "Delete", disabled: selectedBone === "root", variant: "destructive", onClick: () => runCommand(createDeleteBoneCommand(selectedBone)) }
+      ]
+    },
+    {
+      label: "Shape",
+      actions: [
+        { label: "Bind", onClick: () => runCommand(createBindProceduralPartCommand(`${selectedBone}Shape`, selectedBone, "tapered-limb")) },
+        { label: "Pen", onClick: () => runCommand(createEditPathPointCommand(selectedPart.id, selectedPart.points.length, [12, 4])) },
+        { label: "Mirror", onClick: () => runCommand(createMirrorPathCommand(selectedPart.id)) },
+        { label: "Pivot", onClick: () => runCommand(createSetPartPivotCommand(selectedPart.id, [4, 0])) }
+      ]
+    },
+    {
+      label: "Animate",
+      actions: [
+        { label: "Apply Pose", onClick: () => runCommand(createApplyPoseCommand(selectedPose.id)) },
+        { label: "Duplicate Pose", onClick: () => runCommand(createDuplicatePoseCommand(selectedPose.id, `${selectedPose.id}_copy`)) },
+        { label: "Mirror Pose", onClick: () => runCommand(createMirrorPoseCommand(selectedPose.id, `${selectedPose.id}_mirror`)) },
+        { label: "Add Key", onClick: () => runCommand(createAddKeyframeCommand("idle", "body.scaleY", { id: `key${activeTrack.length}`, time: 0.6, value: 1.025, interpolation: "bezier" })) },
+        { label: "Move Key", disabled: !activeTrack.length, onClick: () => runCommand(createMoveKeyframeCommand("idle", "body.scaleY", activeTrack[0]?.id ?? "", 0.12)) },
+        { label: "Delete Key", disabled: !activeTrack.length, variant: "destructive", onClick: () => runCommand(createDeleteKeyframeCommand("idle", "body.scaleY", activeTrack[0]?.id ?? "")) },
+        { label: "Curve", disabled: !activeTrack.length, onClick: () => runCommand(createChangeCurveCommand("idle", "body.scaleY", activeTrack[0]?.id ?? "", "bezier", [0.2, 0.8, 0.2, 1])) },
+        { label: "Transition", onClick: () => runCommand(createTransitionCommand({ id: "walk-jump", fromStateId: "walk", toStateId: "jump", duration: 0.12, priority: 10, canInterrupt: true, syncMode: "none" })) }
+      ]
+    },
+    {
+      label: "Procedural",
+      actions: [
+        { label: "Breathing", onClick: () => runCommand(createUpdateProceduralCommand({ breathing: { enabled: true, frequency: 1, amplitude: 1.2, affectedBones: ["body", "head", "cloak"] } })) },
+        { label: "Foot IK", onClick: () => runCommand(createUpdateProceduralCommand({ footIk: { enabled: true, feet: ["footFront", "footBack"], maxCorrection: 8, blend: 0.75 } })) }
+      ]
+    },
+    {
+      label: "Project",
+      actions: [
+        { label: "Save", onClick: () => saveDraft(editorState.project) },
+        { label: "Load", onClick: () => setEditorState((state) => ({ ...state, project: loadDraft() ?? state.project })) },
+        { label: "Copy JSON", onClick: () => navigator.clipboard?.writeText(serializeEditorProject(editorState.project)) }
+      ]
+    }
+  ];
+  const inspectorRows = useMemo<Array<[string, string]>>(
     () => [
       ["Mode", mode],
       ["Selection", selectedBone],
@@ -66,216 +172,253 @@ export default function EditorPage() {
   );
 
   return (
-    <main className="editorShell" aria-label="Bones editor shell">
-      <header className="topBar">
-        <div className="brand">
-          <strong>Bones</strong>
-          <span>{editorState.project.name}</span>
+    <main className="grid h-dvh w-screen min-w-0 grid-rows-[84px_minmax(0,1fr)_118px] overflow-hidden bg-background text-foreground" aria-label="Bones editor shell">
+      <header className="relative z-10 grid min-w-0 grid-rows-[44px_40px] border-b bg-card px-2.5">
+        <div className="grid min-w-0 grid-cols-[142px_minmax(0,1fr)_max-content] items-center gap-2.5">
+          <div className="grid min-w-0 gap-0.5">
+            <strong className="truncate text-sm">Bones</strong>
+            <span className="truncate text-xs text-muted-foreground">{editorState.project.name}</span>
+          </div>
+          <ToggleGroup
+            className="min-w-0 overflow-hidden"
+            type="single"
+            value={mode}
+            variant="outline"
+            size="sm"
+            spacing={1}
+            aria-label="Editor modes"
+            onValueChange={(nextMode) => {
+              if (nextMode) {
+                setMode(nextMode as EditorMode);
+              }
+            }}
+          >
+            {modes.map((item) => (
+              <ToggleGroupItem className="shrink min-w-0 px-2 text-xs" key={item} value={item} aria-label={item}>
+                <span className="truncate">{item}</span>
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+          <div className="flex items-center justify-end gap-1.5">
+            <Button size="sm" variant={previewPlaying ? "default" : "outline"} type="button" onClick={() => setPreviewPlaying(true)}>
+              Play
+            </Button>
+            <Button size="sm" variant={!previewPlaying ? "default" : "outline"} type="button" onClick={() => setPreviewPlaying(false)}>
+              Pause
+            </Button>
+            <Select value={String(previewClipId)} onValueChange={(value) => setPreviewClipId(Number(value))}>
+              <SelectTrigger className="w-28" size="sm" aria-label="Preview animation clip">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {previewClips.map((clip) => (
+                    <SelectItem key={clip.id} value={String(clip.id)}>
+                      {clip.name}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <Select defaultValue="60">
+              <SelectTrigger className="w-24" size="sm" aria-label="Timeline FPS">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="30">30 FPS</SelectItem>
+                  <SelectItem value="60">60 FPS</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <Button size="sm" variant="outline" type="button">
+              Export
+            </Button>
+          </div>
         </div>
-        <nav className="modeTabs" aria-label="Editor modes">
-          {modes.map((item) => (
-            <button key={item} className={item === mode ? "active" : ""} type="button" onClick={() => setMode(item)}>
-              {item}
-            </button>
+        <div className="flex min-w-0 items-center gap-2 overflow-visible">
+          {toolbarGroups.map((group) => (
+            <DropdownMenu key={group.label}>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" type="button">
+                  {group.label}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="min-w-40">
+                <DropdownMenuLabel>{group.label}</DropdownMenuLabel>
+                <DropdownMenuGroup>
+                  {group.actions.map((action) => (
+                    <DropdownMenuItem
+                      disabled={action.disabled ?? false}
+                      key={action.label}
+                      variant={action.variant ?? "default"}
+                      onSelect={(event) => {
+                        event.preventDefault();
+                        action.onClick?.();
+                      }}
+                    >
+                      {action.label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
           ))}
-        </nav>
-        <div className="toolbarActions" aria-label="Playback tools">
-          <button type="button" disabled={!editorState.history.past.length} onClick={() => setEditorState(undo)}>
-            Undo
-          </button>
-          <button type="button" disabled={!editorState.history.future.length} onClick={() => setEditorState(redo)}>
-            Redo
-          </button>
-          <button type="button" onClick={() => runCommand(createMoveBoneCommand(selectedBone, 2, 0))}>
-            Move
-          </button>
-          <button type="button" onClick={() => runCommand(createRotateBoneCommand(selectedBone, 0.1))}>
-            Rotate
-          </button>
-          <button type="button" onClick={() => runCommand(createAddBoneCommand(selectedBone, `bone${editorState.project.hierarchy.length}`))}>
-            Add Bone
-          </button>
-          <button type="button" onClick={() => runCommand(createRenameBoneCommand(selectedBone, `${selectedBone}Renamed`))}>
-            Rename
-          </button>
-          <button type="button" disabled={selectedBone === "root"} onClick={() => runCommand(createDeleteBoneCommand(selectedBone))}>
-            Delete
-          </button>
-          <button type="button" onClick={() => runCommand(createBindProceduralPartCommand(`${selectedBone}Shape`, selectedBone, "tapered-limb"))}>
-            Bind Shape
-          </button>
-          <button type="button" onClick={() => runCommand(createEditPathPointCommand(selectedPart.id, selectedPart.points.length, [12, 4]))}>
-            Pen
-          </button>
-          <button type="button" onClick={() => runCommand(createMirrorPathCommand(selectedPart.id))}>
-            Mirror
-          </button>
-          <button type="button" onClick={() => runCommand(createSetPartPivotCommand(selectedPart.id, [4, 0]))}>
-            Pivot
-          </button>
-          <button type="button" onClick={() => runCommand(createApplyPoseCommand(selectedPose.id))}>
-            Apply Pose
-          </button>
-          <button type="button" onClick={() => runCommand(createDuplicatePoseCommand(selectedPose.id, `${selectedPose.id}_copy`))}>
-            Duplicate Pose
-          </button>
-          <button type="button" onClick={() => runCommand(createMirrorPoseCommand(selectedPose.id, `${selectedPose.id}_mirror`))}>
-            Mirror Pose
-          </button>
-          <button type="button" onClick={() => runCommand(createAddKeyframeCommand("idle", "body.scaleY", { id: `key${activeTrack.length}`, time: 0.6, value: 1.025, interpolation: "bezier" }))}>
-            Add Key
-          </button>
-          <button type="button" disabled={!activeTrack.length} onClick={() => runCommand(createMoveKeyframeCommand("idle", "body.scaleY", activeTrack[0]?.id ?? "", 0.12))}>
-            Move Key
-          </button>
-          <button type="button" disabled={!activeTrack.length} onClick={() => runCommand(createDeleteKeyframeCommand("idle", "body.scaleY", activeTrack[0]?.id ?? ""))}>
-            Delete Key
-          </button>
-          <button type="button" disabled={!activeTrack.length} onClick={() => runCommand(createChangeCurveCommand("idle", "body.scaleY", activeTrack[0]?.id ?? "", "bezier", [0.2, 0.8, 0.2, 1]))}>
-            Ease
-          </button>
-          <button type="button" onClick={() => runCommand(createTransitionCommand({ id: "walk-jump", fromStateId: "walk", toStateId: "jump", duration: 0.12, priority: 10, canInterrupt: true, syncMode: "none" }))}>
-            Transition
-          </button>
-          <button type="button" onClick={() => runCommand(createUpdateProceduralCommand({ breathing: { enabled: true, frequency: 1, amplitude: 1.2, affectedBones: ["body", "head", "cloak"] } }))}>
-            Breathing
-          </button>
-          <button type="button" onClick={() => runCommand(createUpdateProceduralCommand({ footIk: { enabled: true, feet: ["footFront", "footBack"], maxCorrection: 8, blend: 0.75 } }))}>
-            Foot IK
-          </button>
-          <button type="button" onClick={() => saveDraft(editorState.project)}>
-            Save
-          </button>
-          <button type="button" onClick={() => setEditorState((state) => ({ ...state, project: loadDraft() ?? state.project }))}>
-            Load
-          </button>
-          <button type="button" onClick={() => navigator.clipboard?.writeText(serializeEditorProject(editorState.project))}>
-            Copy JSON
-          </button>
-          <button type="button">Play</button>
-          <button type="button">Pause</button>
-          <button type="button">Record</button>
-          <button type="button">Auto Key</button>
-          <button type="button">Snap</button>
-          <select aria-label="Timeline FPS" defaultValue="60">
-            <option value="30">30 FPS</option>
-            <option value="60">60 FPS</option>
-          </select>
-          <button type="button">Export</button>
         </div>
       </header>
-      <section className="workspace" aria-label="Editor workspace">
-        <aside className="panel hierarchyPanel">
-          <header>Hierarchy</header>
-          <ol>
-            {editorState.project.hierarchy.map((item, index) => (
-              <li
-                key={item}
-                className={item === selectedBone ? "selected" : ""}
-                onClick={() => setEditorState((state) => ({ ...state, project: { ...state.project, selectedBoneId: item } }))}
-                style={{ "--depth": item === "root" ? 0 : index > 2 ? 2 : 1 } as DepthStyle}
-              >
-                {item}
-              </li>
-            ))}
-          </ol>
-        </aside>
-        <section className="canvasPanel" aria-label="Canvas and Pixi preview">
-          <div className="canvasToolbar">
-            <span>{mode}</span>
-            <span>100%</span>
-            <span>Light</span>
-          </div>
-          <div className="canvas" aria-label="PixiJS canvas viewport">
-            <canvas aria-label="PixiJS preview canvas" />
-            <div className="rigPreview" aria-hidden="true">
-              <span className="bone rootBone" />
-              <span className="bone bodyBone" />
-              <span className="bone headBone" />
-              <span className="bone armBone front" />
-              <span className="bone armBone back" />
-              <span className="bone legBone front" />
-              <span className="bone legBone back" />
-              <span className="shape bodyShape" />
-              <span className="shape headShape" />
-              <span className="shape cloakShape" />
+
+      <section className="grid min-h-0 min-w-0 grid-cols-[220px_minmax(360px,1fr)_320px]" aria-label="Editor workspace">
+        <Card className="min-h-0 rounded-none border-0 border-r py-3 ring-0">
+          <CardHeader className="px-3">
+            <CardTitle className="text-sm">Hierarchy</CardTitle>
+          </CardHeader>
+          <CardContent className="min-h-0 px-2">
+            <ScrollArea className="h-full">
+              <ol className="flex flex-col gap-1">
+                {editorState.project.hierarchy.map((item, index) => {
+                  const depth = item === "root" ? 0 : index > 2 ? 2 : 1;
+
+                  return (
+                    <li key={item}>
+                      <Button
+                        className="h-7 w-full justify-start text-xs"
+                        style={{ paddingLeft: `${8 + depth * 12}px` }}
+                        type="button"
+                        variant={item === selectedBone ? "secondary" : "ghost"}
+                        onClick={() => setEditorState((state) => ({ ...state, project: { ...state.project, selectedBoneId: item } }))}
+                      >
+                        <span className="truncate">{item}</span>
+                      </Button>
+                    </li>
+                  );
+                })}
+              </ol>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+
+        <Card className="min-h-0 min-w-0 rounded-none border-0 py-0 ring-0">
+          <CardHeader className="flex h-[30px] flex-row items-center justify-between border-b px-3 py-0">
+            <Badge variant="secondary">{mode}</Badge>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>{previewClips.find((clip) => clip.id === previewClipId)?.name}</span>
+              <Separator className="h-4" orientation="vertical" />
+              <span>{previewPlaying ? "Playing" : "Paused"}</span>
             </div>
+          </CardHeader>
+          <CardContent className="relative min-h-0 flex-1 overflow-hidden bg-[linear-gradient(var(--border)_1px,transparent_1px),linear-gradient(90deg,var(--border)_1px,transparent_1px)] bg-[size:24px_24px] p-0" aria-label="PixiJS canvas viewport">
+            <PixiPreview clipId={previewClipId} playing={previewPlaying} project={editorState.project} showSkeleton={mode !== "Preview"} />
+          </CardContent>
+        </Card>
+
+        <aside className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] border-l bg-card p-2.5">
+          <div className="flex items-center justify-between px-1">
+            <h2 className="text-sm font-medium">Inspector</h2>
+            <Badge variant={editorState.project.dirty ? "destructive" : "outline"}>{editorState.project.dirty ? "Dirty" : "Clean"}</Badge>
           </div>
-        </section>
-        <aside className="panel inspectorPanel">
-          <header>Inspector</header>
-          <section>
-            <h2>Transform</h2>
-            {inspectorRows.map(([label, value]) => (
-              <label key={label}>
-                <span>{label}</span>
-                <input readOnly value={value} />
-              </label>
-            ))}
-          </section>
-          <section>
-            <h2>Shape</h2>
-            <p>{selectedPart.id}</p>
-            <label>
-              <span>Type</span>
-              <input readOnly value={selectedPart.type} />
-            </label>
-            <label>
-              <span>Pivot</span>
-              <input readOnly value={selectedPart.pivot.join(", ")} />
-            </label>
-            <label>
-              <span>Points</span>
-              <input readOnly value={String(selectedPart.points.length)} />
-            </label>
-          </section>
-          <section>
-            <h2>Constraints</h2>
-            <p>Foot IK placeholder</p>
-          </section>
-          <section>
-            <h2>Pose Library</h2>
-            <p>{poseIds.map((poseId) => editorState.project.poses[poseId]?.name).join(", ")}</p>
-          </section>
-          <section>
-            <h2>Curve</h2>
-            <p>{activeTrack.map((key) => `${key.id}: ${key.interpolation}`).join(", ")}</p>
-          </section>
-          <section>
-            <h2>State Machine</h2>
-            <p>{editorState.project.stateMachine.transitions.map((transition) => `${transition.fromStateId}->${transition.toStateId}`).join(", ")}</p>
-            <p>{Object.keys(editorState.project.stateMachine.parameters).join(", ")}</p>
-          </section>
-          <section>
-            <h2>Procedural</h2>
-            <p>Breathing {editorState.project.procedural.breathing.frequency} Hz</p>
-            <p>Cloak stiffness {editorState.project.procedural.secondaryMotion.stiffness}</p>
-            <p>Foot IK {editorState.project.procedural.footIk.enabled ? "on" : "off"}</p>
-          </section>
-          <section>
-            <h2>Profiler</h2>
-            <p>Preview quality: medium</p>
-            <p>Update 0.4ms / Render 1.2ms</p>
-          </section>
+          <ScrollArea className="mt-2 min-h-0">
+            <div className="grid grid-cols-2 gap-2 pr-2 max-[1180px]:grid-cols-1">
+              <Card size="sm">
+                <CardHeader>
+                  <CardTitle>Transform</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-2">
+                  {inspectorRows.map(([label, value]) => (
+                    <ReadOnlyField key={label} label={label} value={value} />
+                  ))}
+                </CardContent>
+              </Card>
+              <Card size="sm">
+                <CardHeader>
+                  <CardTitle>Shape</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-2">
+                  <p className="truncate text-xs text-muted-foreground">{selectedPart.id}</p>
+                  <ReadOnlyField label="Type" value={selectedPart.type} />
+                  <ReadOnlyField label="Asset" value={selectedPart.assetPath?.split("/").pop() ?? "none"} />
+                  <ReadOnlyField label="Pivot" value={selectedPart.pivot.join(", ")} />
+                  <ReadOnlyField label="Points" value={String(selectedPart.points.length)} />
+                </CardContent>
+              </Card>
+              <Card size="sm">
+                <CardHeader>
+                  <CardTitle>Constraints</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-xs text-muted-foreground">Foot IK placeholder</p>
+                </CardContent>
+              </Card>
+              <Card size="sm">
+                <CardHeader>
+                  <CardTitle>Pose Library</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="line-clamp-2 text-xs text-muted-foreground">{poseIds.map((poseId) => editorState.project.poses[poseId]?.name).join(", ")}</p>
+                </CardContent>
+              </Card>
+              <Card size="sm">
+                <CardHeader>
+                  <CardTitle>Curve</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="line-clamp-2 text-xs text-muted-foreground">{activeTrack.map((key) => `${key.id}: ${key.interpolation}`).join(", ")}</p>
+                </CardContent>
+              </Card>
+              <Card size="sm">
+                <CardHeader>
+                  <CardTitle>State Machine</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-1">
+                  <p className="line-clamp-2 text-xs text-muted-foreground">{editorState.project.stateMachine.transitions.map((transition) => `${transition.fromStateId}->${transition.toStateId}`).join(", ")}</p>
+                  <p className="line-clamp-2 text-xs text-muted-foreground">{Object.keys(editorState.project.stateMachine.parameters).join(", ")}</p>
+                </CardContent>
+              </Card>
+              <Card size="sm">
+                <CardHeader>
+                  <CardTitle>Procedural</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-1">
+                  <p className="text-xs text-muted-foreground">Breathing {editorState.project.procedural.breathing.frequency} Hz</p>
+                  <p className="text-xs text-muted-foreground">Cloak stiffness {editorState.project.procedural.secondaryMotion.stiffness}</p>
+                  <p className="text-xs text-muted-foreground">Foot IK {editorState.project.procedural.footIk.enabled ? "on" : "off"}</p>
+                </CardContent>
+              </Card>
+              <Card size="sm">
+                <CardHeader>
+                  <CardTitle>Profiler</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-1">
+                  <p className="text-xs text-muted-foreground">Preview quality: medium</p>
+                  <p className="text-xs text-muted-foreground">Update 0.4ms / Render 1.2ms</p>
+                </CardContent>
+              </Card>
+            </div>
+          </ScrollArea>
         </aside>
       </section>
-      <footer className="timeline" aria-label="Timeline and dopesheet">
-        <header>
-          <strong>Timeline</strong>
-          <span>00:00 / 01:12</span>
-        </header>
-        <div className="tracks">
+
+      <Card className="min-w-0 rounded-none border-0 border-t py-2 ring-0" aria-label="Timeline and dopesheet">
+        <CardHeader className="flex flex-row items-center justify-between px-2.5 py-0">
+          <CardTitle className="text-sm">Timeline</CardTitle>
+          <Badge variant="outline">00:00 / 01:12</Badge>
+        </CardHeader>
+        <CardContent className="mt-1 grid gap-1 px-2.5">
           {sampleProject.tracks.map((track, index) => (
-            <div className="track" key={track}>
-              <span>{track}</span>
+            <div className="relative grid min-h-[17px] grid-cols-[140px_1fr] items-center rounded-md bg-muted" key={track}>
+              <span className="truncate pl-2 text-xs text-muted-foreground">{track}</span>
               {(activeClip.tracks[track] ?? []).map((keyframe) => (
-                <i key={keyframe.id} style={{ left: `${(keyframe.time / activeClip.duration) * 100}%` }} />
+                <Tooltip key={keyframe.id}>
+                  <TooltipTrigger asChild>
+                    <span className="absolute top-[5px] size-[7px] rounded-full bg-primary" style={{ left: `${(keyframe.time / activeClip.duration) * 100}%` }} />
+                  </TooltipTrigger>
+                  <TooltipContent>{keyframe.id}</TooltipContent>
+                </Tooltip>
               ))}
-              <i style={{ left: `${52 + index * 5}%` }} />
+              <span className="absolute top-[5px] size-[7px] rounded-full bg-primary" style={{ left: `${52 + index * 5}%` }} />
             </div>
           ))}
-        </div>
-      </footer>
+        </CardContent>
+      </Card>
     </main>
   );
 }

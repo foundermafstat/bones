@@ -12,6 +12,7 @@
     "build": "pnpm -r --if-present build",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "pnpm -r --if-present lint",
+    "dev": "pnpm --filter @bones/runtime-pixi build && pnpm dev:editor",
     "dev:editor": "pnpm --filter @bones/editor dev"
   },
   "devDependencies": {

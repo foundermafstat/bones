@@ -1,5 +1,7 @@
 import { Container } from "pixi.js";
 import type {
+  AnimationSample,
+  AnimationSampleTrackValue,
   AnimationParameters,
   BoneRuntime,
   PackedTransform2D,
@@ -87,6 +89,24 @@ export class RigInstance {
     return this.parts.find((part) => part.id === id)?.container;
   }
 
+  applySample(sample: AnimationSample): void {
+    this.applyDefaultTransforms();
+
+    for (const value of sample.values) {
+      if (value.targetKind === "bone") {
+        const bone = this.bones.find((item) => item.id === value.target);
+        if (bone) {
+          applySampleValue(bone.container, value);
+        }
+      } else if (value.targetKind === "part") {
+        const part = this.parts.find((item) => item.id === value.target);
+        if (part) {
+          applySampleValue(part.container, value);
+        }
+      }
+    }
+  }
+
   private buildHierarchy(): void {
     for (const bone of this.bones) {
       if (bone.parent < 0) {
@@ -138,4 +158,38 @@ function applyTransform(container: Container, transform: PackedTransform2D): voi
   container.rotation = transform[2];
   container.scale.set(transform[3], transform[4]);
   container.skew.set(transform[5], transform[6]);
+}
+
+function applySampleValue(container: Container, sample: AnimationSampleTrackValue): void {
+  const value = sample.value;
+  if (sample.property === "visible" && typeof value === "boolean") {
+    container.visible = value;
+    return;
+  }
+  if (sample.property === "opacity" && typeof value === "number") {
+    container.alpha = value;
+    return;
+  }
+  if (sample.property === "drawOrder" && typeof value === "number") {
+    container.zIndex = value;
+    return;
+  }
+  if (typeof value !== "number") {
+    return;
+  }
+  if (sample.property === "transform.x") {
+    container.position.x = value;
+  } else if (sample.property === "transform.y") {
+    container.position.y = value;
+  } else if (sample.property === "transform.rotation") {
+    container.rotation = value;
+  } else if (sample.property === "transform.scaleX") {
+    container.scale.x = value;
+  } else if (sample.property === "transform.scaleY") {
+    container.scale.y = value;
+  } else if (sample.property === "transform.skewX") {
+    container.skew.x = value;
+  } else if (sample.property === "transform.skewY") {
+    container.skew.y = value;
+  }
 }
