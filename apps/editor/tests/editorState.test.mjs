@@ -3,9 +3,12 @@ import test from "node:test";
 
 import {
   createAddBoneCommand,
+  createApplyPoseCommand,
+  createCopyPoseCommand,
   createEditPathPointCommand,
   createGroupedCommand,
   createMoveBoneCommand,
+  createPastePoseCommand,
   createRenameBoneCommand,
   createRotateBoneCommand,
   createSetParentCommand,
@@ -113,4 +116,51 @@ test("rename bone keeps metadata and bound parts connected", () => {
   assert.ok(undone.project.bones.body);
   assert.equal(undone.project.parts.bodyShape.boneId, "body");
   assert.equal(undone.project.parents.head, "body");
+});
+
+test("rename bone updates pose transform keys", () => {
+  const project = structuredClone(initialEditorProject);
+  project.poses.test_pose = {
+    id: "test_pose",
+    name: "Test Pose",
+    boneTransforms: { body: { ...project.bones.body, y: -260 } },
+    tags: ["test"]
+  };
+  const container = executeCommand(freshContainer(project), createRenameBoneCommand("body", "torso"));
+
+  assert.equal(container.project.poses.test_pose.boneTransforms.body, undefined);
+  assert.ok(container.project.poses.test_pose.boneTransforms.torso);
+});
+
+test("pose apply restores bone transforms, deforms, and part properties", () => {
+  const project = structuredClone(initialEditorProject);
+  project.poses.test_pose = {
+    id: "test_pose",
+    name: "Test Pose",
+    boneTransforms: { body: { ...project.bones.body, y: -270 } },
+    deforms: { bodyShape: [[0, 0], [4, 0], [4, 8]] },
+    partProperties: { bodyShape: { drawOrder: 12 } },
+    tags: ["test"]
+  };
+  const container = executeCommand(freshContainer(project), createApplyPoseCommand("test_pose"));
+
+  assert.equal(container.project.bones.body.y, -270);
+  assert.deepEqual(container.project.parts.bodyShape.points, [[0, 0], [4, 0], [4, 8]]);
+  assert.equal(container.project.parts.bodyShape.zIndex, 12);
+
+  const undone = undo(container);
+  assert.deepEqual(undone.project.bones.body, project.bones.body);
+  assert.deepEqual(undone.project.parts.bodyShape, project.parts.bodyShape);
+});
+
+test("copy and paste pose create an undoable pose copy", () => {
+  const copied = executeCommand(freshContainer(), createCopyPoseCommand("jump_peak"));
+  assert.equal(copied.project.poseClipboard?.id, "jump_peak");
+
+  const pasted = executeCommand(copied, createPastePoseCommand("jump_peak_pasted"));
+  assert.equal(pasted.project.poses.jump_peak_pasted.name, "Jump peak Pasted");
+
+  const undone = undo(pasted);
+  assert.equal(undone.project.poses.jump_peak_pasted, undefined);
+  assert.equal(undone.project.poseClipboard?.id, "jump_peak");
 });

@@ -9,6 +9,7 @@ import {
   type EditorMetadata,
   type PartDefinition,
   type PathCommand,
+  type PoseDefinition as SourcePoseDefinition,
   type RigProject,
   type Transform2D
 } from "@bones/schema";
@@ -21,6 +22,7 @@ import type {
   EditorProjectState,
   EditorTransition,
   Keyframe,
+  PoseDefinition,
   ProceduralPresetState,
   ShapePart
 } from "./editorState";
@@ -60,13 +62,7 @@ export function toSourceProject(project: EditorProjectState): RigProject {
       }
     ],
     animations: Object.values(project.animations).map(toSourceAnimationClip),
-    poses: Object.values(project.poses).map((pose) => ({
-      id: pose.id,
-      name: pose.name,
-      rigId,
-      boneTransforms: pose.boneTransforms,
-      editor: { tags: pose.tags }
-    })),
+    poses: Object.values(project.poses).map((pose) => toSourcePose(pose, rigId)),
     stateMachines: [
       {
         id: stateMachineId,
@@ -128,17 +124,7 @@ export function fromSourceProject(sourceInput: unknown): EditorProjectState {
     bones,
     boneMetadata,
     parts,
-    poses: Object.fromEntries(
-      (source.poses ?? []).map((pose) => [
-        pose.id,
-        {
-          id: pose.id,
-          name: pose.name,
-          boneTransforms: pose.boneTransforms,
-          tags: pose.editor?.tags ?? []
-        }
-      ])
-    ),
+    poses: Object.fromEntries((source.poses ?? []).map((pose) => [pose.id, fromSourcePose(pose)])),
     animations: Object.fromEntries((source.animations ?? []).map((clip) => [clip.id, fromSourceAnimationClip(clip)])),
     stateMachine: machine
       ? {
@@ -239,6 +225,34 @@ function fromSourcePart(part: PartDefinition): ShapePart {
     ...(anchor ? { anchor } : {}),
     ...(offset ? { offset } : {}),
     zIndex: part.drawOrder ?? 0
+  };
+}
+
+function toSourcePose(pose: PoseDefinition, rigId: string): SourcePoseDefinition {
+  return {
+    id: pose.id,
+    name: pose.name,
+    rigId,
+    boneTransforms: pose.boneTransforms,
+    ...(pose.partProperties ? { partProperties: pose.partProperties } : {}),
+    editor: {
+      tags: pose.tags,
+      custom: {
+        ...(pose.deforms ? { deforms: poseDeformsToJson(pose.deforms) } : {})
+      }
+    }
+  };
+}
+
+function fromSourcePose(pose: SourcePoseDefinition): PoseDefinition {
+  const deforms = readPoseDeforms(pose.editor?.custom?.deforms);
+  return {
+    id: pose.id,
+    name: pose.name,
+    boneTransforms: pose.boneTransforms,
+    ...(deforms ? { deforms } : {}),
+    ...(pose.partProperties ? { partProperties: pose.partProperties } : {}),
+    tags: pose.editor?.tags ?? []
   };
 }
 
@@ -439,6 +453,10 @@ function autosaveToJson(autosave: AutosaveState) {
   };
 }
 
+function poseDeformsToJson(deforms: Readonly<Record<string, readonly (readonly [number, number])[]>>) {
+  return Object.fromEntries(Object.entries(deforms).map(([partId, points]) => [partId, points.map((point) => [point[0], point[1]])]));
+}
+
 function readProcedural(value: unknown): ProceduralPresetState {
   if (!isRecord(value)) {
     return initialEditorProject.procedural;
@@ -491,6 +509,13 @@ function readPointList(value: unknown): readonly (readonly [number, number])[] |
   }
   const points = value.map(readNumberPair);
   return points.every(Boolean) ? (points as readonly (readonly [number, number])[]) : undefined;
+}
+
+function readPoseDeforms(value: unknown): Readonly<Record<string, readonly (readonly [number, number])[]>> | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  return Object.fromEntries(Object.entries(value).map(([partId, points]) => [partId, readPointList(points) ?? []]));
 }
 
 function readPathCommands(value: unknown): readonly PathCommand[] | undefined {

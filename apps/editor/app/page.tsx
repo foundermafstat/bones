@@ -42,8 +42,13 @@ import {
   createSetPartPathCommand,
   createSetPartPivotCommand,
   createApplyPoseCommand,
+  createCopyPoseCommand,
   createDuplicatePoseCommand,
   createMirrorPoseCommand,
+  createPastePoseCommand,
+  createPoseFromCurrentCommand,
+  createRenamePoseCommand,
+  createUpdatePoseTagsCommand,
   createAddKeyframeCommand,
   createDeleteKeyframeCommand,
   createMoveKeyframeCommand,
@@ -100,6 +105,7 @@ export default function EditorPage() {
   const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
   const [dragPoint, setDragPoint] = useState<{ readonly index: number; readonly point: readonly [number, number] } | null>(null);
   const [dragBone, setDragBone] = useState<{ readonly boneId: string; readonly point: readonly [number, number] } | null>(null);
+  const [selectedPoseId, setSelectedPoseId] = useState("idle_neutral");
   const [editorState, setEditorState] = useState<EditorStateContainer>({
     project: initialEditorProject,
     history: { past: [], future: [] }
@@ -116,7 +122,8 @@ export default function EditorPage() {
     : selectedPart.points;
   const shapeViewBox = useMemo(() => getShapeViewBox(shapePoints), [shapePoints]);
   const poseIds = Object.keys(editorState.project.poses);
-  const selectedPose = editorState.project.poses[poseIds[0]!]!;
+  const selectedPose = editorState.project.poses[selectedPoseId] ?? editorState.project.poses[poseIds[0]!]!;
+  const selectedPoseTagText = selectedPose.tags.join(", ");
   const activeClip = editorState.project.animations.idle!;
   const activeTrack = activeClip.tracks["body.scaleY"] ?? [];
   const runCommand = (command: Parameters<typeof executeCommand>[1]) => setEditorState((state) => executeCommand(state, command));
@@ -540,8 +547,48 @@ export default function EditorPage() {
                 <CardHeader>
                   <CardTitle>Pose Library</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <p className="line-clamp-2 text-xs text-muted-foreground">{poseIds.map((poseId) => editorState.project.poses[poseId]?.name).join(", ")}</p>
+                <CardContent className="grid gap-2">
+                  <Select value={selectedPose.id} onValueChange={setSelectedPoseId}>
+                    <SelectTrigger className="h-7 w-full" aria-label="Selected pose">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {poseIds.map((poseId) => (
+                          <SelectItem key={poseId} value={poseId}>
+                            {editorState.project.poses[poseId]?.name ?? poseId}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                  <p className="line-clamp-2 text-xs text-muted-foreground">{selectedPoseTagText || "untagged"}</p>
+                  <div className="grid grid-cols-2 gap-1">
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createApplyPoseCommand(selectedPose.id))}>
+                      Apply
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createPoseFromCurrentCommand(`pose_${poseIds.length + 1}`, `Pose ${poseIds.length + 1}`, ["custom"]))}>
+                      Capture
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createRenamePoseCommand(selectedPose.id, `${selectedPose.name}*`))}>
+                      Rename
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createDuplicatePoseCommand(selectedPose.id, `${selectedPose.id}_copy`))}>
+                      Duplicate
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createMirrorPoseCommand(selectedPose.id, `${selectedPose.id}_mirror`))}>
+                      Mirror
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createCopyPoseCommand(selectedPose.id))}>
+                      Copy
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" disabled={!editorState.project.poseClipboard} onClick={() => runCommand(createPastePoseCommand(`pose_paste_${poseIds.length + 1}`))}>
+                      Paste
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createUpdatePoseTagsCommand(selectedPose.id, Array.from(new Set([...selectedPose.tags, "reviewed"]))))}>
+                      Tag
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
               <Card size="sm">

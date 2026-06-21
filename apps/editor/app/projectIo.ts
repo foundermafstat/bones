@@ -46,6 +46,7 @@ function normalizeEditorProject(project: EditorProjectState): EditorProjectState
   return {
     ...initialEditorProject,
     ...project,
+    poseClipboard: project.poseClipboard ?? null,
     dirtyScopes: project.dirtyScopes ?? initialEditorProject.dirtyScopes,
     autosave: project.autosave ?? initialEditorProject.autosave
   };
