@@ -85,7 +85,12 @@ export interface Keyframe {
   readonly value: number;
   readonly interpolation: "linear" | "step" | "hold" | "bezier" | "spring";
   readonly curve?: readonly [number, number, number, number];
+  readonly curvePreset?: CurvePreset;
+  readonly tangentIn?: number;
+  readonly tangentOut?: number;
 }
+
+export type CurvePreset = "linear" | "easeIn" | "easeOut" | "easeInOut" | "cubicBezier" | "stepped" | "spring" | "overshoot" | "anticipation" | "custom";
 
 export interface TimelineEvent {
   readonly id: string;
@@ -113,6 +118,7 @@ export interface TimelineState {
   readonly autoKey: boolean;
   readonly snappingFps: number;
   readonly virtualWindow: { readonly startRow: number; readonly rowCount: number };
+  readonly curvePreview: { readonly fromClipId: string; readonly toClipId: string; readonly weight: number };
 }
 
 export interface EditorStateMachine {
@@ -314,7 +320,7 @@ export const initialEditorProject: EditorProjectState = {
     fall: { id: "fall", name: "Fall", duration: 0.6, frameRate: 60, loop: true, events: [], markers: [{ id: "fall-loop", time: 0.6, label: "Loop", color: "#4f8cff" }], tags: ["fall"], tracks: { "body.y": [{ id: "fall-body-0", time: 0, value: -280, interpolation: "linear" }, { id: "fall-body-1", time: 0.6, value: -252, interpolation: "linear" }], "cloak.rotation": [{ id: "fall-cloak-0", time: 0, value: -0.18, interpolation: "linear" }, { id: "fall-cloak-1", time: 0.6, value: -0.04, interpolation: "linear" }] } },
     land: { id: "land", name: "Land", duration: 0.34, frameRate: 60, loop: false, events: [{ id: "land-impact", time: 0, type: "land", payload: { strength: 1 } }], markers: [{ id: "land-recover", time: 0.34, label: "Recover", color: "#22c55e" }], tags: ["land"], tracks: { "body.scaleX": [{ id: "land-x-0", time: 0, value: 1.14, interpolation: "linear" }, { id: "land-x-1", time: 0.34, value: 1, interpolation: "linear" }], "body.scaleY": [{ id: "land-y-0", time: 0, value: 0.82, interpolation: "linear" }, { id: "land-y-1", time: 0.34, value: 1, interpolation: "linear" }] } }
   },
-  timeline: { selectedClipId: "idle", selectedKeyIds: [], keyClipboard: [], autoKey: false, snappingFps: 60, virtualWindow: { startRow: 0, rowCount: 12 } },
+  timeline: { selectedClipId: "idle", selectedKeyIds: [], keyClipboard: [], autoKey: false, snappingFps: 60, virtualWindow: { startRow: 0, rowCount: 12 }, curvePreview: { fromClipId: "jump", toClipId: "land", weight: 0.5 } },
   stateMachine: {
     initialStateId: "idle",
     states: [
@@ -1019,7 +1025,8 @@ export function createChangeCurveCommand(
   trackId: string,
   keyframeId: string,
   interpolation: Keyframe["interpolation"],
-  curve: readonly [number, number, number, number]
+  curve: readonly [number, number, number, number],
+  preset: CurvePreset = "cubicBezier"
 ): EditorCommand {
   let previous: Keyframe | undefined;
   const change = (state: EditorProjectState, next: { interpolation: Keyframe["interpolation"]; curve: readonly [number, number, number, number] }) =>
@@ -1029,7 +1036,7 @@ export function createChangeCurveCommand(
           return key;
         }
         previous = key;
-        return { ...key, interpolation: next.interpolation, curve: next.curve };
+        return { ...key, interpolation: next.interpolation, curve: next.curve, curvePreset: preset };
       })
     );
   return {
@@ -1037,6 +1044,47 @@ export function createChangeCurveCommand(
     label: "Change curve",
     do: (state) => change(state, { interpolation, curve }),
     undo: (state) => (previous ? change(state, { interpolation: previous.interpolation, curve: previous.curve ?? [0, 0, 1, 1] }) : state)
+  };
+}
+
+export function createApplyCurvePresetCommand(clipId: string, trackId: string, keyframeId: string, preset: CurvePreset): EditorCommand {
+  const curve = curvePresetToKeyframe(preset);
+  return createChangeCurveCommand(clipId, trackId, keyframeId, curve.interpolation, curve.curve, preset);
+}
+
+export function createEditBezierHandlesCommand(clipId: string, trackId: string, keyframeId: string, curve: readonly [number, number, number, number]): EditorCommand {
+  return createChangeCurveCommand(clipId, trackId, keyframeId, "bezier", curve, "custom");
+}
+
+export function createSetKeyframeTangentsCommand(clipId: string, trackId: string, keyframeId: string, tangentIn: number, tangentOut: number): EditorCommand {
+  let previous: Keyframe | undefined;
+  return {
+    id: `tangents:${clipId}:${trackId}:${keyframeId}`,
+    label: "Set keyframe tangents",
+    do: (state) =>
+      updateClipTrack(state, clipId, trackId, (keys) =>
+        keys.map((key) => {
+          if (key.id !== keyframeId) {
+            return key;
+          }
+          previous = key;
+          return { ...key, tangentIn, tangentOut, curvePreset: "custom" };
+        })
+      ),
+    undo: (state) => (previous ? updateClipTrack(state, clipId, trackId, (keys) => keys.map((key) => (key.id === keyframeId ? previous! : key))) : state)
+  };
+}
+
+export function createSetCurvePreviewCommand(fromClipId: string, toClipId: string, weight: number): EditorCommand {
+  let previous: TimelineState["curvePreview"] | undefined;
+  return {
+    id: `curve-preview:${fromClipId}:${toClipId}:${weight}`,
+    label: "Set curve preview",
+    do: (state) => {
+      previous = state.timeline.curvePreview;
+      return { ...state, timeline: { ...state.timeline, curvePreview: { fromClipId, toClipId, weight: Math.max(0, Math.min(1, weight)) } } };
+    },
+    undo: (state) => (previous ? { ...state, timeline: { ...state.timeline, curvePreview: previous } } : state)
   };
 }
 
@@ -1299,6 +1347,31 @@ function normalizeLoopClip(clip: AnimationClip): AnimationClip {
     })
   );
   return { ...clip, tracks, markers: clip.markers.some((marker) => marker.time === clip.duration) ? clip.markers : [...clip.markers, { id: `${clip.id}-loop`, time: clip.duration, label: "Loop", color: "#4f8cff" }] };
+}
+
+function curvePresetToKeyframe(preset: CurvePreset): { readonly interpolation: Keyframe["interpolation"]; readonly curve: readonly [number, number, number, number] } {
+  switch (preset) {
+    case "linear":
+      return { interpolation: "linear", curve: [0, 0, 1, 1] };
+    case "easeIn":
+      return { interpolation: "bezier", curve: [0.42, 0, 1, 1] };
+    case "easeOut":
+      return { interpolation: "bezier", curve: [0, 0, 0.58, 1] };
+    case "easeInOut":
+      return { interpolation: "bezier", curve: [0.42, 0, 0.58, 1] };
+    case "stepped":
+      return { interpolation: "step", curve: [0, 0, 1, 1] };
+    case "spring":
+      return { interpolation: "spring", curve: [0.25, 1.35, 0.35, 1] };
+    case "overshoot":
+      return { interpolation: "bezier", curve: [0.2, 1.35, 0.35, 1] };
+    case "anticipation":
+      return { interpolation: "bezier", curve: [0.35, -0.35, 0.65, 1] };
+    case "custom":
+    case "cubicBezier":
+    default:
+      return { interpolation: "bezier", curve: [0.2, 0.8, 0.2, 1] };
+  }
 }
 
 function renameAnimation(state: EditorProjectState, clipId: string, nextId: string): EditorProjectState {

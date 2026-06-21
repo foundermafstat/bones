@@ -53,6 +53,10 @@ import {
   createDeleteKeyframeCommand,
   createMoveKeyframeCommand,
   createChangeCurveCommand,
+  createApplyCurvePresetCommand,
+  createEditBezierHandlesCommand,
+  createSetCurvePreviewCommand,
+  createSetKeyframeTangentsCommand,
   createAddTimelineEventCommand,
   createAddTimelineMarkerCommand,
   createAnimationClipCommand,
@@ -136,6 +140,7 @@ export default function EditorPage() {
   const clipIds = Object.keys(editorState.project.animations);
   const activeClip = editorState.project.animations[editorState.project.timeline.selectedClipId] ?? editorState.project.animations.idle!;
   const activeTrack = activeClip.tracks["body.scaleY"] ?? [];
+  const selectedKeyId = editorState.project.timeline.selectedKeyIds[0] ?? activeTrack[0]?.id ?? "";
   const runCommand = (command: Parameters<typeof executeCommand>[1]) => setEditorState((state) => executeCommand(state, command));
   useEffect(() => {
     const autosave = editorState.project.autosave;
@@ -605,8 +610,31 @@ export default function EditorPage() {
                 <CardHeader>
                   <CardTitle>Curve</CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="grid gap-2">
                   <p className="line-clamp-2 text-xs text-muted-foreground">{activeTrack.map((key) => `${key.id}: ${key.interpolation}`).join(", ")}</p>
+                  <div className="grid grid-cols-2 gap-1">
+                    {(["easeIn", "easeOut", "easeInOut", "spring", "overshoot", "anticipation"] as const).map((preset) => (
+                      <Button key={preset} size="sm" type="button" variant="outline" disabled={!selectedKeyId} onClick={() => runCommand(createApplyCurvePresetCommand(activeClip.id, "body.scaleY", selectedKeyId, preset))}>
+                        {preset}
+                      </Button>
+                    ))}
+                    <Button size="sm" type="button" variant="outline" disabled={!selectedKeyId} onClick={() => runCommand(createEditBezierHandlesCommand(activeClip.id, "body.scaleY", selectedKeyId, [0.18, 0.92, 0.22, 1]))}>
+                      Handles
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" disabled={!selectedKeyId} onClick={() => runCommand(createSetKeyframeTangentsCommand(activeClip.id, "body.scaleY", selectedKeyId, -0.2, 0.35))}>
+                      Tangents
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetCurvePreviewCommand("jump", "land", Math.min(1, editorState.project.timeline.curvePreview.weight + 0.1)))}>
+                      A/B +
+                    </Button>
+                    <span className="text-xs text-muted-foreground">
+                      {editorState.project.timeline.curvePreview.fromClipId}
+                      {"->"}
+                      {editorState.project.timeline.curvePreview.toClipId} {editorState.project.timeline.curvePreview.weight.toFixed(1)}
+                    </span>
+                  </div>
                 </CardContent>
               </Card>
               <Card size="sm">

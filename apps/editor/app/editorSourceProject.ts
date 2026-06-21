@@ -300,7 +300,7 @@ function toSourceTrack(trackId: string, keyframes: readonly Keyframe[]): Animati
       value: keyframe.value,
       interpolation: keyframe.interpolation,
       ...(keyframe.curve ? { curve: keyframe.curve } : {}),
-      editor: { custom: { id: keyframe.id } }
+      editor: { custom: { id: keyframe.id, ...(keyframe.curvePreset ? { curvePreset: keyframe.curvePreset } : {}), ...(keyframe.tangentIn !== undefined ? { tangentIn: keyframe.tangentIn } : {}), ...(keyframe.tangentOut !== undefined ? { tangentOut: keyframe.tangentOut } : {}) } }
     }))
   };
 }
@@ -311,13 +311,35 @@ function fromTrackId(track: AnimationTrack): string {
 }
 
 function fromSourceKeyframe(keyframe: SourceAnimationClip["tracks"][number]["keyframes"][number]): Keyframe {
+  const curvePreset = readCurvePreset(keyframe.editor?.custom?.curvePreset);
+  const tangentIn = numberValue(keyframe.editor?.custom?.tangentIn);
+  const tangentOut = numberValue(keyframe.editor?.custom?.tangentOut);
   return {
     id: stringValue(keyframe.editor?.custom?.id) ?? `key-${keyframe.time}`,
     time: keyframe.time,
     value: typeof keyframe.value === "number" ? keyframe.value : 0,
     interpolation: keyframe.interpolation ?? "linear",
-    ...(keyframe.curve ? { curve: keyframe.curve } : {})
+    ...(keyframe.curve ? { curve: keyframe.curve } : {}),
+    ...(curvePreset ? { curvePreset } : {}),
+    ...(tangentIn !== undefined ? { tangentIn } : {}),
+    ...(tangentOut !== undefined ? { tangentOut } : {})
   };
+}
+
+function readCurvePreset(value: unknown): Keyframe["curvePreset"] | undefined {
+  const preset = stringValue(value);
+  return preset === "linear" ||
+    preset === "easeIn" ||
+    preset === "easeOut" ||
+    preset === "easeInOut" ||
+    preset === "cubicBezier" ||
+    preset === "stepped" ||
+    preset === "spring" ||
+    preset === "overshoot" ||
+    preset === "anticipation" ||
+    preset === "custom"
+    ? preset
+    : undefined;
 }
 
 function toSourceTransition(transition: EditorTransition) {
@@ -485,7 +507,8 @@ function timelineToJson(timeline: TimelineState) {
     }),
     autoKey: timeline.autoKey,
     snappingFps: timeline.snappingFps,
-    virtualWindow: { ...timeline.virtualWindow }
+    virtualWindow: { ...timeline.virtualWindow },
+    curvePreview: { ...timeline.curvePreview }
   };
 }
 
@@ -546,7 +569,14 @@ function readTimeline(value: unknown): TimelineState {
           startRow: numberValue(value.virtualWindow.startRow) ?? 0,
           rowCount: numberValue(value.virtualWindow.rowCount) ?? 12
         }
-      : initialEditorProject.timeline.virtualWindow
+      : initialEditorProject.timeline.virtualWindow,
+    curvePreview: isRecord(value.curvePreview)
+      ? {
+          fromClipId: stringValue(value.curvePreview.fromClipId) ?? "jump",
+          toClipId: stringValue(value.curvePreview.toClipId) ?? "land",
+          weight: numberValue(value.curvePreview.weight) ?? 0.5
+        }
+      : initialEditorProject.timeline.curvePreview
   };
 }
 

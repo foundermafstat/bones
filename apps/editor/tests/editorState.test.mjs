@@ -7,6 +7,7 @@ import {
   createAddTimelineEventCommand,
   createAddTimelineMarkerCommand,
   createAnimationClipCommand,
+  createApplyCurvePresetCommand,
   createCopyPoseCommand,
   createCopySelectedKeysCommand,
   createEditPathPointCommand,
@@ -18,6 +19,8 @@ import {
   createRenameBoneCommand,
   createReverseClipCommand,
   createRotateBoneCommand,
+  createSetCurvePreviewCommand,
+  createSetKeyframeTangentsCommand,
   createRetimeClipCommand,
   createSetTimelineSelectionCommand,
   createSetParentCommand,
@@ -207,4 +210,22 @@ test("timeline retime, reverse, normalize loop, events, and markers are undoable
 
   const undone = undo(evented);
   assert.equal(undone.project.animations.walk.events.some((event) => event.id === "cue"), false);
+});
+
+test("curve presets, tangents, and preview state are undoable", () => {
+  const preset = executeCommand(freshContainer(), createApplyCurvePresetCommand("jump", "body.y", "jump-body-0", "anticipation"));
+  const key = preset.project.animations.jump.tracks["body.y"][0];
+  assert.equal(key.interpolation, "bezier");
+  assert.equal(key.curvePreset, "anticipation");
+  assert.deepEqual(key.curve, [0.35, -0.35, 0.65, 1]);
+
+  const tangent = executeCommand(preset, createSetKeyframeTangentsCommand("jump", "body.y", "jump-body-0", -0.2, 0.35));
+  assert.equal(tangent.project.animations.jump.tracks["body.y"][0].tangentIn, -0.2);
+  assert.equal(tangent.project.animations.jump.tracks["body.y"][0].tangentOut, 0.35);
+
+  const preview = executeCommand(tangent, createSetCurvePreviewCommand("jump", "land", 0.8));
+  assert.deepEqual(preview.project.timeline.curvePreview, { fromClipId: "jump", toClipId: "land", weight: 0.8 });
+
+  const undone = undo(preview);
+  assert.deepEqual(undone.project.timeline.curvePreview, tangent.project.timeline.curvePreview);
 });
