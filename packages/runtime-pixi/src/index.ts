@@ -1,3 +1,4 @@
+export * from "./AnimationMixer.js";
 export * from "./AnimationSampler.js";
 export * from "./RigInstance.js";
 export * from "./RigLoader.js";
