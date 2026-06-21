@@ -12,8 +12,18 @@ export interface EditorProjectState {
   readonly hierarchy: readonly string[];
   readonly parents: Readonly<Record<string, string | null>>;
   readonly bones: Readonly<Record<string, BoneTransform>>;
+  readonly parts: Readonly<Record<string, ShapePart>>;
   readonly dirty: boolean;
   readonly dirtyParts: readonly string[];
+}
+
+export interface ShapePart {
+  readonly id: string;
+  readonly boneId: string;
+  readonly type: "procedural" | "path";
+  readonly pivot: readonly [number, number];
+  readonly points: readonly (readonly [number, number])[];
+  readonly preset: "tapered-limb" | "organic-blob" | "capsule" | undefined;
 }
 
 export interface EditorCommand {
@@ -62,6 +72,10 @@ export const initialEditorProject: EditorProjectState = {
     shinFront: { x: 24, y: 0, rotation: 0.18, scaleX: 1, scaleY: 1 },
     footFront: { x: 22, y: 0, rotation: -1.1, scaleX: 1, scaleY: 1 },
     cloak: { x: 0, y: -26, rotation: 0, scaleX: 1, scaleY: 1 }
+  },
+  parts: {
+    bodyShape: { id: "bodyShape", boneId: "body", type: "procedural", pivot: [0, 0], points: [], preset: "organic-blob" },
+    armShape: { id: "armShape", boneId: "upperArmFront", type: "procedural", pivot: [0, 0], points: [], preset: "tapered-limb" }
   }
 };
 
@@ -163,6 +177,67 @@ export function createSetParentCommand(boneId: string, parentId: string | null):
     label: "Set parent",
     do: (state) => ({ ...markDirty(state, boneId), parents: { ...state.parents, [boneId]: parentId } }),
     undo: (state) => ({ ...markDirty(state, boneId), parents: { ...state.parents, [boneId]: state.parents[boneId] ?? null } })
+  };
+}
+
+export function createBindProceduralPartCommand(partId: string, boneId: string, preset: ShapePart["preset"]): EditorCommand {
+  return {
+    id: `bind-part:${partId}:${boneId}`,
+    label: "Bind procedural part",
+    do: (state) => ({
+      ...markDirty(state, partId),
+      parts: { ...state.parts, [partId]: { id: partId, boneId, type: "procedural", pivot: [0, 0], points: [], preset } }
+    }),
+    undo: (state) => {
+      const { [partId]: _removed, ...parts } = state.parts;
+      return { ...markDirty(state, partId), parts };
+    }
+  };
+}
+
+export function createEditPathPointCommand(partId: string, index: number, point: readonly [number, number]): EditorCommand {
+  const update = (state: EditorProjectState, nextPoint: readonly [number, number] | undefined) => {
+    const part = state.parts[partId];
+    if (!part) {
+      return state;
+    }
+    const points = [...part.points];
+    if (nextPoint) {
+      points[index] = nextPoint;
+    } else {
+      points.splice(index, 1);
+    }
+    const nextPart: ShapePart = { ...part, type: "path", points };
+    return { ...markDirty(state, partId), parts: { ...state.parts, [partId]: nextPart } };
+  };
+  return {
+    id: `edit-point:${partId}:${index}`,
+    label: "Edit path point",
+    do: (state) => update(state, point),
+    undo: (state) => update(state, state.parts[partId]?.points[index])
+  };
+}
+
+export function createMirrorPathCommand(partId: string): EditorCommand {
+  const mirror = (state: EditorProjectState) => {
+    const part = state.parts[partId];
+    return part ? { ...markDirty(state, partId), parts: { ...state.parts, [partId]: { ...part, points: part.points.map(([x, y]) => [-x, y] as const) } } } : state;
+  };
+  return { id: `mirror-path:${partId}`, label: "Mirror path", do: mirror, undo: mirror };
+}
+
+export function createSetPartPivotCommand(partId: string, pivot: readonly [number, number]): EditorCommand {
+  return {
+    id: `set-pivot:${partId}:${pivot.join(",")}`,
+    label: "Set pivot",
+    do: (state) => {
+      const part = state.parts[partId];
+      return part ? { ...markDirty(state, partId), parts: { ...state.parts, [partId]: { ...part, pivot } } } : state;
+    },
+    undo: (state) => {
+      const part = state.parts[partId];
+      return part ? { ...markDirty(state, partId), parts: { ...state.parts, [partId]: { ...part, pivot: [0, 0] } } } : state;
+    }
   };
 }
 

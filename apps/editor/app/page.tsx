@@ -8,6 +8,10 @@ import {
   createAddBoneCommand,
   createDeleteBoneCommand,
   createRenameBoneCommand,
+  createBindProceduralPartCommand,
+  createEditPathPointCommand,
+  createMirrorPathCommand,
+  createSetPartPivotCommand,
   executeCommand,
   initialEditorProject,
   redo,
@@ -31,6 +35,7 @@ export default function EditorPage() {
   });
   const selectedBone = editorState.project.selectedBoneId;
   const selectedTransform = editorState.project.bones[selectedBone] ?? initialEditorProject.bones.body!;
+  const selectedPart = Object.values(editorState.project.parts).find((part) => part.boneId === selectedBone) ?? editorState.project.parts.bodyShape!;
   const runCommand = (command: Parameters<typeof executeCommand>[1]) => setEditorState((state) => executeCommand(state, command));
   const inspectorRows = useMemo(
     () => [
@@ -81,6 +86,18 @@ export default function EditorPage() {
           </button>
           <button type="button" disabled={selectedBone === "root"} onClick={() => runCommand(createDeleteBoneCommand(selectedBone))}>
             Delete
+          </button>
+          <button type="button" onClick={() => runCommand(createBindProceduralPartCommand(`${selectedBone}Shape`, selectedBone, "tapered-limb"))}>
+            Bind Shape
+          </button>
+          <button type="button" onClick={() => runCommand(createEditPathPointCommand(selectedPart.id, selectedPart.points.length, [12, 4]))}>
+            Pen
+          </button>
+          <button type="button" onClick={() => runCommand(createMirrorPathCommand(selectedPart.id))}>
+            Mirror
+          </button>
+          <button type="button" onClick={() => runCommand(createSetPartPivotCommand(selectedPart.id, [4, 0]))}>
+            Pivot
           </button>
           <button type="button">Play</button>
           <button type="button">Pause</button>
@@ -145,7 +162,19 @@ export default function EditorPage() {
           </section>
           <section>
             <h2>Shape</h2>
-            <p>Path / procedural silhouette</p>
+            <p>{selectedPart.id}</p>
+            <label>
+              <span>Type</span>
+              <input readOnly value={selectedPart.type} />
+            </label>
+            <label>
+              <span>Pivot</span>
+              <input readOnly value={selectedPart.pivot.join(", ")} />
+            </label>
+            <label>
+              <span>Points</span>
+              <input readOnly value={String(selectedPart.points.length)} />
+            </label>
           </section>
           <section>
             <h2>Constraints</h2>
