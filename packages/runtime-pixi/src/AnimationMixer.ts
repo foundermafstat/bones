@@ -10,6 +10,7 @@ import type {
   AnimationSample,
   AnimationSampleTrackValue,
   RuntimeAnimationClip,
+  RuntimeAnimationEvent,
   RuntimeAnimationEventDispatch,
   RuntimeSampleValue,
   RuntimeTransitionEasing,
@@ -42,6 +43,7 @@ export class AnimationMixer {
 
   private readonly clips = new Map<number, RuntimeAnimationClip>();
   private readonly clipCaches = new Map<number, AnimationClipSampleCache>();
+  private readonly eventScratch: RuntimeAnimationEvent[] = [];
   private readonly baseSample = createAnimationSample();
   private readonly fadeSample = createAnimationSample();
   private readonly layerSamples: AnimationSample[] = [];
@@ -88,7 +90,10 @@ export class AnimationMixer {
   }
 
   setLayers(layers: readonly AnimationLayerOptions[]): void {
-    this.layers = [...layers];
+    this.layers.length = layers.length;
+    for (let index = 0; index < layers.length; index += 1) {
+      this.layers[index] = layers[index]!;
+    }
   }
 
   update(dt: number): AnimationSample {
@@ -101,7 +106,7 @@ export class AnimationMixer {
     const previousBaseTime = this.baseTime;
     this.baseTime += dt;
     const base = sampleAnimationClip(this.baseClip, this.baseTime, this.baseSample, this.clipCaches.get(this.baseClip.id));
-    collectDispatchEvents(this.baseClip, previousBaseTime, this.baseTime, this.events);
+    collectDispatchEvents(this.baseClip, previousBaseTime, this.baseTime, this.events, this.eventScratch);
     copySample(base, this.output);
 
     if (this.fadeClip) {
@@ -109,7 +114,7 @@ export class AnimationMixer {
       this.fadeTime += dt;
       this.fadeElapsed += dt;
       const fade = sampleAnimationClip(this.fadeClip, this.fadeTime, this.fadeSample, this.clipCaches.get(this.fadeClip.id));
-      collectDispatchEvents(this.fadeClip, previousFadeTime, this.fadeTime, this.events);
+      collectDispatchEvents(this.fadeClip, previousFadeTime, this.fadeTime, this.events, this.eventScratch);
       const rawWeight = Math.min(1, this.fadeElapsed / this.fadeDuration);
       const weight = transitionEase(rawWeight, this.fadeEasing);
       blendInto(this.output, fade, weight);
@@ -130,7 +135,7 @@ export class AnimationMixer {
       const previousLayerTime = layer.time ?? previousBaseTime;
       const nextLayerTime = layer.time ?? this.baseTime;
       this.layerSamples[index] = sampleAnimationClip(clip, nextLayerTime, sample, this.clipCaches.get(clip.id));
-      collectDispatchEvents(clip, previousLayerTime, nextLayerTime, this.events);
+      collectDispatchEvents(clip, previousLayerTime, nextLayerTime, this.events, this.eventScratch);
       if (layer.additive) {
         addInto(this.output, sample, layer.weight ?? 1, layer.mask);
       } else {
@@ -229,9 +234,10 @@ function collectDispatchEvents(
   clip: RuntimeAnimationClip,
   previousTime: number,
   nextTime: number,
-  out: RuntimeAnimationEventDispatch[]
+  out: RuntimeAnimationEventDispatch[],
+  scratch: RuntimeAnimationEvent[]
 ): void {
-  const sampled = sampleAnimationEvents(clip, previousTime, nextTime);
+  const sampled = sampleAnimationEvents(clip, previousTime, nextTime, scratch);
   for (const event of sampled) {
     out.push({
       ...event,

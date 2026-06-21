@@ -3,9 +3,13 @@
 import { compileRig } from "@bones/compiler";
 import {
   RigInstance,
+  RuntimeProfiler,
   sampleAnimationClip,
+  qualityPresets,
   type RuntimeAnimationClip,
-  type RuntimeCompiledRig
+  type RuntimeCompiledRig,
+  type QualityPresetName,
+  type RuntimeProfilerStats
 } from "@bones/runtime-pixi";
 import { useEffect, useRef, useState } from "react";
 import type { EditorProjectState } from "./editorState";
@@ -16,10 +20,12 @@ interface PixiPreviewProps {
   readonly clipId: number;
   readonly playing: boolean;
   readonly project: EditorProjectState;
+  readonly quality: QualityPresetName;
   readonly showSkeleton: boolean;
+  readonly onProfilerStats?: (stats: RuntimeProfilerStats) => void;
 }
 
-export function PixiPreview({ clipId, playing, project, showSkeleton }: PixiPreviewProps) {
+export function PixiPreview({ clipId, playing, project, quality, showSkeleton, onProfilerStats }: PixiPreviewProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const stateRef = useRef({ clipId, playing, showSkeleton });
   const [error, setError] = useState<string | null>(null);
@@ -43,11 +49,15 @@ export function PixiPreview({ clipId, playing, project, showSkeleton }: PixiPrev
           return;
         }
 
+        const preset = qualityPresets[quality];
         const app = new pixi.Application();
         await app.init({
           resizeTo: hostRef.current,
-          backgroundAlpha: 0,
-          antialias: true
+          backgroundAlpha: preset.contextAlpha ? 0 : 1,
+          antialias: preset.antialias,
+          autoDensity: true,
+          resolution: Math.min(window.devicePixelRatio || 1, preset.resolution),
+          powerPreference: "high-performance"
         });
 
         if (cancelled || !hostRef.current) {
@@ -55,7 +65,8 @@ export function PixiPreview({ clipId, playing, project, showSkeleton }: PixiPrev
           return;
         }
 
-        const rig = new RigInstance(compiled, { quality: "medium" });
+        const rig = new RigInstance(compiled, { quality });
+        const profiler = new RuntimeProfiler();
         const skeleton = new pixi.Graphics();
         skeleton.zIndex = 1000;
         rig.container.sortableChildren = true;
@@ -75,6 +86,7 @@ export function PixiPreview({ clipId, playing, project, showSkeleton }: PixiPrev
           if (current.playing) {
             time += ticker.deltaMS / 1000;
           }
+          const updateStart = performance.now();
 
           const scale = Math.min(app.screen.width / 460, app.screen.height / 560) * 0.92;
           rig.container.position.set(app.screen.width * 0.5, app.screen.height * 0.88);
@@ -88,6 +100,11 @@ export function PixiPreview({ clipId, playing, project, showSkeleton }: PixiPrev
           }
 
           drawSkeleton(skeleton, rig, compiled, project, current.showSkeleton);
+          const updateMs = performance.now() - updateStart;
+          const stats = profiler.record({ updateMs, renderMs: ticker.deltaMS, allocations: 0 });
+          if (stats.frames % 30 === 0) {
+            onProfilerStats?.({ ...stats });
+          }
         };
 
         app.ticker.add(tick);
@@ -109,7 +126,7 @@ export function PixiPreview({ clipId, playing, project, showSkeleton }: PixiPrev
       cleanup?.();
       host.replaceChildren();
     };
-  }, [project]);
+  }, [onProfilerStats, project, quality]);
 
   return (
     <>

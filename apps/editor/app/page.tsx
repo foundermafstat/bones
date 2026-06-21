@@ -86,6 +86,7 @@ import { createProjectExportBundle, loadDraft, parseImportedProject, saveDraft, 
 import { PixiPreview } from "./PixiPreview";
 import { vectorizeSvgPart } from "./editorVectorImport";
 import { createInitialControllerState, toAnimationParameters, updatePlatformerController } from "@bones/platformer-preview";
+import type { QualityPresetName, RuntimeProfilerStats } from "@bones/runtime-pixi";
 
 const modes = ["Rig", "Shape", "Pose", "Timeline", "Curve", "State Machine", "Procedural", "Preview"] as const;
 
@@ -122,6 +123,8 @@ export default function EditorPage() {
   const [mode, setMode] = useState<EditorMode>("Rig");
   const [previewPlaying, setPreviewPlaying] = useState(true);
   const [previewClipId, setPreviewClipId] = useState(0);
+  const [previewQuality, setPreviewQuality] = useState<QualityPresetName>("medium");
+  const [profilerStats, setProfilerStats] = useState<RuntimeProfilerStats | null>(null);
   const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
   const [dragPoint, setDragPoint] = useState<{ readonly index: number; readonly point: readonly [number, number] } | null>(null);
   const [dragBone, setDragBone] = useState<{ readonly boneId: string; readonly point: readonly [number, number] } | null>(null);
@@ -149,6 +152,7 @@ export default function EditorPage() {
   const activeClip = editorState.project.animations[editorState.project.timeline.selectedClipId] ?? editorState.project.animations.idle!;
   const activeTrack = activeClip.tracks["body.scaleY"] ?? [];
   const selectedKeyId = editorState.project.timeline.selectedKeyIds[0] ?? activeTrack[0]?.id ?? "";
+  const visibleTimelineTracks = sampleProject.tracks.slice(editorState.project.timeline.virtualWindow.startRow, editorState.project.timeline.virtualWindow.startRow + editorState.project.timeline.virtualWindow.rowCount);
   const previewLevel = useMemo(
     () => ({
       colliders: [
@@ -318,14 +322,15 @@ export default function EditorPage() {
                 </SelectGroup>
               </SelectContent>
             </Select>
-            <Select defaultValue="60">
-              <SelectTrigger className="w-24" size="sm" aria-label="Timeline FPS">
+            <Select value={previewQuality} onValueChange={(value) => setPreviewQuality(value as QualityPresetName)}>
+              <SelectTrigger className="w-24" size="sm" aria-label="Preview quality">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectItem value="30">30 FPS</SelectItem>
-                  <SelectItem value="60">60 FPS</SelectItem>
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
                 </SelectGroup>
               </SelectContent>
             </Select>
@@ -405,7 +410,7 @@ export default function EditorPage() {
             </div>
           </CardHeader>
           <CardContent className="relative min-h-0 flex-1 overflow-hidden bg-[linear-gradient(var(--border)_1px,transparent_1px),linear-gradient(90deg,var(--border)_1px,transparent_1px)] bg-[size:24px_24px] p-0" aria-label="PixiJS canvas viewport">
-            <PixiPreview clipId={previewClipId} playing={previewPlaying} project={editorState.project} showSkeleton={mode !== "Preview"} />
+            <PixiPreview clipId={previewClipId} playing={previewPlaying} project={editorState.project} quality={previewQuality} showSkeleton={mode !== "Preview"} onProfilerStats={setProfilerStats} />
             {mode === "Rig" ? (
               <svg
                 aria-label="Rig bone editor"
@@ -744,8 +749,9 @@ export default function EditorPage() {
                   <CardTitle>Profiler</CardTitle>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-1">
-                  <p className="text-xs text-muted-foreground">Preview quality: medium</p>
-                  <p className="text-xs text-muted-foreground">Update 0.4ms / Render 1.2ms</p>
+                  <p className="text-xs text-muted-foreground">Preview quality: {previewQuality}</p>
+                  <p className="text-xs text-muted-foreground">Update {(profilerStats?.avgUpdateMs ?? 0).toFixed(2)}ms / Render {(profilerStats?.avgRenderMs ?? 0).toFixed(2)}ms</p>
+                  <p className="text-xs text-muted-foreground">Max {(profilerStats?.maxUpdateMs ?? 0).toFixed(2)}ms / frames {profilerStats?.frames ?? 0}</p>
                   <p className="text-xs text-muted-foreground">Platformer {platformerDebug.state.animationState} / {platformerDebug.state.debug.activeColliders.length} colliders</p>
                   <p className="text-xs text-muted-foreground">Camera {platformerDebug.state.cameraX.toFixed(0)}, {platformerDebug.state.cameraY.toFixed(0)} / abs {platformerDebug.params.absSpeed}</p>
                 </CardContent>
@@ -803,7 +809,7 @@ export default function EditorPage() {
           <Badge variant="outline">00:00 / 01:12</Badge>
         </CardHeader>
         <CardContent className="mt-1 grid gap-1 px-2.5">
-          {sampleProject.tracks.map((track, index) => (
+          {visibleTimelineTracks.map((track, index) => (
             <div className="relative grid min-h-[17px] grid-cols-[140px_1fr] items-center rounded-md bg-muted" key={track}>
               <span className="truncate pl-2 text-xs text-muted-foreground">{track}</span>
               {(activeClip.tracks[track] ?? []).map((keyframe) => (

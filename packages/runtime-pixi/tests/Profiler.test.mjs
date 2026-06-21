@@ -13,7 +13,18 @@ test("tracks runtime profiler averages and max values", () => {
   assert.equal(stats.allocations, 1);
 });
 
+test("reuses profiler stats snapshot between records", () => {
+  const profiler = new RuntimeProfiler();
+  const first = profiler.record({ updateMs: 1, renderMs: 1, allocations: 0 });
+  const second = profiler.record({ updateMs: 2, renderMs: 2, allocations: 0 });
+
+  assert.equal(first, second);
+  assert.equal(second.frames, 2);
+});
+
 test("exposes mobile quality presets", () => {
   assert.equal(qualityPresets.low.antialias, false);
+  assert.equal(qualityPresets.low.resolution, 1);
+  assert.equal(qualityPresets.medium.clothFps, 45);
   assert.equal(qualityPresets.high.enableSecondaryMotion, true);
 });

@@ -33,6 +33,11 @@ export class RigInstance {
   private lastDelta = 0;
   private readonly boneById = new Map<number, BoneRuntime>();
   private readonly partById = new Map<number, PartRuntime>();
+  private readonly compiledPartById = new Map<number, RuntimeCompiledRig["rig"]["parts"][number]>();
+  private readonly constraintParams: Record<string, AnimationParameters[keyof AnimationParameters]> = {};
+  private readonly constraintParamKeys: string[] = [];
+  private readonly boneWorldParamKeys = new Map<number, { readonly x: string; readonly y: string }>();
+  private readonly emptyEvents: readonly RuntimeAnimationEventDispatch[] = [];
   private readonly mixer: AnimationMixer;
   private readonly stateMachine: RuntimeStateMachineController | undefined;
   private readonly procedural: ProceduralLayerStack | undefined;
@@ -57,6 +62,11 @@ export class RigInstance {
     }));
     for (const bone of this.bones) {
       this.boneById.set(bone.id, bone);
+      this.boneWorldParamKeys.set(bone.id, { x: `bone.${bone.id}.worldX`, y: `bone.${bone.id}.worldY` });
+    }
+
+    for (const part of this.compiled.rig.parts) {
+      this.compiledPartById.set(part.id, part);
     }
 
     this.parts = this.compiled.rig.parts.map((part) => {
@@ -137,17 +147,30 @@ export class RigInstance {
       constraintValues: constraintSample?.values.length ?? 0,
       activeLayers: this.getActiveLayers(state),
       ...(state ? { stateMachine: toRigStateMachineUpdate(state) } : {}),
-      events: [...this.mixer.events]
+      events: this.mixer.events.length ? this.mixer.events.map(copyRuntimeEventDispatch) : this.emptyEvents
     };
   }
 
   private withBoneWorldParams(params: AnimationParameters): AnimationParameters {
-    const next: Record<string, unknown> = { ...params };
-    for (const bone of this.bones) {
-      next[`bone.${bone.id}.worldX`] = bone.container.worldTransform.tx;
-      next[`bone.${bone.id}.worldY`] = bone.container.worldTransform.ty;
+    for (const key of this.constraintParamKeys) {
+      delete this.constraintParams[key];
     }
-    return next as AnimationParameters;
+    this.constraintParamKeys.length = 0;
+    for (const key in params) {
+      const value = params[key];
+      if (value === undefined) {
+        continue;
+      }
+      this.constraintParams[key] = value;
+      this.constraintParamKeys.push(key);
+    }
+    for (const bone of this.bones) {
+      const keys = this.boneWorldParamKeys.get(bone.id)!;
+      this.constraintParams[keys.x] = bone.container.worldTransform.tx;
+      this.constraintParams[keys.y] = bone.container.worldTransform.ty;
+      this.constraintParamKeys.push(keys.x, keys.y);
+    }
+    return this.constraintParams;
   }
 
   getBoneContainer(id: number): Container | undefined {
@@ -298,7 +321,7 @@ export class RigInstance {
     }
 
     for (const part of this.parts) {
-      const source = this.compiled.rig.parts.find((compiledPart) => compiledPart.id === part.id);
+      const source = this.compiledPartById.get(part.id);
       applyTransform(part.container, part.local);
       if (source) {
         part.container.visible = source.visible;
@@ -344,6 +367,17 @@ function toRigStateMachineUpdate(state: StateMachineEvaluation): RigStateMachine
           }
         }
       : {})
+  };
+}
+
+function copyRuntimeEventDispatch(event: RuntimeAnimationEventDispatch): RuntimeAnimationEventDispatch {
+  return {
+    time: event.time,
+    type: event.type,
+    ...(event.payload !== undefined ? { payload: event.payload } : {}),
+    clip: event.clip,
+    localTime: event.localTime,
+    normalizedTime: event.normalizedTime
   };
 }
 

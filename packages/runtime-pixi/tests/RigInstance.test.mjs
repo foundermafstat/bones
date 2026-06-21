@@ -45,6 +45,8 @@ test("RigLoader accepts compiled pixi-v8 JSON", async () => {
   const loaded = await RigLoader.load(compiledFixture);
 
   assert.equal(loaded.name, "Hero");
+  assert.equal(loaded.rig.bones[0].local instanceof Float32Array, true);
+  assert.equal(loaded.rig.parts[0].local instanceof Float32Array, true);
   assert.throws(() => RigLoader.fromCompiled({ runtimeTarget: "canvas" }), /Invalid compiled Bones rig/);
 });
 
@@ -64,11 +66,11 @@ test("RigInstance creates Pixi Container hierarchy and default transforms", () =
 
   assert.equal(body.position.x, 12);
   assert.equal(body.position.y, -20);
-  assert.equal(body.rotation, 0.2);
+  assert.ok(Math.abs(body.rotation - 0.2) < 0.000001);
   assert.equal(body.scale.x, 1.5);
   assert.equal(body.scale.y, 0.75);
-  assert.equal(body.skew.x, 0.1);
-  assert.equal(body.skew.y, -0.1);
+  assert.ok(Math.abs(body.skew.x - 0.1) < 0.000001);
+  assert.ok(Math.abs(body.skew.y + 0.1) < 0.000001);
 
   assert.equal(part.position.x, 1);
   assert.equal(part.position.y, 2);
