@@ -2,6 +2,15 @@
 
 import { useMemo, useState } from "react";
 import type { CSSProperties } from "react";
+import {
+  createMoveBoneCommand,
+  createRotateBoneCommand,
+  executeCommand,
+  initialEditorProject,
+  redo,
+  undo,
+  type EditorStateContainer
+} from "./editorState";
 
 const modes = ["Rig", "Shape", "Pose", "Timeline", "Curve", "State Machine", "Procedural", "Preview"] as const;
 
@@ -15,17 +24,24 @@ type DepthStyle = CSSProperties & { "--depth": number };
 
 export default function EditorPage() {
   const [mode, setMode] = useState<(typeof modes)[number]>("Rig");
-  const selectedBone = sampleProject.hierarchy[1];
+  const [editorState, setEditorState] = useState<EditorStateContainer>({
+    project: initialEditorProject,
+    history: { past: [], future: [] }
+  });
+  const selectedBone = editorState.project.selectedBoneId;
+  const selectedTransform = editorState.project.bones[selectedBone] ?? initialEditorProject.bones.body!;
+  const runCommand = (command: Parameters<typeof executeCommand>[1]) => setEditorState((state) => executeCommand(state, command));
   const inspectorRows = useMemo(
     () => [
       ["Mode", mode],
       ["Selection", selectedBone],
-      ["X", "0"],
-      ["Y", "-36"],
-      ["Rotation", "0"],
-      ["Scale", "1, 1"]
+      ["X", String(selectedTransform.x)],
+      ["Y", String(selectedTransform.y)],
+      ["Rotation", selectedTransform.rotation.toFixed(2)],
+      ["Scale", `${selectedTransform.scaleX}, ${selectedTransform.scaleY}`],
+      ["Dirty", editorState.project.dirty ? editorState.project.dirtyParts.join(", ") : "clean"]
     ],
-    [mode, selectedBone]
+    [editorState.project.dirty, editorState.project.dirtyParts, mode, selectedBone, selectedTransform]
   );
 
   return (
@@ -33,7 +49,7 @@ export default function EditorPage() {
       <header className="topBar">
         <div className="brand">
           <strong>Bones</strong>
-          <span>{sampleProject.name}</span>
+          <span>{editorState.project.name}</span>
         </div>
         <nav className="modeTabs" aria-label="Editor modes">
           {modes.map((item) => (
@@ -43,6 +59,18 @@ export default function EditorPage() {
           ))}
         </nav>
         <div className="toolbarActions" aria-label="Playback tools">
+          <button type="button" disabled={!editorState.history.past.length} onClick={() => setEditorState(undo)}>
+            Undo
+          </button>
+          <button type="button" disabled={!editorState.history.future.length} onClick={() => setEditorState(redo)}>
+            Redo
+          </button>
+          <button type="button" onClick={() => runCommand(createMoveBoneCommand(selectedBone, 2, 0))}>
+            Move
+          </button>
+          <button type="button" onClick={() => runCommand(createRotateBoneCommand(selectedBone, 0.1))}>
+            Rotate
+          </button>
           <button type="button">Play</button>
           <button type="button">Pause</button>
           <button type="button">Record</button>
