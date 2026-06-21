@@ -1,0 +1,23 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "./packages/schema"
+    },
+    {
+      "path": "./packages/vector-core"
+    },
+    {
+      "path": "./packages/compiler"
+    },
+    {
+      "path": "./packages/runtime-pixi"
+    },
+    {
+      "path": "./packages/ldtk-adapter"
+    },
+    {
+      "path": "./packages/platformer-preview"
+    }
+  ]
+}

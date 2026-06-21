@@ -1,0 +1,91 @@
+:root {
+  color-scheme: light;
+  background: #f7f8fb;
+  color: #171a21;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #f7f8fb;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.editorShell {
+  display: grid;
+  min-height: 100vh;
+  grid-template-rows: 48px 1fr 120px;
+}
+
+.topBar,
+.timeline,
+.panel {
+  border-color: #d8dde8;
+  background: #ffffff;
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid #d8dde8;
+  padding: 0 16px;
+}
+
+.topBar span {
+  color: #667085;
+  font-size: 13px;
+}
+
+.workspace {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: 240px minmax(0, 1fr) 280px;
+}
+
+.panel {
+  padding: 16px;
+  color: #475467;
+  font-size: 13px;
+}
+
+.panel:first-child {
+  border-right: 1px solid #d8dde8;
+}
+
+.panel:last-child {
+  border-left: 1px solid #d8dde8;
+}
+
+.canvas {
+  min-width: 0;
+  background:
+    linear-gradient(#e6eaf2 1px, transparent 1px),
+    linear-gradient(90deg, #e6eaf2 1px, transparent 1px),
+    #f7f8fb;
+  background-size: 24px 24px;
+}
+
+.timeline {
+  border-top: 1px solid #d8dde8;
+  padding: 16px;
+  color: #475467;
+  font-size: 13px;
+}
