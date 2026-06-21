@@ -215,6 +215,88 @@ test("update applies procedural and constraint samples after base animation", ()
   assert.equal(state.constraintValues, 2);
 });
 
+test("update exposes state machine blend tree as mixer layers", () => {
+  const instance = new RigInstance({
+    ...compiledFixture,
+    animations: [transformClip(0, "transform.x", 10, 10), transformClip(1, "transform.x", 30, 30)],
+    stateMachines: [
+      {
+        id: 0,
+        initialState: 0,
+        states: [
+          {
+            id: 0,
+            clip: 0,
+            blendTree: {
+              type: "1d",
+              parameter: 0,
+              children: [
+                { threshold: 0, clip: 0 },
+                { threshold: 10, clip: 1 }
+              ]
+            }
+          }
+        ],
+        transitions: [],
+        parameters: [{ id: 0, type: "number", defaultValue: 0 }],
+        parameterLookup: { absSpeed: 0 }
+      }
+    ]
+  });
+  const body = instance.getBoneContainer(1);
+
+  const state = instance.update(0, { absSpeed: 5 });
+
+  assert.equal(body.position.x, 20);
+  assert.deepEqual(state.stateMachine.blendTree, { lowerClip: 0, upperClip: 1, weight: 0.5 });
+  assert.deepEqual(state.activeLayers, [
+    { source: "base", clip: 0, weight: 0.5, additive: false },
+    { source: "blendTree", clip: 1, weight: 0.5, additive: false }
+  ]);
+});
+
+test("update passes transition easing and sync mode from state machine to mixer", () => {
+  const instance = new RigInstance({
+    ...compiledFixture,
+    animations: [transformClip(0, "transform.x", 12, 12), transformClip(1, "transform.x", 42, 42)],
+    stateMachines: [
+      {
+        id: 0,
+        initialState: 0,
+        states: [
+          { id: 0, clip: 0 },
+          { id: 1, clip: 1 }
+        ],
+        transitions: [
+          {
+            id: 0,
+            from: 0,
+            to: 1,
+            duration: 0.1,
+            easing: "easeIn",
+            syncMode: "phaseMatch",
+            priority: 0,
+            canInterrupt: true,
+            conditions: [{ parameter: 0, operator: "==", value: true }]
+          }
+        ],
+        parameters: [{ id: 0, type: "boolean", defaultValue: false }],
+        parameterLookup: { go: 0 }
+      }
+    ]
+  });
+  const body = instance.getBoneContainer(1);
+
+  const transition = instance.update(0.05, { go: true });
+
+  assert.equal(transition.transitionWeight, 0.25);
+  assert.equal(body.position.x, 19.5);
+  assert.deepEqual(transition.activeLayers, [
+    { source: "transition", clip: 0, weight: 0.75, additive: false },
+    { source: "transition", clip: 1, weight: 0.25, additive: false }
+  ]);
+});
+
 function transformClip(id, property, from, to) {
   return {
     id,

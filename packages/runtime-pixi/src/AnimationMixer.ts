@@ -8,6 +8,7 @@ import type {
   AnimationSampleTrackValue,
   RuntimeAnimationClip,
   RuntimeSampleValue,
+  RuntimeTransitionEasing,
   RuntimeTrackProperty,
   RuntimeTrackTargetKind
 } from "./types.js";
@@ -28,6 +29,7 @@ export interface AnimationLayerOptions {
 export interface CrossfadeOptions {
   readonly duration: number;
   readonly phaseMatch?: boolean;
+  readonly easing?: RuntimeTransitionEasing;
 }
 
 export class AnimationMixer {
@@ -43,6 +45,7 @@ export class AnimationMixer {
   private fadeTime = 0;
   private fadeDuration = 0;
   private fadeElapsed = 0;
+  private fadeEasing: RuntimeTransitionEasing = "linear";
   private layers: AnimationLayerOptions[] = [];
 
   constructor(clips: readonly RuntimeAnimationClip[] = []) {
@@ -73,6 +76,7 @@ export class AnimationMixer {
     this.fadeClip = next;
     this.fadeDuration = options.duration;
     this.fadeElapsed = 0;
+    this.fadeEasing = options.easing ?? "linear";
     this.fadeTime = options.phaseMatch ? next.duration * (this.baseSample.normalizedTime || normalizedTime(this.baseClip, this.baseTime)) : 0;
   }
 
@@ -94,9 +98,10 @@ export class AnimationMixer {
       this.fadeTime += dt;
       this.fadeElapsed += dt;
       const fade = sampleAnimationClip(this.fadeClip, this.fadeTime, this.fadeSample);
-      const weight = Math.min(1, this.fadeElapsed / this.fadeDuration);
+      const rawWeight = Math.min(1, this.fadeElapsed / this.fadeDuration);
+      const weight = transitionEase(rawWeight, this.fadeEasing);
       blendInto(this.output, fade, weight);
-      if (weight >= 1) {
+      if (rawWeight >= 1) {
         this.baseClip = this.fadeClip;
         this.baseTime = this.fadeTime;
         this.fadeClip = undefined;
@@ -122,7 +127,7 @@ export class AnimationMixer {
   }
 
   get transitionWeight(): number {
-    return this.fadeClip ? Math.min(1, this.fadeElapsed / this.fadeDuration) : 0;
+    return this.fadeClip ? transitionEase(Math.min(1, this.fadeElapsed / this.fadeDuration), this.fadeEasing) : 0;
   }
 
   private requireClip(id: number): RuntimeAnimationClip {
@@ -200,4 +205,31 @@ function normalizedTime(clip: RuntimeAnimationClip, time: number): number {
     return 0;
   }
   return (time % clip.duration) / clip.duration;
+}
+
+function transitionEase(t: number, easing: RuntimeTransitionEasing): number {
+  const clamped = Math.min(1, Math.max(0, t));
+  if (easing === "easeIn") {
+    return clamped * clamped;
+  }
+  if (easing === "easeOut") {
+    return 1 - (1 - clamped) * (1 - clamped);
+  }
+  if (easing === "easeInOut" || easing === "cubicBezier") {
+    return clamped < 0.5 ? 2 * clamped * clamped : 1 - Math.pow(-2 * clamped + 2, 2) / 2;
+  }
+  if (easing === "spring") {
+    return Math.min(1, 1 - Math.cos(clamped * Math.PI * 0.5) * Math.exp(-4 * clamped));
+  }
+  if (easing === "overshoot") {
+    const c1 = 1.70158;
+    const c3 = c1 + 1;
+    return Math.min(1, 1 + c3 * Math.pow(clamped - 1, 3) + c1 * Math.pow(clamped - 1, 2));
+  }
+  if (easing === "anticipation") {
+    const c1 = 1.70158;
+    const c3 = c1 + 1;
+    return Math.max(0, c3 * clamped * clamped * clamped - c1 * clamped * clamped);
+  }
+  return clamped;
 }

@@ -74,3 +74,14 @@ test("phase matches looped transitions", () => {
   const sample = mixer.update(0);
   assert.equal(sample.localTime, 0.75);
 });
+
+test("applies transition easing to crossfade weight", () => {
+  const mixer = new AnimationMixer([clip(0, 0), clip(1, 10)]);
+  mixer.play(0);
+  mixer.update(0);
+  mixer.crossfadeTo(1, { duration: 1, easing: "easeIn" });
+
+  const half = mixer.update(0.5);
+  assert.equal(half.values[0].value, 2.5);
+  assert.equal(mixer.transitionWeight, 0.25);
+});

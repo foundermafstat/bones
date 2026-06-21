@@ -120,6 +120,28 @@ export interface RigUpdateState {
   readonly sampledValues: number;
   readonly proceduralValues: number;
   readonly constraintValues: number;
+  readonly activeLayers: readonly RigActiveAnimationLayer[];
+  readonly stateMachine?: RigStateMachineUpdate;
+}
+
+export interface RigActiveAnimationLayer {
+  readonly source: "base" | "transition" | "blendTree";
+  readonly clip: NumericId;
+  readonly weight: number;
+  readonly additive: boolean;
+}
+
+export interface RigStateMachineUpdate {
+  readonly state: NumericId;
+  readonly previousState?: NumericId;
+  readonly transition?: NumericId;
+  readonly timeInState: number;
+  readonly clip: NumericId;
+  readonly blendTree?: {
+    readonly lowerClip: NumericId;
+    readonly upperClip: NumericId;
+    readonly weight: number;
+  };
 }
 
 export type RuntimeTrackTargetKind = "bone" | "part" | "project" | "stateMachine";
@@ -210,12 +232,22 @@ export interface RuntimeTransition {
   readonly from: NumericId;
   readonly to: NumericId;
   readonly duration: number;
-  readonly easing?: "linear" | "easeIn" | "easeOut" | "easeInOut" | "cubicBezier" | "spring" | "overshoot" | "anticipation";
+  readonly easing?: RuntimeTransitionEasing;
   readonly priority: number;
   readonly canInterrupt: boolean;
   readonly syncMode?: "none" | "normalizedTime" | "phaseMatch";
   readonly conditions: readonly RuntimeCondition[];
 }
+
+export type RuntimeTransitionEasing =
+  | "linear"
+  | "easeIn"
+  | "easeOut"
+  | "easeInOut"
+  | "cubicBezier"
+  | "spring"
+  | "overshoot"
+  | "anticipation";
 
 export interface RuntimeParameter {
   readonly id: NumericId;

@@ -8,7 +8,9 @@ import type {
   BoneRuntime,
   PackedTransform2D,
   PartRuntime,
+  RigActiveAnimationLayer,
   RigInstanceOptions,
+  RigStateMachineUpdate,
   RigUpdateState,
   RuntimeCompiledRig
 } from "./types.js";
@@ -127,7 +129,9 @@ export class RigInstance {
       transitionWeight: this.mixer.transitionWeight,
       sampledValues: baseSample.values.length,
       proceduralValues: proceduralSample?.values.length ?? 0,
-      constraintValues: constraintSample?.values.length ?? 0
+      constraintValues: constraintSample?.values.length ?? 0,
+      activeLayers: this.getActiveLayers(state),
+      ...(state ? { stateMachine: toRigStateMachineUpdate(state) } : {})
     };
   }
 
@@ -177,7 +181,8 @@ export class RigInstance {
     } else if (state.transition && this.activeTransition !== state.transition.id) {
       this.mixer.crossfadeTo(clip, {
         duration: state.transition.duration,
-        phaseMatch: state.transition.syncMode === "phaseMatch" || state.transition.syncMode === "normalizedTime"
+        phaseMatch: state.transition.syncMode === "phaseMatch" || state.transition.syncMode === "normalizedTime",
+        easing: state.transition.easing ?? "linear"
       });
     } else if (!state.transition && this.activeClip !== clip) {
       this.mixer.play(clip);
@@ -190,6 +195,23 @@ export class RigInstance {
     this.mixer.setLayers(blendTreeLayers);
     this.activeClip = clip;
     this.activeTransition = state.transition?.id;
+  }
+
+  private getActiveLayers(state: StateMachineEvaluation | undefined): readonly RigActiveAnimationLayer[] {
+    if (state?.transition && state.previousState && state.previousState.clip >= 0) {
+      const transitionWeight = this.mixer.transitionWeight;
+      return [
+        { source: "transition", clip: state.previousState.clip, weight: 1 - transitionWeight, additive: false },
+        { source: "transition", clip: this.activeClip ?? state.clip, weight: transitionWeight, additive: false }
+      ];
+    }
+    if (state?.blendTree) {
+      return [
+        { source: "base", clip: state.blendTree.lowerClip, weight: 1 - state.blendTree.weight, additive: false },
+        { source: "blendTree", clip: state.blendTree.upperClip, weight: state.blendTree.weight, additive: false }
+      ];
+    }
+    return this.activeClip !== undefined ? [{ source: "base", clip: this.activeClip, weight: 1, additive: false }] : [];
   }
 
   private applySampleValues(sample: AnimationSample, additive: boolean): void {
@@ -246,6 +268,25 @@ export class RigInstance {
       }
     }
   }
+}
+
+function toRigStateMachineUpdate(state: StateMachineEvaluation): RigStateMachineUpdate {
+  return {
+    state: state.state.id,
+    ...(state.previousState ? { previousState: state.previousState.id } : {}),
+    ...(state.transition ? { transition: state.transition.id } : {}),
+    timeInState: state.timeInState,
+    clip: state.clip,
+    ...(state.blendTree
+      ? {
+          blendTree: {
+            lowerClip: state.blendTree.lowerClip,
+            upperClip: state.blendTree.upperClip,
+            weight: state.blendTree.weight
+          }
+        }
+      : {})
+  };
 }
 
 function namedContainer(label: string): Container {
