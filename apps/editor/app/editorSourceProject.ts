@@ -14,8 +14,10 @@ import {
 } from "@bones/schema";
 import type {
   AnimationClip,
+  AutosaveState,
   BoneMetadata,
   BoneTransform,
+  DirtyScopes,
   EditorProjectState,
   EditorTransition,
   Keyframe,
@@ -50,6 +52,8 @@ export function toSourceProject(project: EditorProjectState): RigProject {
             hierarchy: [...project.hierarchy],
             dirty: project.dirty,
             dirtyParts: [...project.dirtyParts],
+            dirtyScopes: dirtyScopesToJson(project.dirtyScopes),
+            autosave: autosaveToJson(project.autosave),
             procedural: proceduralToJson(project.procedural)
           }
         }
@@ -154,7 +158,9 @@ export function fromSourceProject(sourceInput: unknown): EditorProjectState {
       : initialEditorProject.stateMachine,
     procedural,
     dirty: Boolean(rig.editor?.custom?.dirty),
-    dirtyParts: readStringArray(rig.editor?.custom?.dirtyParts) ?? []
+    dirtyParts: readStringArray(rig.editor?.custom?.dirtyParts) ?? [],
+    dirtyScopes: readDirtyScopes(rig.editor?.custom?.dirtyScopes),
+    autosave: readAutosave(rig.editor?.custom?.autosave)
   };
 }
 
@@ -410,6 +416,29 @@ function proceduralToJson(procedural: ProceduralPresetState) {
   };
 }
 
+function dirtyScopesToJson(dirtyScopes: DirtyScopes) {
+  return {
+    project: [...dirtyScopes.project],
+    bones: [...dirtyScopes.bones],
+    parts: [...dirtyScopes.parts],
+    animations: [...dirtyScopes.animations],
+    poses: [...dirtyScopes.poses],
+    stateMachine: [...dirtyScopes.stateMachine],
+    procedural: [...dirtyScopes.procedural]
+  };
+}
+
+function autosaveToJson(autosave: AutosaveState) {
+  return {
+    status: autosave.status,
+    revision: autosave.revision,
+    throttleMs: autosave.throttleMs,
+    lastChangedAt: autosave.lastChangedAt,
+    nextSaveAt: autosave.nextSaveAt,
+    ...(autosave.lastSavedAt !== undefined ? { lastSavedAt: autosave.lastSavedAt } : {})
+  };
+}
+
 function readProcedural(value: unknown): ProceduralPresetState {
   if (!isRecord(value)) {
     return initialEditorProject.procedural;
@@ -419,6 +448,36 @@ function readProcedural(value: unknown): ProceduralPresetState {
     secondaryMotion: isRecord(value.secondaryMotion) ? { ...initialEditorProject.procedural.secondaryMotion, ...value.secondaryMotion } : initialEditorProject.procedural.secondaryMotion,
     squashStretch: isRecord(value.squashStretch) ? { ...initialEditorProject.procedural.squashStretch, ...value.squashStretch } : initialEditorProject.procedural.squashStretch,
     footIk: isRecord(value.footIk) ? { ...initialEditorProject.procedural.footIk, ...value.footIk } : initialEditorProject.procedural.footIk
+  };
+}
+
+function readDirtyScopes(value: unknown): DirtyScopes {
+  if (!isRecord(value)) {
+    return initialEditorProject.dirtyScopes;
+  }
+  return {
+    project: readStringArray(value.project) ?? [],
+    bones: readStringArray(value.bones) ?? [],
+    parts: readStringArray(value.parts) ?? [],
+    animations: readStringArray(value.animations) ?? [],
+    poses: readStringArray(value.poses) ?? [],
+    stateMachine: readStringArray(value.stateMachine) ?? [],
+    procedural: readStringArray(value.procedural) ?? []
+  };
+}
+
+function readAutosave(value: unknown): AutosaveState {
+  if (!isRecord(value)) {
+    return initialEditorProject.autosave;
+  }
+  const lastSavedAt = numberValue(value.lastSavedAt);
+  return {
+    status: value.status === "pending" || value.status === "saved" ? value.status : "idle",
+    revision: numberValue(value.revision) ?? 0,
+    throttleMs: numberValue(value.throttleMs) ?? initialEditorProject.autosave.throttleMs,
+    lastChangedAt: numberValue(value.lastChangedAt) ?? 0,
+    nextSaveAt: numberValue(value.nextSaveAt) ?? 0,
+    ...(lastSavedAt !== undefined ? { lastSavedAt } : {})
   };
 }
 

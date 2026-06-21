@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type MouseEvent, type PointerEvent } from "react";
+import { useEffect, useMemo, useState, type MouseEvent, type PointerEvent } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -52,6 +52,7 @@ import {
   createUpdateProceduralCommand,
   executeCommand,
   initialEditorProject,
+  markAutosaveSaved,
   redo,
   undo,
   type EditorProjectState,
@@ -119,6 +120,18 @@ export default function EditorPage() {
   const activeClip = editorState.project.animations.idle!;
   const activeTrack = activeClip.tracks["body.scaleY"] ?? [];
   const runCommand = (command: Parameters<typeof executeCommand>[1]) => setEditorState((state) => executeCommand(state, command));
+  useEffect(() => {
+    const autosave = editorState.project.autosave;
+    if (autosave.status !== "pending") {
+      return;
+    }
+    const revision = autosave.revision;
+    const handle = window.setTimeout(() => {
+      saveDraft(editorState.project);
+      setEditorState((state) => (state.project.autosave.revision === revision ? { ...state, project: markAutosaveSaved(state.project) } : state));
+    }, Math.max(0, autosave.nextSaveAt - Date.now()));
+    return () => window.clearTimeout(handle);
+  }, [editorState.project, editorState.project.autosave]);
   const vectorizeSelectedPart = async () => {
     const vectorPart = await vectorizeSvgPart(selectedPart);
     runCommand(createSetPartPathCommand(vectorPart.id, vectorPart.points, vectorPart.pathCommands, vectorPart.svgViewBox));

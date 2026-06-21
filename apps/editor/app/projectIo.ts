@@ -1,4 +1,5 @@
 import type { EditorProjectState } from "./editorState";
+import { initialEditorProject } from "./editorState";
 import { fromSourceProject, toSourceProject } from "./editorSourceProject";
 
 export const EDITOR_DRAFT_KEY = "bones:editor:draft:v1";
@@ -20,7 +21,7 @@ export function parseEditorProject(json: string): EditorProjectState {
     if (parsed.schemaVersion && parsed.schemaVersion !== CURRENT_EDITOR_SCHEMA_VERSION) {
       return migrateEditorProject(parsed);
     }
-    return parsed.project;
+    return normalizeEditorProject(parsed.project);
   }
   return fromSourceProject(parsed);
 }
@@ -38,5 +39,14 @@ function migrateEditorProject(serialized: Partial<SerializedEditorProject>): Edi
   if (!serialized.project) {
     throw new Error("Cannot migrate missing editor project.");
   }
-  return serialized.project;
+  return normalizeEditorProject(serialized.project);
+}
+
+function normalizeEditorProject(project: EditorProjectState): EditorProjectState {
+  return {
+    ...initialEditorProject,
+    ...project,
+    dirtyScopes: project.dirtyScopes ?? initialEditorProject.dirtyScopes,
+    autosave: project.autosave ?? initialEditorProject.autosave
+  };
 }

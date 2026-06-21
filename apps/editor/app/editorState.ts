@@ -20,6 +20,8 @@ export interface EditorProjectState {
   readonly animations: Readonly<Record<string, AnimationClip>>;
   readonly stateMachine: EditorStateMachine;
   readonly procedural: ProceduralPresetState;
+  readonly dirtyScopes: DirtyScopes;
+  readonly autosave: AutosaveState;
   readonly dirty: boolean;
   readonly dirtyParts: readonly string[];
 }
@@ -94,6 +96,19 @@ export interface ProceduralPresetState {
   readonly footIk: { readonly enabled: boolean; readonly feet: readonly string[]; readonly maxCorrection: number; readonly blend: number };
 }
 
+export type DirtyScopeName = "project" | "bones" | "parts" | "animations" | "poses" | "stateMachine" | "procedural";
+
+export type DirtyScopes = Readonly<Record<DirtyScopeName, readonly string[]>>;
+
+export interface AutosaveState {
+  readonly status: "idle" | "pending" | "saved";
+  readonly revision: number;
+  readonly throttleMs: number;
+  readonly lastChangedAt: number;
+  readonly nextSaveAt: number;
+  readonly lastSavedAt?: number;
+}
+
 export interface EditorCommand {
   readonly id: string;
   readonly label: string;
@@ -101,15 +116,41 @@ export interface EditorCommand {
   undo(state: EditorProjectState): EditorProjectState;
 }
 
+export interface EditorCommandRecord {
+  readonly command: EditorCommand;
+  readonly selectionBefore: string;
+  readonly selectionAfter: string;
+}
+
 export interface CommandHistory {
-  readonly past: readonly EditorCommand[];
-  readonly future: readonly EditorCommand[];
+  readonly past: readonly EditorCommandRecord[];
+  readonly future: readonly EditorCommandRecord[];
 }
 
 export interface EditorStateContainer {
   readonly project: EditorProjectState;
   readonly history: CommandHistory;
 }
+
+export const AUTOSAVE_THROTTLE_MS = 750;
+
+export const cleanDirtyScopes: DirtyScopes = {
+  project: [],
+  bones: [],
+  parts: [],
+  animations: [],
+  poses: [],
+  stateMachine: [],
+  procedural: []
+};
+
+export const initialAutosaveState: AutosaveState = {
+  status: "idle",
+  revision: 0,
+  throttleMs: AUTOSAVE_THROTTLE_MS,
+  lastChangedAt: 0,
+  nextSaveAt: 0
+};
 
 export const initialEditorProject: EditorProjectState = {
   name: "Shadow Hero",
@@ -226,42 +267,62 @@ export const initialEditorProject: EditorProjectState = {
     secondaryMotion: { enabled: true, target: "cloak", stiffness: 0.22, damping: 0.72, velocityInfluence: 0.35 },
     squashStretch: { enabled: true, targetBone: "body", landingImpactScale: 0.18 },
     footIk: { enabled: false, feet: ["footFront"], maxCorrection: 8, blend: 0.75 }
-  }
+  },
+  dirtyScopes: cleanDirtyScopes,
+  autosave: initialAutosaveState
 };
 
 export function executeCommand(container: EditorStateContainer, command: EditorCommand): EditorStateContainer {
+  const selectionBefore = container.project.selectedBoneId;
+  const nextProject = command.do(container.project);
+  const record: EditorCommandRecord = { command, selectionBefore, selectionAfter: nextProject.selectedBoneId };
   return {
-    project: command.do(container.project),
-    history: { past: [...container.history.past, command], future: [] }
+    project: nextProject,
+    history: { past: [...container.history.past, record], future: [] }
   };
 }
 
 export function undo(container: EditorStateContainer): EditorStateContainer {
-  const command = container.history.past[container.history.past.length - 1];
-  if (!command) {
+  const record = container.history.past[container.history.past.length - 1];
+  if (!record) {
     return container;
   }
+  const project = restoreSelection(record.command.undo(container.project), record.selectionBefore);
   return {
-    project: command.undo(container.project),
+    project,
     history: {
       past: container.history.past.slice(0, -1),
-      future: [command, ...container.history.future]
+      future: [record, ...container.history.future]
     }
   };
 }
 
 export function redo(container: EditorStateContainer): EditorStateContainer {
-  const command = container.history.future[0];
-  if (!command) {
+  const record = container.history.future[0];
+  if (!record) {
     return container;
   }
+  const project = restoreSelection(record.command.do(container.project), record.selectionAfter);
   return {
-    project: command.do(container.project),
+    project,
     history: {
-      past: [...container.history.past, command],
+      past: [...container.history.past, record],
       future: container.history.future.slice(1)
     }
   };
+}
+
+export function createGroupedCommand(label: string, commands: readonly EditorCommand[]): EditorCommand {
+  return {
+    id: `group:${commands.map((command) => command.id).join("+")}`,
+    label,
+    do: (state) => commands.reduce((nextState, command) => command.do(nextState), state),
+    undo: (state) => [...commands].reverse().reduce((nextState, command) => command.undo(nextState), state)
+  };
+}
+
+export function markAutosaveSaved(project: EditorProjectState, savedAt = Date.now()): EditorProjectState {
+  return { ...project, autosave: { ...project.autosave, status: "saved", lastSavedAt: savedAt } };
 }
 
 export function createMoveBoneCommand(boneId: string, dx: number, dy: number): EditorCommand {
@@ -299,16 +360,36 @@ export function createAddBoneCommand(parentId: string, boneId: string): EditorCo
 }
 
 export function createDeleteBoneCommand(boneId: string): EditorCommand {
+  let previous:
+    | {
+        readonly bone?: BoneTransform;
+        readonly parent?: string | null;
+        readonly metadata?: BoneMetadata;
+        readonly hierarchy: readonly string[];
+      }
+    | undefined;
   return {
     id: `delete-bone:${boneId}`,
     label: "Delete bone",
-    do: (state) => removeBone(state, boneId, state.parents[boneId] ?? "root"),
-    undo: (state) => ({
-      ...markDirty(state, boneId),
-      hierarchy: state.hierarchy.includes(boneId) ? state.hierarchy : [...state.hierarchy, boneId],
-      parents: { ...state.parents, [boneId]: state.parents[boneId] ?? "root" },
-      bones: { ...state.bones, [boneId]: state.bones[boneId] ?? { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 } }
-    })
+    do: (state) => {
+      previous = {
+        ...(state.bones[boneId] ? { bone: state.bones[boneId] } : {}),
+        parent: state.parents[boneId] ?? null,
+        ...(state.boneMetadata[boneId] ? { metadata: state.boneMetadata[boneId] } : {}),
+        hierarchy: state.hierarchy
+      };
+      return removeBone(state, boneId, state.parents[boneId] ?? "root");
+    },
+    undo: (state) =>
+      previous?.bone
+        ? {
+            ...markDirty(state, boneId, "bones"),
+            hierarchy: previous.hierarchy,
+            parents: { ...state.parents, [boneId]: previous.parent ?? null },
+            bones: { ...state.bones, [boneId]: previous.bone },
+            boneMetadata: previous.metadata ? { ...state.boneMetadata, [boneId]: previous.metadata } : state.boneMetadata
+          }
+        : state
   };
 }
 
@@ -322,11 +403,15 @@ export function createRenameBoneCommand(boneId: string, nextId: string): EditorC
 }
 
 export function createSetParentCommand(boneId: string, parentId: string | null): EditorCommand {
+  let previousParent: string | null | undefined;
   return {
     id: `set-parent:${boneId}:${parentId ?? "root"}`,
     label: "Set parent",
-    do: (state) => ({ ...markDirty(state, boneId), parents: { ...state.parents, [boneId]: parentId } }),
-    undo: (state) => ({ ...markDirty(state, boneId), parents: { ...state.parents, [boneId]: state.parents[boneId] ?? null } })
+    do: (state) => {
+      previousParent = state.parents[boneId] ?? null;
+      return { ...markDirty(state, boneId, "bones"), parents: { ...state.parents, [boneId]: parentId } };
+    },
+    undo: (state) => (previousParent !== undefined ? { ...markDirty(state, boneId, "bones"), parents: { ...state.parents, [boneId]: previousParent } } : state)
   };
 }
 
@@ -380,11 +465,13 @@ export function createBindProceduralPartCommand(partId: string, boneId: string, 
 }
 
 export function createEditPathPointCommand(partId: string, index: number, point?: readonly [number, number]): EditorCommand {
+  let previous: ShapePart | undefined;
   const update = (state: EditorProjectState, nextPoint: readonly [number, number] | undefined) => {
     const part = state.parts[partId];
     if (!part) {
       return state;
     }
+    previous = previous ?? part;
     const points = [...part.points];
     if (nextPoint) {
       points[index] = nextPoint;
@@ -398,7 +485,7 @@ export function createEditPathPointCommand(partId: string, index: number, point?
     id: `edit-point:${partId}:${index}`,
     label: "Edit path point",
     do: (state) => update(state, point),
-    undo: (state) => update(state, state.parts[partId]?.points[index])
+    undo: (state) => (previous ? { ...markDirty(state, partId, "parts"), parts: { ...state.parts, [partId]: previous } } : state)
   };
 }
 
@@ -615,6 +702,15 @@ export function createChangeCurveCommand(
   };
 }
 
+export function createRenameAnimationCommand(clipId: string, nextId: string): EditorCommand {
+  return {
+    id: `rename-animation:${clipId}:${nextId}`,
+    label: "Rename animation",
+    do: (state) => renameAnimation(state, clipId, nextId),
+    undo: (state) => renameAnimation(state, nextId, clipId)
+  };
+}
+
 export function createTransitionCommand(transition: EditorTransition): EditorCommand {
   return {
     id: `transition:${transition.id}`,
@@ -671,23 +767,64 @@ function updateBone(state: EditorProjectState, boneId: string, updater: (bone: B
   };
 }
 
-function markDirty(state: EditorProjectState, id: string): EditorProjectState {
+function restoreSelection(state: EditorProjectState, boneId: string): EditorProjectState {
+  return state.bones[boneId] ? { ...state, selectedBoneId: boneId } : { ...state, selectedBoneId: state.hierarchy[0] ?? "root" };
+}
+
+function markDirty(state: EditorProjectState, id: string, scope: DirtyScopeName = inferDirtyScope(state, id)): EditorProjectState {
+  const nextDirtyScopes = {
+    ...state.dirtyScopes,
+    [scope]: state.dirtyScopes[scope].includes(id) ? state.dirtyScopes[scope] : [...state.dirtyScopes[scope], id]
+  };
+  const now = Date.now();
   return {
     ...state,
     dirty: true,
-    dirtyParts: state.dirtyParts.includes(id) ? state.dirtyParts : [...state.dirtyParts, id]
+    dirtyParts: state.dirtyParts.includes(id) ? state.dirtyParts : [...state.dirtyParts, id],
+    dirtyScopes: nextDirtyScopes,
+    autosave: {
+      ...state.autosave,
+      status: "pending",
+      revision: state.autosave.revision + 1,
+      lastChangedAt: now,
+      nextSaveAt: now + state.autosave.throttleMs
+    }
   };
+}
+
+function inferDirtyScope(state: EditorProjectState, id: string): DirtyScopeName {
+  if (state.bones[id] || state.parents[id] !== undefined) {
+    return "bones";
+  }
+  if (state.parts[id]) {
+    return "parts";
+  }
+  if (state.animations[id]) {
+    return "animations";
+  }
+  if (state.poses[id]) {
+    return "poses";
+  }
+  if (id === "procedural") {
+    return "procedural";
+  }
+  if (state.stateMachine.states.some((stateItem) => stateItem.id === id) || state.stateMachine.transitions.some((transition) => transition.id === id)) {
+    return "stateMachine";
+  }
+  return "project";
 }
 
 function removeBone(state: EditorProjectState, boneId: string, fallbackSelection: string | null): EditorProjectState {
   const { [boneId]: _removedBone, ...bones } = state.bones;
   const { [boneId]: _removedParent, ...parents } = state.parents;
+  const { [boneId]: _removedMetadata, ...boneMetadata } = state.boneMetadata;
   return {
-    ...markDirty(state, boneId),
+    ...markDirty(state, boneId, "bones"),
     selectedBoneId: fallbackSelection ?? "root",
     hierarchy: state.hierarchy.filter((item) => item !== boneId),
-    parents,
-    bones
+    parents: Object.fromEntries(Object.entries(parents).map(([childId, parentId]) => [childId, parentId === boneId ? fallbackSelection : parentId])),
+    bones,
+    boneMetadata
   };
 }
 
@@ -698,12 +835,15 @@ function renameBone(state: EditorProjectState, boneId: string, nextId: string): 
   }
   const { [boneId]: _removedBone, ...bones } = state.bones;
   const { [boneId]: parent, ...parents } = state.parents;
+  const { [boneId]: metadata, ...boneMetadata } = state.boneMetadata;
   return {
-    ...markDirty(state, nextId),
+    ...markDirty(state, nextId, "bones"),
     selectedBoneId: state.selectedBoneId === boneId ? nextId : state.selectedBoneId,
     hierarchy: state.hierarchy.map((item) => (item === boneId ? nextId : item)),
     parents: Object.fromEntries(Object.entries({ ...parents, [nextId]: parent ?? null }).map(([child, value]) => [child, value === boneId ? nextId : value])),
-    bones: { ...bones, [nextId]: current }
+    bones: { ...bones, [nextId]: current },
+    boneMetadata: metadata ? { ...boneMetadata, [nextId]: metadata } : boneMetadata,
+    parts: Object.fromEntries(Object.entries(state.parts).map(([partId, part]) => [partId, part.boneId === boneId ? { ...part, boneId: nextId } : part]))
   };
 }
 
@@ -723,6 +863,22 @@ function updateClipTrack(state: EditorProjectState, clipId: string, trackId: str
           [trackId]: updater(clip.tracks[trackId] ?? [])
         }
       }
+    }
+  };
+}
+
+function renameAnimation(state: EditorProjectState, clipId: string, nextId: string): EditorProjectState {
+  const clip = state.animations[clipId];
+  if (!clip || state.animations[nextId]) {
+    return state;
+  }
+  const { [clipId]: _removedClip, ...animations } = state.animations;
+  return {
+    ...markDirty(state, nextId, "animations"),
+    animations: { ...animations, [nextId]: { ...clip, id: nextId } },
+    stateMachine: {
+      ...state.stateMachine,
+      states: state.stateMachine.states.map((stateItem) => (stateItem.clipId === clipId ? { ...stateItem, clipId: nextId } : stateItem))
     }
   };
 }
