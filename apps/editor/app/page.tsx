@@ -1482,12 +1482,16 @@ export default function EditorPage() {
                       const endY = to.y - (dy / length) * 32;
                       const midX = (startX + endX) / 2;
                       const midY = (startY + endY) / 2;
+                      const conditionSummary = transition.conditions.map((condition) => `${condition.parameter}${condition.op}${String(condition.value)}`).join(" & ") || "always";
+                      const detailSummary = `${transition.duration.toFixed(2)}s ${transition.easing} / ${conditionSummary}`;
+                      const labelWidth = Math.max(86, Math.min(210, Math.max(transition.id.length, detailSummary.length) * 6.2));
                       return (
                         <g
                           key={transition.id}
                           className="cursor-pointer"
                           role="button"
                           tabIndex={0}
+                          aria-label={`Transition ${transition.id}: ${detailSummary}`}
                           onClick={() => {
                             setSmSelectedTransitionId(transition.id);
                             setSmFromStateId(transition.fromStateId);
@@ -1510,9 +1514,12 @@ export default function EditorPage() {
                             y1={startY}
                             y2={endY}
                           />
-                          <rect fill="var(--card)" height="18" rx="4" stroke={selected ? "#4f8cff" : "#cbd5e1"} width={Math.max(70, transition.id.length * 7)} x={midX - Math.max(70, transition.id.length * 7) / 2} y={midY - 9} />
-                          <text fill="currentColor" fontSize="10" textAnchor="middle" x={midX} y={midY + 3}>
+                          <rect fill="var(--card)" height="30" rx="4" stroke={selected ? "#4f8cff" : "#cbd5e1"} width={labelWidth} x={midX - labelWidth / 2} y={midY - 15} />
+                          <text fill="currentColor" fontSize="10" fontWeight="600" textAnchor="middle" x={midX} y={midY - 3}>
                             {transition.id}
+                          </text>
+                          <text fill="#64748b" fontSize="8.5" textAnchor="middle" x={midX} y={midY + 9}>
+                            {detailSummary.length > 34 ? `${detailSummary.slice(0, 31)}...` : detailSummary}
                           </text>
                         </g>
                       );
