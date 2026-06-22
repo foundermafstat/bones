@@ -281,6 +281,15 @@ export const compiledRigProjectJsonSchema = {
         priority: { type: "number" },
         canInterrupt: { type: "boolean" },
         syncMode: { enum: ["none", "normalizedTime", "phaseMatch"] },
+        transitionClip: numericId,
+        interruptWindow: {
+          type: "array",
+          prefixItems: [{ type: "number", minimum: 0 }, { type: "number", minimum: 0 }],
+          minItems: 2,
+          maxItems: 2
+        },
+        exitTime: { type: "number", minimum: 0 },
+        minStateTime: { type: "number", minimum: 0 },
         conditions: { type: "array", items: { $ref: "#/$defs/condition" } }
       }
     },

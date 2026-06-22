@@ -55,6 +55,23 @@ test("exposes timeInState for landing style transitions", () => {
   assert.equal(controller.update(0.11, {}).state.id, 0);
 });
 
+test("respects min state time and transition interrupt windows", () => {
+  const controller = new RuntimeStateMachineController({
+    ...machine,
+    transitions: [
+      { id: 0, from: 0, to: 1, duration: 0.1, priority: 0, canInterrupt: true, minStateTime: 0.05, conditions: [{ parameter: 0, operator: ">", value: 0 }] },
+      { id: 1, from: 1, to: 2, duration: 0.2, priority: 0, canInterrupt: true, interruptWindow: [0.1, 0.15], conditions: [{ parameter: 0, operator: ">", value: 50 }] },
+      { id: 2, from: 2, to: 3, duration: 0.1, priority: 10, canInterrupt: true, conditions: [{ parameter: 1, operator: "==", value: true }] }
+    ]
+  });
+
+  assert.equal(controller.update(0.016, { absSpeed: 40 }).state.id, 0);
+  assert.equal(controller.update(0.04, { absSpeed: 40 }).state.id, 1);
+  assert.equal(controller.update(0.01, { absSpeed: 80 }).state.id, 2);
+  assert.equal(controller.update(0.05, { jumpPressed: true }).state.id, 2);
+  assert.equal(controller.update(0.05, { jumpPressed: true }).state.id, 3);
+});
+
 test("evaluates 1d locomotion blend tree", () => {
   const result = evaluateBlendTree(
     [

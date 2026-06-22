@@ -251,6 +251,10 @@ export interface AnimationTransition {
   readonly priority?: number;
   readonly canInterrupt?: boolean;
   readonly syncMode?: "none" | "normalizedTime" | "phaseMatch";
+  readonly transitionClipId?: string;
+  readonly interruptWindow?: readonly [number, number];
+  readonly exitTime?: number;
+  readonly minStateTime?: number;
   readonly conditions?: readonly AnimationCondition[];
 }
 

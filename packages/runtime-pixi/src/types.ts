@@ -115,16 +115,24 @@ export interface RigUpdateState {
   readonly lastDelta: number;
   readonly params: AnimationParameters;
   readonly activeClip?: NumericId;
+  readonly previousClip?: NumericId;
   readonly activeState?: NumericId;
   readonly previousState?: NumericId;
   readonly activeTransition?: NumericId;
   readonly transitionWeight: number;
+  readonly sampledClipTimes: readonly RigSampledClipTime[];
   readonly sampledValues: number;
   readonly proceduralValues: number;
   readonly constraintValues: number;
   readonly activeLayers: readonly RigActiveAnimationLayer[];
   readonly stateMachine?: RigStateMachineUpdate;
   readonly events: readonly RuntimeAnimationEventDispatch[];
+}
+
+export interface RigSampledClipTime {
+  readonly clip: NumericId;
+  readonly localTime: number;
+  readonly normalizedTime: number;
 }
 
 export interface RigActiveAnimationLayer {
@@ -138,6 +146,8 @@ export interface RigStateMachineUpdate {
   readonly state: NumericId;
   readonly previousState?: NumericId;
   readonly transition?: NumericId;
+  readonly transitionWeight: number;
+  readonly syncMode?: "none" | "normalizedTime" | "phaseMatch";
   readonly timeInState: number;
   readonly clip: NumericId;
   readonly blendTree?: {
@@ -252,6 +262,10 @@ export interface RuntimeTransition {
   readonly priority: number;
   readonly canInterrupt: boolean;
   readonly syncMode?: "none" | "normalizedTime" | "phaseMatch";
+  readonly transitionClip?: NumericId;
+  readonly interruptWindow?: readonly [number, number];
+  readonly exitTime?: number;
+  readonly minStateTime?: number;
   readonly conditions: readonly RuntimeCondition[];
 }
 

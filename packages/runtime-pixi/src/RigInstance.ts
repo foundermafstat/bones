@@ -138,15 +138,17 @@ export class RigInstance {
       lastDelta: this.lastDelta,
       params: this.params,
       ...(this.activeClip !== undefined ? { activeClip: this.activeClip } : {}),
+      ...(this.mixer.previousClipId !== undefined ? { previousClip: this.mixer.previousClipId } : {}),
       ...(state ? { activeState: state.state.id } : {}),
       ...(state?.previousState ? { previousState: state.previousState.id } : {}),
       ...(state?.transition ? { activeTransition: state.transition.id } : {}),
       transitionWeight: this.mixer.transitionWeight,
+      sampledClipTimes: this.mixer.sampledClipTimes,
       sampledValues: baseSample.values.length,
       proceduralValues: proceduralSample?.values.length ?? 0,
       constraintValues: constraintSample?.values.length ?? 0,
       activeLayers: this.getActiveLayers(state),
-      ...(state ? { stateMachine: toRigStateMachineUpdate(state) } : {}),
+      ...(state ? { stateMachine: toRigStateMachineUpdate(state, this.mixer.transitionWeight) } : {}),
       events: this.mixer.events.length ? this.mixer.events.map(copyRuntimeEventDispatch) : this.emptyEvents
     };
   }
@@ -239,7 +241,8 @@ export class RigInstance {
       state.blendTree && state.blendTree.upperClip !== state.blendTree.lowerClip && state.blendTree.weight > 0
         ? [{ clipId: state.blendTree.upperClip, weight: state.blendTree.weight }]
         : [];
-    this.mixer.setLayers(blendTreeLayers);
+    const transitionClipLayers = state.transition?.transitionClip !== undefined ? [{ clipId: state.transition.transitionClip, weight: this.mixer.transitionWeight }] : [];
+    this.mixer.setLayers([...blendTreeLayers, ...transitionClipLayers]);
     this.activeClip = clip;
     this.activeTransition = state.transition?.id;
   }
@@ -247,10 +250,14 @@ export class RigInstance {
   private getActiveLayers(state: StateMachineEvaluation | undefined): readonly RigActiveAnimationLayer[] {
     if (state?.transition && state.previousState && state.previousState.clip >= 0) {
       const transitionWeight = this.mixer.transitionWeight;
-      return [
+      const layers: RigActiveAnimationLayer[] = [
         { source: "transition", clip: state.previousState.clip, weight: 1 - transitionWeight, additive: false },
         { source: "transition", clip: this.activeClip ?? state.clip, weight: transitionWeight, additive: false }
       ];
+      if (state.transition.transitionClip !== undefined) {
+        layers.push({ source: "transition", clip: state.transition.transitionClip, weight: transitionWeight, additive: false });
+      }
+      return layers;
     }
     if (state?.blendTree) {
       return [
@@ -351,11 +358,13 @@ export class RigInstance {
   }
 }
 
-function toRigStateMachineUpdate(state: StateMachineEvaluation): RigStateMachineUpdate {
+function toRigStateMachineUpdate(state: StateMachineEvaluation, transitionWeight: number): RigStateMachineUpdate {
   return {
     state: state.state.id,
     ...(state.previousState ? { previousState: state.previousState.id } : {}),
     ...(state.transition ? { transition: state.transition.id } : {}),
+    transitionWeight: state.transition ? transitionWeight : 0,
+    ...(state.transition?.syncMode ? { syncMode: state.transition.syncMode } : {}),
     timeInState: state.timeInState,
     clip: state.clip,
     ...(state.blendTree

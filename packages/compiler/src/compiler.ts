@@ -234,6 +234,10 @@ function compileStateMachine(
       priority: transition.priority ?? 0,
       canInterrupt: transition.canInterrupt ?? true,
       syncMode: transition.syncMode ?? "none",
+      ...(transition.transitionClipId ? { transitionClip: lookupRequired(lookups.animations, transition.transitionClipId, "animation") } : {}),
+      ...(transition.interruptWindow ? { interruptWindow: transition.interruptWindow } : {}),
+      ...(transition.exitTime !== undefined ? { exitTime: transition.exitTime } : {}),
+      ...(transition.minStateTime !== undefined ? { minStateTime: transition.minStateTime } : {}),
       conditions: sortConditions(transition.conditions ?? []).map((condition) => ({
         parameter: lookupRequired(parameterLookup, condition.parameterId, "parameter"),
         operator: condition.operator,

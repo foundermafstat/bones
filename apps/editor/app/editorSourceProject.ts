@@ -360,6 +360,7 @@ function toSourceTransition(transition: EditorTransition) {
     priority: transition.priority,
     canInterrupt: transition.canInterrupt,
     syncMode: transition.syncMode,
+    ...(transition.interruptWindow ? { interruptWindow: transition.interruptWindow } : {}),
     conditions: transition.conditions.map((condition) => ({ parameterId: condition.parameter, operator: condition.op, value: condition.value }))
   };
 }

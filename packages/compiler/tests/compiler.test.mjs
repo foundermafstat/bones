@@ -92,6 +92,10 @@ const sourceProject = {
           priority: 3,
           canInterrupt: false,
           syncMode: "normalizedTime",
+          transitionClipId: "idle",
+          interruptWindow: [0.02, 0.08],
+          exitTime: 0.1,
+          minStateTime: 0.05,
           conditions: [{ parameterId: "absSpeed", operator: ">=", value: 0 }]
         }
       ],
@@ -123,6 +127,10 @@ test("compiles source project into deterministic compiled JSON v1", () => {
   assert.equal(first.stateMachines[0].transitions[0].conditions[0].parameter, 0);
   assert.equal(first.stateMachines[0].transitions[0].easing, "easeOut");
   assert.equal(first.stateMachines[0].transitions[0].syncMode, "normalizedTime");
+  assert.equal(first.stateMachines[0].transitions[0].transitionClip, 0);
+  assert.deepEqual(first.stateMachines[0].transitions[0].interruptWindow, [0.02, 0.08]);
+  assert.equal(first.stateMachines[0].transitions[0].exitTime, 0.1);
+  assert.equal(first.stateMachines[0].transitions[0].minStateTime, 0.05);
   assert.equal(JSON.stringify(first).includes("editor"), false);
 });
 

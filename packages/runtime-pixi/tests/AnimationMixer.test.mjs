@@ -107,3 +107,20 @@ test("queues animation events emitted by active clips", () => {
     normalizedTime: 0.25
   });
 });
+
+test("dedupes matching events during crossfade", () => {
+  const event = { time: 0.25, type: "footstep", payload: { foot: "front" } };
+  const mixer = new AnimationMixer([
+    { ...clip(0, 0), events: [event] },
+    { ...clip(1, 10), events: [event] }
+  ]);
+  mixer.play(0);
+  mixer.update(0);
+  mixer.crossfadeTo(1, { duration: 1, phaseMatch: true });
+
+  mixer.update(0.3);
+
+  assert.equal(mixer.events.length, 1);
+  assert.equal(mixer.events[0].type, "footstep");
+  assert.deepEqual(mixer.sampledClipTimes.map((entry) => entry.clip), [0, 1]);
+});

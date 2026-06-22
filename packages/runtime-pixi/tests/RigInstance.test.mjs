@@ -174,6 +174,9 @@ test("update evaluates state machine and crossfades through the mixer", () => {
   assert.equal(transition.activeState, 1);
   assert.equal(transition.activeTransition, 0);
   assert.equal(transition.transitionWeight, 0.5);
+  assert.equal(transition.previousClip, 0);
+  assert.deepEqual(transition.sampledClipTimes.map((entry) => entry.clip), [0, 1]);
+  assert.equal(transition.stateMachine.transitionWeight, 0.5);
   assert.equal(body.position.x, 27);
 
   const settled = instance.update(0.05, { go: false });

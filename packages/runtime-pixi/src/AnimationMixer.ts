@@ -44,6 +44,7 @@ export class AnimationMixer {
   private readonly clips = new Map<number, RuntimeAnimationClip>();
   private readonly clipCaches = new Map<number, AnimationClipSampleCache>();
   private readonly eventScratch: RuntimeAnimationEvent[] = [];
+  private readonly eventDedupe = new Set<string>();
   private readonly baseSample = createAnimationSample();
   private readonly fadeSample = createAnimationSample();
   private readonly layerSamples: AnimationSample[] = [];
@@ -98,6 +99,7 @@ export class AnimationMixer {
 
   update(dt: number): AnimationSample {
     this.events.length = 0;
+    this.eventDedupe.clear();
     if (!this.baseClip) {
       this.output.values.length = 0;
       return this.output;
@@ -106,7 +108,7 @@ export class AnimationMixer {
     const previousBaseTime = this.baseTime;
     this.baseTime += dt;
     const base = sampleAnimationClip(this.baseClip, this.baseTime, this.baseSample, this.clipCaches.get(this.baseClip.id));
-    collectDispatchEvents(this.baseClip, previousBaseTime, this.baseTime, this.events, this.eventScratch);
+    collectDispatchEvents(this.baseClip, previousBaseTime, this.baseTime, this.events, this.eventScratch, this.eventDedupe);
     copySample(base, this.output);
 
     if (this.fadeClip) {
@@ -114,7 +116,7 @@ export class AnimationMixer {
       this.fadeTime += dt;
       this.fadeElapsed += dt;
       const fade = sampleAnimationClip(this.fadeClip, this.fadeTime, this.fadeSample, this.clipCaches.get(this.fadeClip.id));
-      collectDispatchEvents(this.fadeClip, previousFadeTime, this.fadeTime, this.events, this.eventScratch);
+      collectDispatchEvents(this.fadeClip, previousFadeTime, this.fadeTime, this.events, this.eventScratch, this.eventDedupe);
       const rawWeight = Math.min(1, this.fadeElapsed / this.fadeDuration);
       const weight = transitionEase(rawWeight, this.fadeEasing);
       blendInto(this.output, fade, weight);
@@ -135,7 +137,7 @@ export class AnimationMixer {
       const previousLayerTime = layer.time ?? previousBaseTime;
       const nextLayerTime = layer.time ?? this.baseTime;
       this.layerSamples[index] = sampleAnimationClip(clip, nextLayerTime, sample, this.clipCaches.get(clip.id));
-      collectDispatchEvents(clip, previousLayerTime, nextLayerTime, this.events, this.eventScratch);
+      collectDispatchEvents(clip, previousLayerTime, nextLayerTime, this.events, this.eventScratch, this.eventDedupe);
       if (layer.additive) {
         addInto(this.output, sample, layer.weight ?? 1, layer.mask);
       } else {
@@ -148,6 +150,24 @@ export class AnimationMixer {
 
   get transitionWeight(): number {
     return this.fadeClip ? transitionEase(Math.min(1, this.fadeElapsed / this.fadeDuration), this.fadeEasing) : 0;
+  }
+
+  get activeClipId(): number | undefined {
+    return this.baseClip?.id;
+  }
+
+  get previousClipId(): number | undefined {
+    return this.fadeClip ? this.baseClip?.id : undefined;
+  }
+
+  get sampledClipTimes(): readonly { readonly clip: number; readonly localTime: number; readonly normalizedTime: number }[] {
+    const times = this.baseClip
+      ? [{ clip: this.baseClip.id, localTime: this.baseTime, normalizedTime: normalizedTime(this.baseClip, this.baseTime) }]
+      : [];
+    if (!this.fadeClip) {
+      return times;
+    }
+    return [...times, { clip: this.fadeClip.id, localTime: this.fadeTime, normalizedTime: normalizedTime(this.fadeClip, this.fadeTime) }];
   }
 
   private requireClip(id: number): RuntimeAnimationClip {
@@ -235,10 +255,16 @@ function collectDispatchEvents(
   previousTime: number,
   nextTime: number,
   out: RuntimeAnimationEventDispatch[],
-  scratch: RuntimeAnimationEvent[]
+  scratch: RuntimeAnimationEvent[],
+  dedupe: Set<string>
 ): void {
   const sampled = sampleAnimationEvents(clip, previousTime, nextTime, scratch);
   for (const event of sampled) {
+    const key = `${event.type}:${event.time.toFixed(4)}:${JSON.stringify(event.payload ?? null)}`;
+    if (dedupe.has(key)) {
+      continue;
+    }
+    dedupe.add(key);
     out.push({
       ...event,
       clip: clip.id,

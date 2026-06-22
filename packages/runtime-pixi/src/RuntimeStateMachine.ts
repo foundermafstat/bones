@@ -17,6 +17,7 @@ export interface StateMachineEvaluation {
   readonly state: RuntimeState;
   readonly previousState?: RuntimeState;
   readonly transition?: RuntimeTransition;
+  readonly transitionWeight: number;
   readonly timeInState: number;
   readonly clip: number;
   readonly blendTree?: BlendTree1DOutput;
@@ -58,7 +59,7 @@ export class RuntimeStateMachineController {
       }
     }
 
-    if (!this.activeTransition || this.activeTransition.transition.canInterrupt) {
+    if (!this.activeTransition || canInterruptActiveTransition(this.activeTransition)) {
       const transition = this.findTransition(params);
       if (transition) {
         const previousState = this.activeState;
@@ -91,6 +92,7 @@ export class RuntimeStateMachineController {
     return {
       state: this.activeState,
       ...(this.activeTransition ? { previousState: this.activeTransition.previousState, transition: this.activeTransition.transition } : {}),
+      transitionWeight: this.activeTransition ? Math.min(1, this.activeTransition.elapsed / Math.max(0.0001, this.activeTransition.transition.duration)) : 0,
       timeInState: this.stateTime,
       clip: blendTree?.lowerClip ?? this.activeState.clip,
       ...(blendTree ? { blendTree } : {})
@@ -99,7 +101,12 @@ export class RuntimeStateMachineController {
 
   private findTransition(params: AnimationParameters): RuntimeTransition | undefined {
     return this.machine.transitions
-      .filter((transition) => transition.from === this.activeState.id && transition.conditions.every((condition) => conditionMatches(this.getParameter(condition.parameter, params), condition.operator, condition.value)))
+      .filter(
+        (transition) =>
+          transition.from === this.activeState.id &&
+          transitionStateTimeReady(transition, this.stateTime) &&
+          transition.conditions.every((condition) => conditionMatches(this.getParameter(condition.parameter, params), condition.operator, condition.value))
+      )
       .sort((a, b) => b.priority - a.priority || a.id - b.id)[0];
   }
 
@@ -117,6 +124,27 @@ export class RuntimeStateMachineController {
   private getState(id: number): RuntimeState | undefined {
     return this.machine.states.find((state) => state.id === id);
   }
+}
+
+function canInterruptActiveTransition(active: ActiveTransition): boolean {
+  if (!active.transition.canInterrupt) {
+    return false;
+  }
+  const window = active.transition.interruptWindow;
+  if (!window) {
+    return true;
+  }
+  return active.elapsed >= window[0] && active.elapsed <= window[1];
+}
+
+function transitionStateTimeReady(transition: RuntimeTransition, stateTime: number): boolean {
+  if (transition.minStateTime !== undefined && stateTime < transition.minStateTime) {
+    return false;
+  }
+  if (transition.exitTime !== undefined && stateTime < transition.exitTime) {
+    return false;
+  }
+  return true;
 }
 
 export function evaluateBlendTree(children: readonly RuntimeBlendTreeChild[], parameter: AnimationParameterValue): BlendTree1DOutput | undefined {

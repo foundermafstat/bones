@@ -141,6 +141,10 @@ export interface CompiledTransitionV1 {
   readonly priority: number;
   readonly canInterrupt: boolean;
   readonly syncMode: "none" | "normalizedTime" | "phaseMatch";
+  readonly transitionClip?: NumericId;
+  readonly interruptWindow?: readonly [number, number];
+  readonly exitTime?: number;
+  readonly minStateTime?: number;
   readonly conditions: readonly CompiledConditionV1[];
 }
 
