@@ -191,7 +191,7 @@ export interface FootIkChain {
   readonly raycastHeight: number;
 }
 
-export type DirtyScopeName = "project" | "bones" | "parts" | "animations" | "poses" | "stateMachine" | "procedural";
+export type DirtyScopeName = "project" | "bones" | "parts" | "animations" | "poses" | "stateMachine" | "procedural" | "preview";
 
 export type DirtyScopes = Readonly<Record<DirtyScopeName, readonly string[]>>;
 
@@ -213,8 +213,8 @@ export interface EditorCommand {
 
 export interface EditorCommandRecord {
   readonly command: EditorCommand;
-  readonly selectionBefore: string;
-  readonly selectionAfter: string;
+  readonly uiBefore: EditorUiSnapshot;
+  readonly uiAfter: EditorUiSnapshot;
 }
 
 export interface CommandHistory {
@@ -227,6 +227,26 @@ export interface EditorStateContainer {
   readonly history: CommandHistory;
 }
 
+export interface EditorUiSnapshot {
+  readonly selectedBoneId: string;
+  readonly selectedClipId: string;
+  readonly selectedKeyIds: readonly string[];
+  readonly curvePreview: TimelineState["curvePreview"];
+  readonly selectedTransitionId?: string;
+  readonly stateMachinePreview: EditorStateMachine["preview"];
+}
+
+export interface ExecuteCommandOptions {
+  readonly validate?: (project: EditorProjectState) => void;
+}
+
+export interface ProjectTransaction {
+  readonly label: string;
+  readonly base: EditorStateContainer;
+  readonly current: EditorStateContainer;
+  readonly commands: readonly EditorCommand[];
+}
+
 export const AUTOSAVE_THROTTLE_MS = 750;
 
 export const cleanDirtyScopes: DirtyScopes = {
@@ -236,7 +256,8 @@ export const cleanDirtyScopes: DirtyScopes = {
   animations: [],
   poses: [],
   stateMachine: [],
-  procedural: []
+  procedural: [],
+  preview: []
 };
 
 export const initialAutosaveState: AutosaveState = {
@@ -439,10 +460,11 @@ export const initialEditorProject: EditorProjectState = {
   autosave: initialAutosaveState
 };
 
-export function executeCommand(container: EditorStateContainer, command: EditorCommand): EditorStateContainer {
-  const selectionBefore = container.project.selectedBoneId;
+export function executeCommand(container: EditorStateContainer, command: EditorCommand, options: ExecuteCommandOptions = {}): EditorStateContainer {
+  const uiBefore = captureUiSnapshot(container.project);
   const nextProject = command.do(container.project);
-  const record: EditorCommandRecord = { command, selectionBefore, selectionAfter: nextProject.selectedBoneId };
+  options.validate?.(nextProject);
+  const record: EditorCommandRecord = { command, uiBefore, uiAfter: captureUiSnapshot(nextProject) };
   return {
     project: nextProject,
     history: { past: [...container.history.past, record], future: [] }
@@ -454,7 +476,7 @@ export function undo(container: EditorStateContainer): EditorStateContainer {
   if (!record) {
     return container;
   }
-  const project = restoreSelection(record.command.undo(container.project), record.selectionBefore);
+  const project = restoreUiSnapshot(record.command.undo(container.project), record.uiBefore);
   return {
     project,
     history: {
@@ -469,7 +491,7 @@ export function redo(container: EditorStateContainer): EditorStateContainer {
   if (!record) {
     return container;
   }
-  const project = restoreSelection(record.command.do(container.project), record.selectionAfter);
+  const project = restoreUiSnapshot(record.command.do(container.project), record.uiAfter);
   return {
     project,
     history: {
@@ -486,6 +508,29 @@ export function createGroupedCommand(label: string, commands: readonly EditorCom
     do: (state) => commands.reduce((nextState, command) => command.do(nextState), state),
     undo: (state) => [...commands].reverse().reduce((nextState, command) => command.undo(nextState), state)
   };
+}
+
+export function beginProjectTransaction(container: EditorStateContainer, label: string): ProjectTransaction {
+  return { label, base: container, current: container, commands: [] };
+}
+
+export function applyTransactionCommand(transaction: ProjectTransaction, command: EditorCommand, options: ExecuteCommandOptions = {}): ProjectTransaction {
+  return {
+    ...transaction,
+    current: executeCommand(transaction.current, command, options),
+    commands: [...transaction.commands, command]
+  };
+}
+
+export function commitProjectTransaction(transaction: ProjectTransaction, options: ExecuteCommandOptions = {}): EditorStateContainer {
+  if (!transaction.commands.length) {
+    return transaction.base;
+  }
+  return executeCommand(transaction.base, createGroupedCommand(transaction.label, transaction.commands), options);
+}
+
+export function rollbackProjectTransaction(transaction: ProjectTransaction): EditorStateContainer {
+  return transaction.base;
 }
 
 export function markAutosaveSaved(project: EditorProjectState, savedAt = Date.now()): EditorProjectState {
@@ -1310,9 +1355,9 @@ export function createSetCurvePreviewCommand(fromClipId: string, toClipId: strin
     label: "Set curve preview",
     do: (state) => {
       previous = state.timeline.curvePreview;
-      return { ...state, timeline: { ...state.timeline, curvePreview: { fromClipId, toClipId, weight: Math.max(0, Math.min(1, weight)) } } };
+      return { ...markDirty(state, "curvePreview", "preview"), timeline: { ...state.timeline, curvePreview: { fromClipId, toClipId, weight: Math.max(0, Math.min(1, weight)) } } };
     },
-    undo: (state) => (previous ? { ...state, timeline: { ...state.timeline, curvePreview: previous } } : state)
+    undo: (state) => (previous ? { ...markDirty(state, "curvePreview", "preview"), timeline: { ...state.timeline, curvePreview: previous } } : state)
   };
 }
 
@@ -1480,9 +1525,9 @@ export function createSetStateMachinePreviewCommand(fromStateId: string, toState
     label: "Set state machine preview",
     do: (state) => {
       previous = state.stateMachine.preview;
-      return { ...state, stateMachine: { ...state.stateMachine, preview: { fromStateId, toStateId, weight: Math.max(0, Math.min(1, weight)) } } };
+      return { ...markDirty(state, "stateMachinePreview", "preview"), stateMachine: { ...state.stateMachine, preview: { fromStateId, toStateId, weight: Math.max(0, Math.min(1, weight)) } } };
     },
-    undo: (state) => (previous ? { ...state, stateMachine: { ...state.stateMachine, preview: previous } } : state)
+    undo: (state) => (previous ? { ...markDirty(state, "stateMachinePreview", "preview"), stateMachine: { ...state.stateMachine, preview: previous } } : state)
   };
 }
 
@@ -1522,8 +1567,43 @@ function updateBone(state: EditorProjectState, boneId: string, updater: (bone: B
   };
 }
 
-function restoreSelection(state: EditorProjectState, boneId: string): EditorProjectState {
-  return state.bones[boneId] ? { ...state, selectedBoneId: boneId } : { ...state, selectedBoneId: state.hierarchy[0] ?? "root" };
+function captureUiSnapshot(project: EditorProjectState): EditorUiSnapshot {
+  const selectedTransitionId = project.stateMachine.transitions.find(
+    (transition) => transition.fromStateId === project.stateMachine.preview.fromStateId && transition.toStateId === project.stateMachine.preview.toStateId
+  )?.id;
+  return {
+    selectedBoneId: project.selectedBoneId,
+    selectedClipId: project.timeline.selectedClipId,
+    selectedKeyIds: [...project.timeline.selectedKeyIds],
+    curvePreview: { ...project.timeline.curvePreview },
+    ...(selectedTransitionId ? { selectedTransitionId } : {}),
+    stateMachinePreview: { ...project.stateMachine.preview }
+  };
+}
+
+function restoreUiSnapshot(state: EditorProjectState, snapshot: EditorUiSnapshot): EditorProjectState {
+  const selectedBoneId = state.bones[snapshot.selectedBoneId] ? snapshot.selectedBoneId : state.hierarchy[0] ?? "root";
+  const selectedClipId = state.animations[snapshot.selectedClipId] ? snapshot.selectedClipId : state.timeline.selectedClipId;
+  const selectedKeyIds = snapshot.selectedKeyIds.filter((keyId) => Object.values(state.animations[selectedClipId]?.tracks ?? {}).some((keys) => keys.some((key) => key.id === keyId)));
+  const curvePreview = state.animations[snapshot.curvePreview.fromClipId] && state.animations[snapshot.curvePreview.toClipId] ? snapshot.curvePreview : state.timeline.curvePreview;
+  const stateMachinePreview =
+    state.stateMachine.states.some((item) => item.id === snapshot.stateMachinePreview.fromStateId) && state.stateMachine.states.some((item) => item.id === snapshot.stateMachinePreview.toStateId)
+      ? snapshot.stateMachinePreview
+      : state.stateMachine.preview;
+  return {
+    ...state,
+    selectedBoneId,
+    timeline: {
+      ...state.timeline,
+      selectedClipId,
+      selectedKeyIds,
+      curvePreview
+    },
+    stateMachine: {
+      ...state.stateMachine,
+      preview: stateMachinePreview
+    }
+  };
 }
 
 function markDirty(state: EditorProjectState, id: string, scope: DirtyScopeName = inferDirtyScope(state, id)): EditorProjectState {
@@ -1634,7 +1714,8 @@ function renameDirtyRefs(state: EditorProjectState, boneId: string, nextId: stri
       animations: renameIds(state.dirtyScopes.animations),
       poses: renameIds(state.dirtyScopes.poses),
       stateMachine: renameIds(state.dirtyScopes.stateMachine),
-      procedural: renameIds(state.dirtyScopes.procedural)
+      procedural: renameIds(state.dirtyScopes.procedural),
+      preview: renameIds(state.dirtyScopes.preview)
     }
   };
 }

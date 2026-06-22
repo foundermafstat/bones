@@ -1,5 +1,5 @@
-import type { EditorProjectState } from "./editorState";
-import { initialEditorProject } from "./editorState";
+import type { DirtyScopes, EditorProjectState } from "./editorState";
+import { cleanDirtyScopes, initialEditorProject } from "./editorState";
 import { fromSourceProject, toSourceProject } from "./editorSourceProject";
 import { vectorizeSvgParts } from "./editorVectorImport";
 import { compileRig } from "@bones/compiler";
@@ -114,7 +114,20 @@ function normalizeEditorProject(project: EditorProjectState): EditorProjectState
     poseClipboard: project.poseClipboard ?? null,
     timeline: project.timeline ?? initialEditorProject.timeline,
     stateMachine: { ...initialEditorProject.stateMachine, ...project.stateMachine, preview: project.stateMachine.preview ?? initialEditorProject.stateMachine.preview },
-    dirtyScopes: project.dirtyScopes ?? initialEditorProject.dirtyScopes,
+    dirtyScopes: normalizeDirtyScopes(project.dirtyScopes),
     autosave: project.autosave ?? initialEditorProject.autosave
+  };
+}
+
+function normalizeDirtyScopes(dirtyScopes: DirtyScopes | undefined): DirtyScopes {
+  return {
+    project: dirtyScopes?.project ?? cleanDirtyScopes.project,
+    bones: dirtyScopes?.bones ?? cleanDirtyScopes.bones,
+    parts: dirtyScopes?.parts ?? cleanDirtyScopes.parts,
+    animations: dirtyScopes?.animations ?? cleanDirtyScopes.animations,
+    poses: dirtyScopes?.poses ?? cleanDirtyScopes.poses,
+    stateMachine: dirtyScopes?.stateMachine ?? cleanDirtyScopes.stateMachine,
+    procedural: dirtyScopes?.procedural ?? cleanDirtyScopes.procedural,
+    preview: dirtyScopes?.preview ?? cleanDirtyScopes.preview
   };
 }

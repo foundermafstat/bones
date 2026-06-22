@@ -4,6 +4,9 @@ import test from "node:test";
 import {
   createAddBoneCommand,
   createAddSvgPartCommand,
+  applyTransactionCommand,
+  beginProjectTransaction,
+  commitProjectTransaction,
   createApplyPoseCommand,
   createAddKeyframeCommand,
   createAddTimelineEventCommand,
@@ -45,6 +48,7 @@ import {
   executeCommand,
   initialEditorProject,
   redo,
+  rollbackProjectTransaction,
   undo
 } from "../app/editorState.ts";
 
@@ -83,6 +87,36 @@ test("undo restores selection around selection-changing commands", () => {
   const redone = redo(undone);
   assert.equal(redone.project.selectedBoneId, "testBone");
   assert.ok(redone.project.bones.testBone);
+});
+
+test("project transaction commit groups changes and rollback returns the base container", () => {
+  const base = freshContainer();
+  const transaction = applyTransactionCommand(applyTransactionCommand(beginProjectTransaction(base, "Move body twice"), createMoveBoneCommand("body", 4, 0)), createRotateBoneCommand("body", 0.2));
+
+  assert.equal(transaction.current.project.bones.body.x, initialEditorProject.bones.body.x + 4);
+  assert.equal(transaction.current.project.bones.body.rotation, 0.2);
+  assert.equal(rollbackProjectTransaction(transaction), base);
+
+  const committed = commitProjectTransaction(transaction);
+  assert.equal(committed.history.past.length, 1);
+  assert.equal(committed.project.bones.body.x, initialEditorProject.bones.body.x + 4);
+  assert.equal(committed.project.bones.body.rotation, 0.2);
+
+  const undone = undo(committed);
+  assert.deepEqual(undone.project.bones.body, initialEditorProject.bones.body);
+});
+
+test("command validation hook receives source-compatible project after command", () => {
+  let validationCount = 0;
+  const container = executeCommand(freshContainer(), createMoveBoneCommand("body", 1, 0), {
+    validate(project) {
+      assert.equal(project.bones.body.x, initialEditorProject.bones.body.x + 1);
+      validationCount += 1;
+    }
+  });
+
+  assert.equal(validationCount, 1);
+  assert.equal(container.project.bones.body.x, initialEditorProject.bones.body.x + 1);
 });
 
 test("set parent undo restores the original parent", () => {
@@ -319,6 +353,7 @@ test("curve presets, tangents, and preview state are undoable", () => {
 
   const preview = executeCommand(tangent, createSetCurvePreviewCommand("jump", "land", 0.8));
   assert.deepEqual(preview.project.timeline.curvePreview, { fromClipId: "jump", toClipId: "land", weight: 0.8 });
+  assert.deepEqual(preview.project.dirtyScopes.preview, ["curvePreview"]);
 
   const undone = undo(preview);
   assert.deepEqual(undone.project.timeline.curvePreview, tangent.project.timeline.curvePreview);
@@ -351,9 +386,29 @@ test("state machine graph commands edit states, transitions, parameters, blend t
 
   const preview = executeCommand(blend, createSetStateMachinePreviewCommand("idle", "walk", 0.9));
   assert.deepEqual(preview.project.stateMachine.preview, { fromStateId: "idle", toStateId: "walk", weight: 0.9 });
+  assert.deepEqual(preview.project.dirtyScopes.preview, ["stateMachinePreview"]);
 
   const undone = undo(preview);
   assert.deepEqual(undone.project.stateMachine.preview, blend.project.stateMachine.preview);
+});
+
+test("undo and redo restore timeline selection and graph preview ui snapshots", () => {
+  const selected = executeCommand(freshContainer(), createSetTimelineSelectionCommand("walk", ["walk-body-x-1", "walk-head-1"]));
+  const previewed = executeCommand(selected, createSetStateMachinePreviewCommand("idle", "walk", 0.75));
+  const moved = executeCommand(previewed, createAddBoneCommand("body", "snapshotBone"));
+
+  assert.equal(moved.project.selectedBoneId, "snapshotBone");
+
+  const undone = undo(moved);
+  assert.equal(undone.project.selectedBoneId, initialEditorProject.selectedBoneId);
+  assert.equal(undone.project.timeline.selectedClipId, "walk");
+  assert.deepEqual(undone.project.timeline.selectedKeyIds, ["walk-body-x-1", "walk-head-1"]);
+  assert.deepEqual(undone.project.stateMachine.preview, { fromStateId: "idle", toStateId: "walk", weight: 0.75 });
+
+  const redone = redo(undone);
+  assert.equal(redone.project.selectedBoneId, "snapshotBone");
+  assert.deepEqual(redone.project.timeline.selectedKeyIds, ["walk-body-x-1", "walk-head-1"]);
+  assert.deepEqual(redone.project.stateMachine.preview, { fromStateId: "idle", toStateId: "walk", weight: 0.75 });
 });
 
 test("state machine transition can be authored with conditions and timing", () => {

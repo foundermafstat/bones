@@ -503,7 +503,8 @@ function dirtyScopesToJson(dirtyScopes: DirtyScopes) {
     animations: [...dirtyScopes.animations],
     poses: [...dirtyScopes.poses],
     stateMachine: [...dirtyScopes.stateMachine],
-    procedural: [...dirtyScopes.procedural]
+    procedural: [...dirtyScopes.procedural],
+    preview: [...dirtyScopes.preview]
   };
 }
 
@@ -567,7 +568,8 @@ function readDirtyScopes(value: unknown): DirtyScopes {
     animations: readStringArray(value.animations) ?? [],
     poses: readStringArray(value.poses) ?? [],
     stateMachine: readStringArray(value.stateMachine) ?? [],
-    procedural: readStringArray(value.procedural) ?? []
+    procedural: readStringArray(value.procedural) ?? [],
+    preview: readStringArray(value.preview) ?? []
   };
 }
 
