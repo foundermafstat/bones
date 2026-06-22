@@ -20,6 +20,8 @@ export interface ProjectExportBundle {
 export interface ProjectImportResult {
   readonly project?: EditorProjectState;
   readonly errors: readonly string[];
+  readonly kind?: "source" | "legacy-wrapper";
+  readonly summary?: string;
 }
 
 export function serializeEditorProject(project: EditorProjectState): string {
@@ -30,7 +32,7 @@ export function parseEditorProject(json: string): EditorProjectState {
   const parsed = JSON.parse(json) as Partial<SerializedEditorProject> & Record<string, unknown>;
   if (parsed.project) {
     if (parsed.schemaVersion && parsed.schemaVersion !== CURRENT_EDITOR_SCHEMA_VERSION) {
-      return migrateEditorProject(parsed);
+      throw new Error(`$.schemaVersion: Unsupported editor schemaVersion ${String(parsed.schemaVersion)}.`);
     }
     return normalizeEditorProject(parsed.project);
   }
@@ -39,9 +41,16 @@ export function parseEditorProject(json: string): EditorProjectState {
 
 export function parseImportedProject(json: string): ProjectImportResult {
   try {
-    return { project: parseEditorProject(json), errors: [] };
+    const parsed = JSON.parse(json) as Partial<SerializedEditorProject> & Record<string, unknown>;
+    const kind = parsed.project ? "legacy-wrapper" : "source";
+    if (parsed.project && parsed.schemaVersion && parsed.schemaVersion !== CURRENT_EDITOR_SCHEMA_VERSION) {
+      return { errors: [`$.schemaVersion: Unsupported editor schemaVersion ${String(parsed.schemaVersion)}.`], kind };
+    }
+    const project = parseEditorProject(json);
+    return { project, errors: [], kind, summary: summarizeImport(project, kind) };
   } catch (error) {
-    return { errors: [error instanceof Error ? error.message : "Unknown import error"] };
+    const message = error instanceof SyntaxError ? `Malformed JSON: ${error.message}` : error instanceof Error ? error.message : "Unknown import error";
+    return { errors: [message] };
   }
 }
 
@@ -86,6 +95,10 @@ function migrateEditorProject(serialized: Partial<SerializedEditorProject>): Edi
     throw new Error("Cannot migrate missing editor project.");
   }
   return normalizeEditorProject(serialized.project);
+}
+
+function summarizeImport(project: EditorProjectState, kind: ProjectImportResult["kind"]): string {
+  return `${kind ?? "source"}: ${project.name}, ${project.hierarchy.length} bones, ${Object.keys(project.parts).length} parts, ${Object.keys(project.animations).length} clips`;
 }
 
 function normalizeEditorProject(project: EditorProjectState): EditorProjectState {

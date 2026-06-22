@@ -94,7 +94,7 @@ import {
   type EditorStateContainer,
   type Keyframe
 } from "./editorState";
-import { createProjectExportBundle, EDITOR_DRAFT_KEY, loadDraft, parseImportedProject, saveDraft, serializeEditorProject, type ProjectExportBundle } from "./projectIo";
+import { createProjectExportBundle, EDITOR_DRAFT_KEY, loadDraft, parseImportedProject, saveDraft, serializeEditorProject, type ProjectExportBundle, type ProjectImportResult } from "./projectIo";
 import { PixiPreview } from "./PixiPreview";
 import { vectorizeSvgPart } from "./editorVectorImport";
 import { parseLdtkLevel } from "@bones/ldtk-adapter";
@@ -262,6 +262,7 @@ export default function EditorPage() {
   const [lastCommand, setLastCommand] = useState("none");
   const [projectOrigin, setProjectOrigin] = useState<ProjectOrigin>("sample");
   const [lastExportBundle, setLastExportBundle] = useState<ProjectExportBundle | null>(null);
+  const [pendingImport, setPendingImport] = useState<ProjectImportResult | null>(null);
   const [editorState, setEditorState] = useState<EditorStateContainer>({
     project: initialEditorProject,
     history: { past: [], future: [] }
@@ -390,10 +391,16 @@ export default function EditorPage() {
   const importFromClipboard = async () => {
     const text = await navigator.clipboard?.readText();
     const result = parseImportedProject(text ?? "");
-    if (result.project) {
-      replaceProject(result.project, "imported", Object.keys(result.project.poses)[0] ?? "");
+    setPendingImport(result);
+    setIoStatus(result.errors.length ? result.errors.join("; ") : editorState.project.dirty ? "import preview ready; confirm required" : "import preview ready");
+  };
+  const confirmImport = () => {
+    if (!pendingImport?.project) {
+      return;
     }
-    setIoStatus(result.errors.length ? result.errors.join("; ") : "imported source JSON");
+    replaceProject(pendingImport.project, "imported", Object.keys(pendingImport.project.poses)[0] ?? "");
+    setIoStatus(`imported ${pendingImport.kind ?? "project"}`);
+    setPendingImport(null);
   };
   useEffect(() => {
     const autosave = editorState.project.autosave;
@@ -868,6 +875,21 @@ export default function EditorPage() {
           </div>
           <ScrollArea className="mt-2 min-h-0">
             <div className="grid grid-cols-1 gap-2 pr-2">
+              {pendingImport ? (
+                <InspectorSection title="Import Preview">
+                  <CardContent className="grid gap-2">
+                    <p className="text-xs text-muted-foreground">{pendingImport.errors.length ? pendingImport.errors.join("; ") : pendingImport.summary}</p>
+                    <div className="grid grid-cols-2 gap-1">
+                      <Button size="sm" type="button" disabled={!pendingImport.project} onClick={confirmImport}>
+                        Confirm Import
+                      </Button>
+                      <Button size="sm" type="button" variant="outline" onClick={() => setPendingImport(null)}>
+                        Clear
+                      </Button>
+                    </div>
+                  </CardContent>
+                </InspectorSection>
+              ) : null}
               <InspectorSection title="Transform">
                 <CardContent className="flex flex-col gap-2">
                   {inspectorRows.map(([label, value]) => (
