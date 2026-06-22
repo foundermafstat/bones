@@ -76,6 +76,7 @@ import {
 } from "../app/editorState.ts";
 import { createProjectExportBundle, createRuntimeParityReport, EDITOR_DRAFT_KEY, EDITOR_DRAFT_META_KEY, loadDraftMeta, saveDraft, serializeEditorProject } from "../app/projectIo.ts";
 import { vectorizeSvgPart } from "../app/editorVectorImport.ts";
+import { classifyBrowserConsoleEntries } from "../../../scripts/editor-console-classifier.mjs";
 
 function freshContainer(project = structuredClone(initialEditorProject)) {
   return { project, history: { past: [], future: [] } };
@@ -127,6 +128,20 @@ test("draft save writes source JSON and startup metadata", () => {
   assert.equal(Object.prototype.hasOwnProperty.call(saved, "project"), false);
   assert.equal(storage.getItem(EDITOR_DRAFT_META_KEY)?.includes(project.name), true);
   assert.equal(loadDraftMeta(storage)?.bones, project.hierarchy.length);
+});
+
+test("browser console classifier ignores extension noise and fails app schema errors", () => {
+  const extensionOnly = classifyBrowserConsoleEntries([
+    { level: "warn", message: "ObjectMultiplex - orphaned data", url: "chrome-extension://nkbihfbeogaeaoehlefnkodbefgpgknn/scripts/contentscript.js" }
+  ]);
+  assert.equal(extensionOnly.ok, true);
+  assert.equal(extensionOnly.summary.extensionNoise, 1);
+
+  const appError = classifyBrowserConsoleEntries([
+    { level: "error", message: "SchemaValidationError: $.animations[5].tracks[0] invalid", url: "http://localhost:3000/_next/static/chunks/app.js" }
+  ]);
+  assert.equal(appError.ok, false);
+  assert.equal(appError.appIssues.length, 1);
 });
 
 test("undo restores selection around selection-changing commands", () => {

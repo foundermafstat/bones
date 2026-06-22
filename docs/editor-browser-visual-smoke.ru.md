@@ -30,7 +30,16 @@ EDITOR_URL=http://localhost:3000/ pnpm smoke:editor-browser
 - `graph` - виден State Machine Graph;
 - `export` - export собирает `7 files ready`, включая `hero.compiled.json` и `hero.release-manifest.json`;
 - `responsive` - editor остается видимым на mobile viewport;
-- `consoleErrors` и `pageErrors` пустые.
+- `console.summary` - классификация browser warn/error;
+- `console.appIssues` / `consoleErrors` пустые;
+- `console.extensionNoise` может содержать шум расширений Chrome и не фейлит smoke;
+- `pageErrors` пустые.
+
+Console classifier:
+
+- `chrome-extension://...` warn/error считается extension noise;
+- `localhost`, `127.0.0.1`, `webpack-internal`, `/_next/` warn/error считается app issue;
+- любой `SchemaValidationError` считается app issue и фейлит smoke.
 
 Если Playwright не установлен, скрипт завершится с JSON `missingDependency: "playwright"`. Это не меняет production bundle; зависимость можно добавить только в CI/dev toolchain.
 
@@ -38,7 +47,7 @@ EDITOR_URL=http://localhost:3000/ pnpm smoke:editor-browser
 
 1. Открыть `http://localhost:3000/`.
 2. Проверить, что видны `Bones`, mode tabs, Hierarchy, Inspector, Timeline.
-3. Убедиться, что нет framework overlay и console errors приложения.
+3. Убедиться, что нет framework overlay и console app issues; extension noise отдельно игнорируется.
 4. В `Rig` проверить один визуальный skeleton overlay поверх персонажа.
 5. В `Preview` нажать `idle`, `walk`, `jump`, `fall`, `land`; debug scenario должен меняться.
 6. В `State Machine` проверить видимость `State Machine Graph`.
@@ -46,4 +55,4 @@ EDITOR_URL=http://localhost:3000/ pnpm smoke:editor-browser
 8. Нажать `Export`; ожидаемый результат - `7 files ready`, `hero.compiled.json`, `hero.release-manifest.json`, `hero.compiled.json.gz`.
 9. Изменить ширину окна до mobile-like размера; панели должны оставаться видимыми, без framework overlay.
 
-Успех: все пункты проходят, export не содержит SVG в source/compiled runtime artifact, preview остается видимым после export.
+Успех: все пункты проходят, export не содержит SVG в source/compiled runtime artifact, preview остается видимым после export, `SchemaValidationError` отсутствует.

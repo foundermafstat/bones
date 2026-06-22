@@ -1,3 +1,5 @@
+import { classifyBrowserConsoleEntries } from "./editor-console-classifier.mjs";
+
 const url = process.env.EDITOR_URL ?? "http://localhost:3000/";
 
 let chromium;
@@ -21,14 +23,20 @@ try {
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
-const consoleErrors = [];
+const consoleEntries = [];
 const pageErrors = [];
 page.on("console", (message) => {
-  if (message.type() === "error") {
-    consoleErrors.push(message.text());
+  const type = message.type();
+  if (type === "error" || type === "warning" || type === "warn") {
+    consoleEntries.push({
+      level: type === "warning" ? "warn" : type,
+      message: message.text(),
+      url: message.location().url
+    });
   }
 });
 page.on("pageerror", (error) => pageErrors.push(error.message));
+const consoleSummary = classifyBrowserConsoleEntries(consoleEntries);
 
 const result = {
   ok: false,
@@ -40,7 +48,8 @@ const result = {
   graph: false,
   export: false,
   responsive: false,
-  consoleErrors,
+  console: consoleSummary,
+  consoleErrors: consoleSummary.appIssues,
   pageErrors
 };
 
@@ -78,6 +87,9 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(250);
   result.responsive = await page.getByText("Bones").first().isVisible();
+  const finalConsoleSummary = classifyBrowserConsoleEntries(consoleEntries);
+  result.console = finalConsoleSummary;
+  result.consoleErrors = finalConsoleSummary.appIssues;
 
   result.ok =
     result.identity &&
@@ -87,7 +99,7 @@ try {
     result.graph &&
     result.export &&
     result.responsive &&
-    consoleErrors.length === 0 &&
+    finalConsoleSummary.ok &&
     pageErrors.length === 0;
 } finally {
   await browser.close();
