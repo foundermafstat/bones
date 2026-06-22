@@ -27,7 +27,7 @@ import type {
   ShapePart,
   TimelineState
 } from "./editorState";
-import { initialEditorProject } from "./editorState";
+import { initialEditorProject } from "./editorState.ts";
 
 const projectId = "shadow-hero";
 const rigId = "shadow-hero-rig";

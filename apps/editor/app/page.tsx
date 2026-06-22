@@ -1597,6 +1597,14 @@ export default function EditorPage() {
                   <p className="text-xs text-muted-foreground">
                     {lastExportBundle ? (lastExportBundle.validation.ok ? `${exportFileEntries.length} files ready` : "validation failed") : "not built"}
                   </p>
+                  {lastExportBundle?.summary ? (
+                    <div className="grid gap-1 rounded-md bg-muted px-2 py-1 text-xs">
+                      <span>Profile: {lastExportBundle.summary.profile}</span>
+                      <span>Counts: {lastExportBundle.summary.bones} bones / {lastExportBundle.summary.parts} parts / {lastExportBundle.summary.animations} clips / {lastExportBundle.summary.states} states</span>
+                      <span>Size: {lastExportBundle.summary.totalBytes}b{lastExportBundle.summary.compressedBytes ? ` / gzip ${lastExportBundle.summary.compressedBytes}b` : ""}</span>
+                      <span className="truncate" title={lastExportBundle.summary.compiledHash}>Compiled SHA-256: {lastExportBundle.summary.compiledHash.slice(0, 16)}...</span>
+                    </div>
+                  ) : null}
                   {lastExportBundle?.validation.errors.map((error) => (
                     <p className="text-xs text-destructive" key={error}>{error}</p>
                   ))}
