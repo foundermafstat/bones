@@ -138,6 +138,13 @@ test("imports SVG path data into editable vector commands", () => {
   ]);
 });
 
+test("imports SVG without editable paths as an empty vector list", () => {
+  const imported = importSvgPaths('<svg viewBox="0 0 10 10"><rect width="10" height="10"/></svg>');
+
+  assert.deepEqual(imported.viewBox, [0, 0, 10, 10]);
+  assert.deepEqual(imported.paths, []);
+});
+
 test("computes bounds, pivot, hit tests, and overlap preview", () => {
   const bounds = getPathBounds(square);
 

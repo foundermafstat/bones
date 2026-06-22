@@ -138,6 +138,7 @@ export default function EditorPage() {
   const [newPartSource, setNewPartSource] = useState("/assets/shadow-hero-silhouette/part_01_rear_head_hair.svg");
   const [newPartBoneId, setNewPartBoneId] = useState("head");
   const [newPartDrawOrder, setNewPartDrawOrder] = useState(9);
+  const [vectorizeSummary, setVectorizeSummary] = useState("");
   const [ioStatus, setIoStatus] = useState("ready");
   const [projectOrigin, setProjectOrigin] = useState<ProjectOrigin>("sample");
   const [lastExportBundle, setLastExportBundle] = useState<ProjectExportBundle | null>(null);
@@ -269,8 +270,17 @@ export default function EditorPage() {
       setIoStatus("select an SVG part first");
       return;
     }
-    const vectorPart = await vectorizeSvgPart(selectedPart);
-    runCommand(createSetPartPathCommand(vectorPart.id, vectorPart.points, vectorPart.pathCommands, vectorPart.svgViewBox));
+    try {
+      const vectorPart = await vectorizeSvgPart(selectedPart);
+      runCommand(createSetPartPathCommand(vectorPart.id, vectorPart.points, vectorPart.pathCommands, vectorPart.svgViewBox));
+      const viewBox = vectorPart.svgViewBox ? vectorPart.svgViewBox.join(", ") : "none";
+      setVectorizeSummary(`${vectorPart.pathCommands?.length ?? 0} commands / ${vectorPart.points.length} points / viewBox ${viewBox}`);
+      setIoStatus("vectorized SVG part; importer uses the first SVG path only");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown vectorize error";
+      setVectorizeSummary(message);
+      setIoStatus(message);
+    }
   };
   const addSvgPart = () => {
     const id = newPartId.trim();
@@ -708,6 +718,10 @@ export default function EditorPage() {
                   <ReadOnlyField label="Asset" value={selectedPart?.assetPath?.split("/").pop() ?? "none"} />
                   <ReadOnlyField label="Pivot" value={selectedPart?.pivot.join(", ") ?? "none"} />
                   <ReadOnlyField label="Points" value={String(selectedPart?.points.length ?? 0)} />
+                  <ReadOnlyField label="Commands" value={String(selectedPart?.pathCommands?.length ?? 0)} />
+                  <ReadOnlyField label="ViewBox" value={selectedPart?.svgViewBox?.join(", ") ?? "none"} />
+                  {vectorizeSummary ? <p className="text-xs text-muted-foreground">{vectorizeSummary}</p> : null}
+                  {selectedPart?.type === "path" ? <p className="text-xs text-amber-600">SVG importer uses the first path only; groups and masks are ignored.</p> : null}
                   <div className="grid grid-cols-2 gap-1">
                     <Button size="sm" type="button" variant="outline" onClick={() => void vectorizeSelectedPart()} disabled={selectedPart?.type !== "svg"}>
                       Vectorize
