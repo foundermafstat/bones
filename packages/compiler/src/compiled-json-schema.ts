@@ -179,6 +179,8 @@ export const compiledRigProjectJsonSchema = {
       properties: {
         time: { type: "number", minimum: 0 },
         type: { type: "string", minLength: 1 },
+        category: { enum: ["gameplay", "audio", "vfx", "camera", "debug"] },
+        duration: { type: "number", minimum: 0 },
         payload: true
       }
     },

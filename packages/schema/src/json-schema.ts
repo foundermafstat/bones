@@ -263,6 +263,8 @@ export const rigProjectJsonSchema = {
       properties: {
         time: { type: "number", minimum: 0 },
         type: { $ref: "#/$defs/nonEmptyString" },
+        category: { enum: ["gameplay", "audio", "vfx", "camera", "debug"] },
+        duration: { type: "number", minimum: 0 },
         payload: { type: "object" }
       }
     },

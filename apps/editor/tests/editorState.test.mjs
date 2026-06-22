@@ -20,6 +20,7 @@ import {
   createChangeCurveCommand,
   createCopyPoseCommand,
   createCopySelectedKeysCommand,
+  createDeleteTimelineEventCommand,
   createDeleteSelectedKeysCommand,
   createBindPartToBoneCommand,
   createDeleteBoneCommand,
@@ -491,16 +492,20 @@ test("timeline retime, reverse, normalize loop, events, and markers are undoable
   assert.ok(Object.values(normalized.project.animations.walk.tracks).every((keys) => keys.some((key) => Math.abs(key.time - normalized.project.animations.walk.duration) < 0.0001)));
 
   const marked = executeCommand(normalized, createAddTimelineMarkerCommand("walk", { id: "breakdown", time: 0.5, label: "Breakdown" }));
-  const evented = executeCommand(marked, createAddTimelineEventCommand("walk", { id: "cue", time: 0.5, type: "cue" }));
-  const footstep = executeCommand(evented, createAddTimelineEventCommand("walk", { id: "footstep", time: 0.25, type: "footstep", payload: { foot: "front" } }));
+  const evented = executeCommand(marked, createAddTimelineEventCommand("walk", { id: "cue", time: 0.5, type: "cue", category: "debug" }));
+  const footstep = executeCommand(evented, createAddTimelineEventCommand("walk", { id: "footstep", time: 0.25, type: "footstep", category: "audio", payload: { foot: "front" } }));
+  const attack = executeCommand(footstep, createAddTimelineEventCommand("walk", { id: "attack", time: 0.4, type: "attackWindow", category: "gameplay", duration: 0.18, payload: { phase: "active" } }));
+  const deletedAttack = executeCommand(attack, createDeleteTimelineEventCommand("walk", "attack"));
   assert.ok(evented.project.animations.walk.markers.some((marker) => marker.id === "breakdown"));
   assert.ok(evented.project.animations.walk.events.some((event) => event.id === "cue"));
   assert.deepEqual(footstep.project.animations.walk.events.find((event) => event.id === "footstep")?.payload, { foot: "front" });
+  assert.equal(attack.project.animations.walk.events.find((event) => event.id === "attack")?.duration, 0.18);
+  assert.equal(deletedAttack.project.animations.walk.events.some((event) => event.id === "attack"), false);
 
-  const undone = undo(footstep);
-  assert.equal(undone.project.animations.walk.events.some((event) => event.id === "footstep"), false);
-  const undoneCue = undo(undone);
-  assert.equal(undoneCue.project.animations.walk.events.some((event) => event.id === "cue"), false);
+  const restoredAttack = undo(deletedAttack);
+  assert.equal(restoredAttack.project.animations.walk.events.find((event) => event.id === "attack")?.category, "gameplay");
+  const undoneAttack = undo(restoredAttack);
+  assert.equal(undoneAttack.project.animations.walk.events.some((event) => event.id === "attack"), false);
 });
 
 test("curve presets, tangents, and preview state are undoable", () => {

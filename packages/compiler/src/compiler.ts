@@ -160,11 +160,13 @@ function compileAnimationClip(
     loop: clip.loop ?? false,
     tracks: tracks.map((track) => compileTrack(track, trackLookup, lookups)),
     trackLookup,
-    events: sortEvents(clip.events ?? []).map((event) => ({
-      time: event.time,
-      type: event.type,
-      ...(event.payload ? { payload: event.payload as unknown as JsonValue } : {})
-    }))
+        events: sortEvents(clip.events ?? []).map((event) => ({
+          time: event.time,
+          type: event.type,
+          ...(event.category ? { category: event.category } : {}),
+          ...(event.duration !== undefined ? { duration: event.duration } : {}),
+          ...(event.payload ? { payload: event.payload as unknown as JsonValue } : {})
+        }))
   };
 }
 

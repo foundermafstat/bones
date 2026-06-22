@@ -43,6 +43,7 @@ export class RigInstance {
   private readonly procedural: ProceduralLayerStack | undefined;
   private readonly constraints: ConstraintSolver | undefined;
   private readonly animationEventListeners = new Set<(event: RuntimeAnimationEventDispatch) => void>();
+  private readonly eventHistory: RuntimeAnimationEventDispatch[] = [];
   private activeClip: number | undefined;
   private activeTransition: number | undefined;
 
@@ -134,7 +135,7 @@ export class RigInstance {
     if (constraintSample) {
       this.applySampleValues(constraintSample, true);
     }
-    this.emitAnimationEvents(this.mixer.events);
+    const emittedEvents = this.emitAnimationEvents(this.mixer.events);
 
     return {
       elapsed: this.elapsed,
@@ -152,7 +153,8 @@ export class RigInstance {
       constraintValues: constraintSample?.values.length ?? 0,
       activeLayers: this.getActiveLayers(state),
       ...(state ? { stateMachine: toRigStateMachineUpdate(state, this.mixer.transitionWeight) } : {}),
-      events: this.mixer.events.length ? this.mixer.events.map(copyRuntimeEventDispatch) : this.emptyEvents
+      events: emittedEvents.length ? emittedEvents : this.emptyEvents,
+      eventHistory: this.eventHistory.length ? this.eventHistory.map(copyRuntimeEventDispatch) : this.emptyEvents
     };
   }
 
@@ -291,15 +293,21 @@ export class RigInstance {
     }
   }
 
-  private emitAnimationEvents(events: readonly RuntimeAnimationEventDispatch[]): void {
-    if (!events.length || !this.animationEventListeners.size) {
-      return;
+  private emitAnimationEvents(events: readonly RuntimeAnimationEventDispatch[]): readonly RuntimeAnimationEventDispatch[] {
+    if (!events.length) {
+      return this.emptyEvents;
+    }
+    const emitted = events.map(copyRuntimeEventDispatch);
+    this.eventHistory.push(...emitted);
+    if (this.eventHistory.length > 32) {
+      this.eventHistory.splice(0, this.eventHistory.length - 32);
     }
     for (const event of events) {
       for (const listener of this.animationEventListeners) {
         listener(event);
       }
     }
+    return emitted;
   }
 
   private buildHierarchy(): void {
@@ -386,6 +394,8 @@ function copyRuntimeEventDispatch(event: RuntimeAnimationEventDispatch): Runtime
   return {
     time: event.time,
     type: event.type,
+    ...(event.category ? { category: event.category } : {}),
+    ...(event.duration !== undefined ? { duration: event.duration } : {}),
     ...(event.payload !== undefined ? { payload: event.payload } : {}),
     clip: event.clip,
     localTime: event.localTime,

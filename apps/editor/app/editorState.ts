@@ -113,6 +113,8 @@ export interface TimelineEvent {
   readonly id: string;
   readonly time: number;
   readonly type: string;
+  readonly category?: "gameplay" | "audio" | "vfx" | "camera" | "debug";
+  readonly duration?: number;
   readonly payload?: Readonly<Record<string, JsonValue>>;
 }
 
@@ -1554,6 +1556,23 @@ export function createAddTimelineEventCommand(clipId: string, event: TimelineEve
     label: "Add timeline event",
     do: (state) => updateClip(state, clipId, (clip) => ({ ...clip, events: [...clip.events.filter((item) => item.id !== event.id), event].sort((a, b) => a.time - b.time) })),
     undo: (state) => updateClip(state, clipId, (clip) => ({ ...clip, events: clip.events.filter((item) => item.id !== event.id) }))
+  };
+}
+
+export function createDeleteTimelineEventCommand(clipId: string, eventId: string): EditorCommand {
+  let previous: TimelineEvent | undefined;
+  return {
+    id: `timeline-event-delete:${clipId}:${eventId}`,
+    label: "Delete timeline event",
+    do: (state) =>
+      updateClip(state, clipId, (clip) => {
+        previous = previous ?? clip.events.find((item) => item.id === eventId);
+        return { ...clip, events: clip.events.filter((item) => item.id !== eventId) };
+      }),
+    undo: (state) =>
+      previous
+        ? updateClip(state, clipId, (clip) => ({ ...clip, events: [...clip.events.filter((item) => item.id !== eventId), previous!].sort((a, b) => a.time - b.time) }))
+        : state
   };
 }
 

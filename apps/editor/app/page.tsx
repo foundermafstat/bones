@@ -73,6 +73,7 @@ import {
   createSetKeyframeTangentsCommand,
   createAddTimelineEventCommand,
   createAddTimelineMarkerCommand,
+  createDeleteTimelineEventCommand,
   createAnimationClipCommand,
   createCopySelectedKeysCommand,
   createDeleteSelectedKeysCommand,
@@ -121,6 +122,7 @@ import { PixiPreview } from "./PixiPreview";
 import { inspectSvgVector, vectorizeSvgPart } from "./editorVectorImport";
 import { parseLdtkLevel } from "@bones/ldtk-adapter";
 import { createInitialControllerState, toAnimationParameters, updatePlatformerController } from "@bones/platformer-preview";
+import type { JsonValue } from "@bones/schema";
 import type { QualityPresetName, RuntimeProfilerStats } from "@bones/runtime-pixi";
 
 const modes = ["Rig", "Shape", "Pose", "Timeline", "Curve", "State Machine", "Procedural", "Preview"] as const;
@@ -420,6 +422,22 @@ export default function EditorPage() {
     [editorState.project.stateMachine, platformerDebug.params]
   );
   const previewEvents = activeClip?.events ?? [];
+  const addTimelineEventPreset = (type: string, category: "gameplay" | "audio" | "vfx" | "camera" | "debug", payload?: Readonly<Record<string, JsonValue>>, duration?: number) => {
+    if (!activeClip) {
+      return;
+    }
+    const eventTime = clampPanelSize(timelineCurrentTime, 0, activeClip.duration);
+    runCommand(
+      createAddTimelineEventCommand(activeClip.id, {
+        id: `${activeClip.id}-${type}-${activeClip.events.length}`,
+        time: eventTime,
+        type,
+        category,
+        ...(duration !== undefined ? { duration: Math.min(duration, Math.max(0, activeClip.duration - eventTime)) } : {}),
+        ...(payload ? { payload } : {})
+      })
+    );
+  };
   const runCommand = (command: Parameters<typeof executeCommand>[1]) => {
     setLastCommand(command.label);
     setEditorState((state) => executeCommand(state, command));
@@ -1099,7 +1117,7 @@ export default function EditorPage() {
                     </div>
                     <div>
                       <p className="font-medium">Events</p>
-                      <p className="text-muted-foreground">{previewEvents.map((event) => `${event.type}@${event.time.toFixed(2)}`).join(", ") || "none"}</p>
+                      <p className="text-muted-foreground">{previewEvents.map((event) => `${event.category ?? "debug"}:${event.type}@${event.time.toFixed(2)}${event.duration ? `+${event.duration.toFixed(2)}` : ""}`).join(", ") || "none"}</p>
                       <p className="text-muted-foreground">records {previewRecords.length}</p>
                       <p className="text-muted-foreground">colliders {platformerDebug.state.debug.activeColliders.length} / death {String(platformerDebug.state.debug.touchedDeathZone)}</p>
                       <p className="text-muted-foreground">camera {platformerDebug.state.cameraX.toFixed(0)}, {platformerDebug.state.cameraY.toFixed(0)}</p>
@@ -2387,14 +2405,20 @@ export default function EditorPage() {
               <Button size="sm" type="button" variant="outline" onClick={() => activeClip && runCommand(createAddTimelineMarkerCommand(activeClip.id, { id: `${activeClip.id}-marker-${activeClip.markers.length}`, time: activeClip.duration * 0.5, label: "Breakdown", color: "#f59e0b" }))} disabled={!activeClip}>
                 Marker
               </Button>
-              <Button size="sm" type="button" variant="outline" onClick={() => activeClip && runCommand(createAddTimelineEventCommand(activeClip.id, { id: `${activeClip.id}-event-${activeClip.events.length}`, time: activeClip.duration * 0.5, type: "cue" }))} disabled={!activeClip}>
+              <Button size="sm" type="button" variant="outline" onClick={() => activeClip && runCommand(createAddTimelineEventCommand(activeClip.id, { id: `${activeClip.id}-event-${activeClip.events.length}`, time: activeClip.duration * 0.5, type: "cue", category: "debug" }))} disabled={!activeClip}>
                 Event
               </Button>
-              <Button size="sm" type="button" variant="outline" onClick={() => activeClip && runCommand(createAddTimelineEventCommand(activeClip.id, { id: `${activeClip.id}-footstep-${activeClip.events.length}`, time: timelineCurrentTime, type: "footstep", payload: { foot: timelineTargetId.includes("Back") ? "back" : "front" } }))} disabled={!activeClip}>
+              <Button size="sm" type="button" variant="outline" onClick={() => addTimelineEventPreset("footstep", "audio", { foot: timelineTargetId.includes("Back") ? "back" : "front" })} disabled={!activeClip}>
                 Footstep
               </Button>
-              <Button size="sm" type="button" variant="outline" onClick={() => activeClip && runCommand(createAddTimelineEventCommand(activeClip.id, { id: `${activeClip.id}-land-${activeClip.events.length}`, time: timelineCurrentTime, type: "land", payload: { strength: 1 } }))} disabled={!activeClip}>
+              <Button size="sm" type="button" variant="outline" onClick={() => addTimelineEventPreset("land", "gameplay", { strength: 1 })} disabled={!activeClip}>
                 Land
+              </Button>
+              <Button size="sm" type="button" variant="outline" onClick={() => addTimelineEventPreset("dust", "vfx", { side: timelineTargetId.includes("Back") ? "back" : "front" })} disabled={!activeClip}>
+                Dust
+              </Button>
+              <Button size="sm" type="button" variant="outline" onClick={() => addTimelineEventPreset("attackWindow", "gameplay", { phase: "active" }, 0.18)} disabled={!activeClip}>
+                Attack
               </Button>
               <Button size="sm" type="button" variant="outline" onClick={() => activeClip && runCommand(createSelectTrackKeysCommand(activeClip.id, timelineTrackId))} disabled={!activeClip}>
                 Select Track
@@ -2423,6 +2447,38 @@ export default function EditorPage() {
               <span className="text-xs text-muted-foreground">{selectedTimelineTrackId}</span>
               <Input className="h-7 w-20 text-xs" type="number" step="0.01" value={selectedTimelineKey.time} onChange={(event) => activeClip && runCommand(createUpdateKeyframeCommand(activeClip.id, selectedTimelineTrackId, selectedTimelineKey.id, { time: Number(event.target.value) }))} aria-label="Selected key time" />
               <Input className="h-7 w-20 text-xs" type="number" step="0.01" value={selectedTimelineKey.value} onChange={(event) => activeClip && runCommand(createUpdateKeyframeCommand(activeClip.id, selectedTimelineTrackId, selectedTimelineKey.id, { value: Number(event.target.value) }))} aria-label="Selected key value" />
+            </div>
+          ) : null}
+          {activeClip ? (
+            <div className="grid min-h-7 grid-cols-[140px_minmax(420px,1fr)] items-center rounded-md border border-emerald-200 bg-emerald-50" aria-label="Timeline event lane">
+              <span className="truncate pl-2 text-xs font-medium text-emerald-800">events</span>
+              <div className="relative h-full min-h-7 overflow-hidden rounded-r-md">
+                <span className="absolute bottom-0 top-0 z-10 w-px bg-primary/50" style={{ left: `${(clampPanelSize(timelineCurrentTime, 0, activeClip.duration) / Math.max(0.001, activeClip.duration)) * 100}%` }} />
+                {activeClip.events.map((timelineEvent) => {
+                  const duration = Math.max(0.001, activeClip.duration);
+                  const left = (clampPanelSize(timelineEvent.time, 0, activeClip.duration) / duration) * 100;
+                  const width = timelineEvent.duration ? Math.max(1, (timelineEvent.duration / duration) * 100) : 0;
+
+                  return (
+                    <Tooltip key={timelineEvent.id}>
+                      <TooltipTrigger asChild>
+                        <button
+                          className="absolute top-1/2 z-20 h-4 min-w-4 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-emerald-700 bg-emerald-500 text-[9px] text-white"
+                          style={{ left: `${left}%`, width: width ? `${width}%` : undefined }}
+                          type="button"
+                          aria-label={`Delete event ${timelineEvent.id}`}
+                          onClick={() => runCommand(createDeleteTimelineEventCommand(activeClip.id, timelineEvent.id))}
+                        >
+                          {timelineEvent.type.slice(0, 1)}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent className="pointer-events-none">
+                        {timelineEvent.category ?? "debug"}:{timelineEvent.type}@{timelineEvent.time.toFixed(2)}{timelineEvent.duration ? ` +${timelineEvent.duration.toFixed(2)}` : ""}
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })}
+              </div>
             </div>
           ) : null}
           {activeClip ? visibleTimelineTracks.map((track) => {

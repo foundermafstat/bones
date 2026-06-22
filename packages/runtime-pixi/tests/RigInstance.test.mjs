@@ -398,7 +398,7 @@ test("update queues and emits animation events through subscriptions", () => {
     animations: [
       {
         ...transformClip(0, "transform.x", 12, 12),
-        events: [{ time: 0.2, type: "dust", payload: { side: "left" } }]
+        events: [{ time: 0.2, type: "dust", category: "vfx", duration: 0.1, payload: { side: "left" } }]
       }
     ]
   });
@@ -410,10 +410,13 @@ test("update queues and emits animation events through subscriptions", () => {
   instance.update(1, {});
 
   assert.equal(state.events.length, 1);
+  assert.equal(state.eventHistory.length, 1);
   assert.deepEqual(received, [
     {
       time: 0.2,
       type: "dust",
+      category: "vfx",
+      duration: 0.1,
       payload: { side: "left" },
       clip: 0,
       localTime: 0.2,

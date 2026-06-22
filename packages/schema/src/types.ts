@@ -182,8 +182,12 @@ export interface Keyframe {
 export interface AnimationEvent {
   readonly time: number;
   readonly type: string;
+  readonly category?: AnimationEventCategory;
+  readonly duration?: number;
   readonly payload?: Readonly<Record<string, JsonValue>>;
 }
+
+export type AnimationEventCategory = "gameplay" | "audio" | "vfx" | "camera" | "debug";
 
 export interface TimelineMarker {
   readonly id: string;

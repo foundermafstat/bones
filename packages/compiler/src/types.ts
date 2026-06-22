@@ -108,6 +108,8 @@ export interface CompiledKeyframeV1 {
 export interface CompiledAnimationEventV1 {
   readonly time: number;
   readonly type: string;
+  readonly category?: "gameplay" | "audio" | "vfx" | "camera" | "debug";
+  readonly duration?: number;
   readonly payload?: JsonValue;
 }
 

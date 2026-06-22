@@ -485,6 +485,15 @@ function validateAnimationEvent(input: unknown, path: string, duration: unknown,
     errors.push({ path: `${path}.time`, message: "Animation event time cannot exceed clip duration." });
   }
   expectNonEmptyString(input.type, `${path}.type`, errors);
+  if (input.category !== undefined && !["gameplay", "audio", "vfx", "camera", "debug"].includes(String(input.category))) {
+    errors.push({ path: `${path}.category`, message: "Animation event category must be gameplay, audio, vfx, camera, or debug." });
+  }
+  if (input.duration !== undefined) {
+    expectNumber(input.duration, `${path}.duration`, errors, { min: 0 });
+  }
+  if (typeof input.time === "number" && typeof input.duration === "number" && typeof duration === "number" && input.time + input.duration > duration) {
+    errors.push({ path: `${path}.duration`, message: "Animation event window cannot exceed clip duration." });
+  }
   if (input.payload !== undefined && !isRecord(input.payload)) {
     errors.push({ path: `${path}.payload`, message: "Animation event payload must be an object." });
   }

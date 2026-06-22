@@ -130,6 +130,7 @@ export interface RigUpdateState {
   readonly activeLayers: readonly RigActiveAnimationLayer[];
   readonly stateMachine?: RigStateMachineUpdate;
   readonly events: readonly RuntimeAnimationEventDispatch[];
+  readonly eventHistory: readonly RuntimeAnimationEventDispatch[];
 }
 
 export interface RigSampledClipTime {
@@ -192,6 +193,8 @@ export interface RuntimeAnimationClip {
 export interface RuntimeAnimationEvent {
   readonly time: number;
   readonly type: string;
+  readonly category?: "gameplay" | "audio" | "vfx" | "camera" | "debug";
+  readonly duration?: number;
   readonly payload?: RuntimeSampleValue;
 }
 
