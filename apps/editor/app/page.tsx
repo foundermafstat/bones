@@ -998,7 +998,7 @@ export default function EditorPage() {
         <div className="flex min-w-0 items-center gap-2 overflow-visible">
           <div className="flex min-w-0 items-center gap-1 overflow-hidden" aria-label="Active mode actions">
             {activeToolbarActions.map((action) => (
-              <Button className="min-w-0 shrink px-2 text-xs" disabled={action.disabled ?? false} key={action.label} size="sm" type="button" variant={action.variant ?? "outline"} onClick={action.onClick}>
+              <Button className="min-w-0 shrink px-2 text-xs" disabled={action.disabled ?? false} key={action.label} size="sm" type="button" variant={action.variant ?? "outline"} aria-label={`${mode} toolbar ${action.label}`} onClick={action.onClick}>
                 <span className="truncate">{action.label}</span>
               </Button>
             ))}
@@ -1581,14 +1581,14 @@ export default function EditorPage() {
                         size="sm"
                         type="button"
                         variant="outline"
-                        aria-label="Add bone"
+                        aria-label="Rig inspector Add Bone"
                         disabled={!newBoneId.trim() || Boolean(editorState.project.bones[newBoneId.trim()])}
                         onClick={() => {
                           runCommand(createAddBoneCommand(newBoneParentId, newBoneId.trim()));
                           setIoStatus(`added bone ${newBoneId.trim()}`);
                         }}
                       >
-                        Add
+                        Add Bone
                       </Button>
                     </div>
                   </div>
@@ -1596,31 +1596,31 @@ export default function EditorPage() {
                     Delete impact: {childBoneCount} children / {boundPartCount} parts / {boundTrackCount} tracks / {poseRefCount} poses / {proceduralRefCount} procedural refs
                   </p>
                   <div className="grid grid-cols-2 gap-1">
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetParentCommand(selectedBone, "root"))} disabled={selectedBone === "root"}>
+                    <Button size="sm" type="button" variant="outline" aria-label="Rig Parent Root" onClick={() => runCommand(createSetParentCommand(selectedBone, "root"))} disabled={selectedBone === "root"}>
                       Parent Root
                     </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetParentCommand(selectedBone, "body"))} disabled={selectedBone === "root" || selectedBone === "body"}>
+                    <Button size="sm" type="button" variant="outline" aria-label="Rig Parent Body" onClick={() => runCommand(createSetParentCommand(selectedBone, "body"))} disabled={selectedBone === "root" || selectedBone === "body"}>
                       Parent Body
                     </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetBoneMetadataCommand(selectedBone, { locked: !selectedBoneMetadata.locked }))}>
+                    <Button size="sm" type="button" variant="outline" aria-label={selectedBoneMetadata.locked ? "Rig Unlock Bone" : "Rig Lock Bone"} onClick={() => runCommand(createSetBoneMetadataCommand(selectedBone, { locked: !selectedBoneMetadata.locked }))}>
                       {selectedBoneMetadata.locked ? "Unlock" : "Lock"}
                     </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetBoneMetadataCommand(selectedBone, { hidden: !selectedBoneMetadata.hidden }))}>
+                    <Button size="sm" type="button" variant="outline" aria-label={selectedBoneMetadata.hidden ? "Rig Show Bone" : "Rig Hide Bone"} onClick={() => runCommand(createSetBoneMetadataCommand(selectedBone, { hidden: !selectedBoneMetadata.hidden }))}>
                       {selectedBoneMetadata.hidden ? "Show" : "Hide"}
                     </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetBoneMetadataCommand(selectedBone, { mirrorGroup: selectedBone.includes("Front") ? "front" : "back" }))}>
+                    <Button size="sm" type="button" variant="outline" aria-label="Rig Mirror ID" onClick={() => runCommand(createSetBoneMetadataCommand(selectedBone, { mirrorGroup: selectedBone.includes("Front") ? "front" : "back" }))}>
                       Mirror ID
                     </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createMirrorBoneTransformCommand(selectedBone))}>
+                    <Button size="sm" type="button" variant="outline" aria-label="Rig Mirror Transform" onClick={() => runCommand(createMirrorBoneTransformCommand(selectedBone))}>
                       Mirror Transform
                     </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createMirrorBoneBranchCommand(selectedBone))}>
+                    <Button size="sm" type="button" variant="outline" aria-label="Rig Mirror Branch" onClick={() => runCommand(createMirrorBoneBranchCommand(selectedBone))}>
                       Mirror Branch
                     </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetBoneMetadataCommand(selectedBone, { tags: [...(selectedBoneMetadata.tags ?? []), "default-pose"] }))}>
+                    <Button size="sm" type="button" variant="outline" aria-label="Rig Tag Bone" onClick={() => runCommand(createSetBoneMetadataCommand(selectedBone, { tags: [...(selectedBoneMetadata.tags ?? []), "default-pose"] }))}>
                       Tag
                     </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetBoneMetadataCommand(selectedBone, { facing: selectedBoneMetadata.facing === -1 ? 1 : -1 }))}>
+                    <Button size="sm" type="button" variant="outline" aria-label="Rig Toggle Facing" onClick={() => runCommand(createSetBoneMetadataCommand(selectedBone, { facing: selectedBoneMetadata.facing === -1 ? 1 : -1 }))}>
                       Facing
                     </Button>
                   </div>
@@ -1852,7 +1852,7 @@ export default function EditorPage() {
                     <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createPoseFromCurrentCommand(`pose_${poseIds.length + 1}`, `Pose ${poseIds.length + 1}`, ["custom"]))}>
                       Capture
                     </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={() => selectedPose && runCommand(createRenamePoseCommand(selectedPose.id, `${selectedPose.name}*`))} disabled={!selectedPose}>
+                    <Button size="sm" type="button" variant="outline" aria-label="Pose Rename" onClick={() => selectedPose && runCommand(createRenamePoseCommand(selectedPose.id, `${selectedPose.name}*`))} disabled={!selectedPose}>
                       Rename
                     </Button>
                     <Button size="sm" type="button" variant="outline" onClick={() => selectedPose && runCommand(createDuplicatePoseCommand(selectedPose.id, `${selectedPose.id}_copy`))} disabled={!selectedPose}>
@@ -1867,7 +1867,7 @@ export default function EditorPage() {
                     <Button size="sm" type="button" variant="outline" disabled={!editorState.project.poseClipboard} onClick={() => runCommand(createPastePoseCommand(`pose_paste_${poseIds.length + 1}`))}>
                       Paste
                     </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={() => selectedPose && runCommand(createUpdatePoseTagsCommand(selectedPose.id, Array.from(new Set([...selectedPose.tags, "reviewed"]))))} disabled={!selectedPose}>
+                    <Button size="sm" type="button" variant="outline" aria-label="Pose Tag" onClick={() => selectedPose && runCommand(createUpdatePoseTagsCommand(selectedPose.id, Array.from(new Set([...selectedPose.tags, "reviewed"]))))} disabled={!selectedPose}>
                       Tag
                     </Button>
                     <Button size="sm" type="button" variant="outline" onClick={() => selectedPose && nextPose && runCommand(createBlendPoseCommand(selectedPose.id, nextPose.id, `${selectedPose.id}_${nextPose.id}_blend`, poseBlendWeight))} disabled={!selectedPose || !nextPose}>
