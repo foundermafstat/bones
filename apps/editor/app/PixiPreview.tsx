@@ -18,14 +18,16 @@ import { vectorizeSvgParts } from "./editorVectorImport";
 
 interface PixiPreviewProps {
   readonly clipId: number;
+  readonly compiledProject?: RuntimeCompiledRig | null;
   readonly playing: boolean;
   readonly project: EditorProjectState;
   readonly quality: QualityPresetName;
+  readonly runtimeMode: "source" | "compiled";
   readonly showSkeleton: boolean;
   readonly onProfilerStats?: (stats: RuntimeProfilerStats) => void;
 }
 
-export function PixiPreview({ clipId, playing, project, quality, showSkeleton, onProfilerStats }: PixiPreviewProps) {
+export function PixiPreview({ clipId, compiledProject, playing, project, quality, runtimeMode, showSkeleton, onProfilerStats }: PixiPreviewProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const stateRef = useRef({ clipId, playing, showSkeleton });
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +46,7 @@ export function PixiPreview({ clipId, playing, project, quality, showSkeleton, o
     async function mountPreview() {
       try {
         setError(null);
-        const [pixi, compiled] = await Promise.all([import("pixi.js"), compilePreviewRig(project)]);
+        const [pixi, compiled] = await Promise.all([import("pixi.js"), runtimeMode === "compiled" && compiledProject ? Promise.resolve(compiledProject) : compilePreviewRig(project)]);
         if (cancelled || !hostRef.current) {
           return;
         }
@@ -153,11 +155,11 @@ export function PixiPreview({ clipId, playing, project, quality, showSkeleton, o
       cleanup?.();
       host.replaceChildren();
     };
-  }, [onProfilerStats, project, quality]);
+  }, [compiledProject, onProfilerStats, project, quality, runtimeMode]);
 
   return (
     <>
-      <div className="pixiPreviewHost" ref={hostRef} aria-label="Compiled runtime rig preview" />
+      <div className="pixiPreviewHost" ref={hostRef} aria-label={runtimeMode === "compiled" ? "Compiled runtime rig preview" : "Editor source rig preview"} />
       {error ? (
         <div className="absolute left-3 top-3 max-w-md rounded-md border border-destructive/30 bg-background/95 px-3 py-2 text-xs text-destructive shadow-sm">
           {error}

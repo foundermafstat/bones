@@ -125,8 +125,9 @@ import { PixiPreview } from "./PixiPreview";
 import { inspectSvgVector, vectorizeSvgPart } from "./editorVectorImport";
 import { parseLdtkLevel } from "@bones/ldtk-adapter";
 import { createInitialControllerState, toAnimationParameters, updatePlatformerController } from "@bones/platformer-preview";
+import type { CompiledRigProjectV1 } from "@bones/compiler";
 import type { JsonValue } from "@bones/schema";
-import { evaluateRuntimeBudget, runtimePerformanceBudgets, type QualityPresetName, type RuntimeProfilerStats } from "@bones/runtime-pixi";
+import { evaluateRuntimeBudget, runtimePerformanceBudgets, type QualityPresetName, type RuntimeCompiledRig, type RuntimeProfilerStats } from "@bones/runtime-pixi";
 
 const modes = ["Rig", "Shape", "Pose", "Timeline", "Curve", "State Machine", "Procedural", "Preview"] as const;
 const stateMachineViewBox = { x: 0, y: 0, width: 640, height: 360 } as const;
@@ -270,6 +271,8 @@ export default function EditorPage() {
   const [previewScenario, setPreviewScenario] = useState<(typeof previewScenarios)[number]>("idle");
   const [previewRecords, setPreviewRecords] = useState<readonly { readonly scenario: string; readonly state: string; readonly params: Readonly<Record<string, unknown>> }[]>([]);
   const [previewQuality, setPreviewQuality] = useState<QualityPresetName>("medium");
+  const [previewRuntimeMode, setPreviewRuntimeMode] = useState<"source" | "compiled">("source");
+  const [compiledPreviewProject, setCompiledPreviewProject] = useState<RuntimeCompiledRig | null>(null);
   const [profilerStats, setProfilerStats] = useState<RuntimeProfilerStats | null>(null);
   const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
   const [dragPoint, setDragPoint] = useState<{ readonly index: number; readonly point: readonly [number, number] } | null>(null);
@@ -481,6 +484,8 @@ export default function EditorPage() {
   };
   const runCommand = (command: Parameters<typeof executeCommand>[1]) => {
     setLastCommand(command.label);
+    setCompiledPreviewProject(null);
+    setPreviewRuntimeMode("source");
     setEditorState((state) => executeCommand(state, command));
   };
   const commitStateNodePosition = (stateId: string, position: StateMachineNodePosition) => {
@@ -717,6 +722,8 @@ export default function EditorPage() {
   }, []);
   const replaceProject = (project: EditorProjectState, origin: ProjectOrigin, poseId = "") => {
     setEditorState({ project, history: { past: [], future: [] } });
+    setCompiledPreviewProject(null);
+    setPreviewRuntimeMode("source");
     setProjectOrigin(origin);
     setSelectedPoseId(poseId);
     setSelectedPartId(Object.keys(project.parts)[0] ?? "");
@@ -787,6 +794,34 @@ export default function EditorPage() {
       const report = createEmptyRuntimeParityReport([error instanceof Error ? error.message : "runtime parity failed"]);
       setRuntimeParityReport(report);
       setIoStatus(report.errors[0] ?? "runtime parity failed");
+    }
+  };
+  const loadCompiledRuntimePreview = async () => {
+    const bundle = lastExportBundle?.validation.ok ? lastExportBundle : await createProjectExportBundle(editorState.project);
+    setLastExportBundle(bundle);
+    if (!bundle.validation.ok) {
+      setRuntimeParityReport(createEmptyRuntimeParityReport(bundle.validation.errors));
+      setIoStatus("compiled preview blocked by export validation");
+      return;
+    }
+    try {
+      const compiledText = bundle.files["hero.compiled.json"];
+      if (!compiledText) {
+        throw new Error("missing hero.compiled.json");
+      }
+      const compiled = JSON.parse(compiledText) as CompiledRigProjectV1;
+      const sourceText = bundle.files["hero.source.rig.json"];
+      if (sourceText) {
+        setRuntimeParityReport(createRuntimeParityReport(JSON.parse(sourceText), compiled));
+      }
+      setCompiledPreviewProject(compiled as unknown as RuntimeCompiledRig);
+      setPreviewRuntimeMode("compiled");
+      setMode("Preview");
+      setIoStatus("compiled runtime loaded into preview");
+    } catch (error) {
+      const report = createEmptyRuntimeParityReport([error instanceof Error ? error.message : "compiled preview load failed"]);
+      setRuntimeParityReport(report);
+      setIoStatus(report.errors[0] ?? "compiled preview load failed");
     }
   };
   const updateSelectedTimelineEventPayload = () => {
@@ -1262,11 +1297,17 @@ export default function EditorPage() {
             </div>
           </CardHeader>
           <CardContent className="relative min-h-0 flex-1 overflow-hidden bg-[linear-gradient(var(--border)_1px,transparent_1px),linear-gradient(90deg,var(--border)_1px,transparent_1px)] bg-[size:24px_24px] p-0" aria-label="PixiJS canvas viewport">
-            <PixiPreview clipId={previewClipId} playing={previewPlaying} project={editorState.project} quality={previewQuality} showSkeleton={mode !== "Preview" && mode !== "Rig"} onProfilerStats={setProfilerStats} />
+            <PixiPreview clipId={previewClipId} compiledProject={compiledPreviewProject} playing={previewPlaying} project={editorState.project} quality={previewQuality} runtimeMode={previewRuntimeMode} showSkeleton={mode !== "Preview" && mode !== "Rig"} onProfilerStats={setProfilerStats} />
             {mode === "Preview" ? (
               <div className="absolute inset-0 z-20 pointer-events-none">
                 <div className="pointer-events-auto absolute left-3 top-3 grid w-[min(560px,calc(100%-24px))] gap-2 rounded-md border bg-card/95 p-3 shadow-sm" aria-label="Gameplay preview overlay">
                   <div className="flex flex-wrap items-center gap-1">
+                    <Button size="sm" type="button" variant={previewRuntimeMode === "source" ? "default" : "outline"} onClick={() => setPreviewRuntimeMode("source")}>
+                      Editor Source
+                    </Button>
+                    <Button size="sm" type="button" variant={previewRuntimeMode === "compiled" ? "default" : "outline"} disabled={!compiledPreviewProject} onClick={() => setPreviewRuntimeMode("compiled")}>
+                      Compiled Runtime
+                    </Button>
                     {previewScenarios.map((scenario, index) => (
                       <Button
                         key={scenario}
@@ -1311,10 +1352,14 @@ export default function EditorPage() {
                     >
                       Replay
                     </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => void loadCompiledRuntimePreview()}>
+                      Load Compiled
+                    </Button>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div>
                       <p className="font-medium">State {platformerDebug.state.animationState}</p>
+                      <p className="text-muted-foreground">Runtime {previewRuntimeMode === "compiled" ? "compiled export" : "editor source"}</p>
                       <p className="text-muted-foreground">Clip {previewClips[previewClipId]?.name ?? "Unknown"} / transition {previewStateMachineSimulation.transitionId ?? "none"} {previewStateMachineSimulation.transitionWeight.toFixed(2)}</p>
                       <p className="text-muted-foreground">Params absSpeed {platformerDebug.params.absSpeed} velocityY {platformerDebug.params.velocityY}</p>
                       <p className="text-muted-foreground">grounded {String(platformerDebug.params.grounded)} landing {platformerDebug.params.landingImpact}</p>
