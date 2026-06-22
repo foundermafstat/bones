@@ -120,7 +120,7 @@ import {
   type StateMachineNodePosition,
   type TimelineEvent
 } from "./editorState";
-import { createProjectExportBundle, EDITOR_DRAFT_KEY, EDITOR_DRAFT_META_KEY, loadDraft, loadDraftMeta, parseImportedProject, saveDraft, serializeEditorProject, type DraftMetadata, type ProjectExportBundle, type ProjectImportResult } from "./projectIo";
+import { createProjectExportBundle, createRuntimeParityReport, EDITOR_DRAFT_KEY, EDITOR_DRAFT_META_KEY, loadDraft, loadDraftMeta, parseImportedProject, saveDraft, serializeEditorProject, type DraftMetadata, type ProjectExportBundle, type ProjectImportResult, type RuntimeParityReport } from "./projectIo";
 import { PixiPreview } from "./PixiPreview";
 import { inspectSvgVector, vectorizeSvgPart } from "./editorVectorImport";
 import { parseLdtkLevel } from "@bones/ldtk-adapter";
@@ -251,6 +251,15 @@ function InspectorSection({ children, title }: { children: ReactNode; title: str
   );
 }
 
+function createEmptyRuntimeParityReport(errors: readonly string[]): RuntimeParityReport {
+  return {
+    ok: false,
+    errors,
+    warnings: [],
+    summary: { bones: 0, parts: 0, animations: 0, tracks: 0, states: 0 }
+  };
+}
+
 export default function EditorPage() {
   const [mode, setMode] = useState<EditorMode>("Rig");
   const [leftPanelWidth, setLeftPanelWidth] = useState(220);
@@ -321,6 +330,7 @@ export default function EditorPage() {
   const [confirmDeleteBoneId, setConfirmDeleteBoneId] = useState("");
   const [availableDraft, setAvailableDraft] = useState<DraftMetadata | null>(null);
   const [lastExportBundle, setLastExportBundle] = useState<ProjectExportBundle | null>(null);
+  const [runtimeParityReport, setRuntimeParityReport] = useState<RuntimeParityReport | null>(null);
   const [pendingImport, setPendingImport] = useState<ProjectImportResult | null>(null);
   const [editorState, setEditorState] = useState<EditorStateContainer>({
     project: initialEditorProject,
@@ -742,6 +752,7 @@ export default function EditorPage() {
   const exportBundle = async () => {
     const bundle = await createProjectExportBundle(editorState.project);
     setLastExportBundle(bundle);
+    setRuntimeParityReport(null);
     if (!bundle.validation.ok) {
       setIoStatus(bundle.validation.errors.join("; "));
       return;
@@ -752,6 +763,30 @@ export default function EditorPage() {
       setIoStatus(`copied ${json.length} bytes / ${Object.keys(bundle.files).length} files`);
     } catch {
       setIoStatus(`export ready (${Object.keys(bundle.files).length} files); clipboard permission denied`);
+    }
+  };
+  const runRuntimeParityCheck = async () => {
+    const bundle = lastExportBundle?.validation.ok ? lastExportBundle : await createProjectExportBundle(editorState.project);
+    setLastExportBundle(bundle);
+    if (!bundle.validation.ok) {
+      const report = createEmptyRuntimeParityReport(bundle.validation.errors);
+      setRuntimeParityReport(report);
+      setIoStatus("runtime parity blocked by export validation");
+      return;
+    }
+    try {
+      const sourceText = bundle.files["hero.source.rig.json"];
+      const compiledText = bundle.files["hero.compiled.json"];
+      if (!sourceText || !compiledText) {
+        throw new Error("runtime parity requires hero.source.rig.json and hero.compiled.json");
+      }
+      const report = createRuntimeParityReport(JSON.parse(sourceText), JSON.parse(compiledText));
+      setRuntimeParityReport(report);
+      setIoStatus(report.ok ? `runtime parity ok: ${report.summary.bones} bones / ${report.summary.tracks} tracks` : `runtime parity failed: ${report.errors[0] ?? "unknown mismatch"}`);
+    } catch (error) {
+      const report = createEmptyRuntimeParityReport([error instanceof Error ? error.message : "runtime parity failed"]);
+      setRuntimeParityReport(report);
+      setIoStatus(report.errors[0] ?? "runtime parity failed");
     }
   };
   const updateSelectedTimelineEventPayload = () => {
@@ -1794,10 +1829,19 @@ export default function EditorPage() {
                     <Button size="sm" type="button" variant="outline" onClick={() => void copyExportFile("hero.compiled.json")} disabled={!lastExportBundle?.files["hero.compiled.json"]}>
                       Copy Compiled
                     </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => void runRuntimeParityCheck()}>
+                      Runtime Parity
+                    </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {lastExportBundle ? (lastExportBundle.validation.ok ? `${exportFileEntries.length} files ready` : "validation failed") : "not built"}
                   </p>
+                  {runtimeParityReport ? (
+                    <div className={`grid gap-1 rounded-md px-2 py-1 text-xs ${runtimeParityReport.ok ? "bg-emerald-50 text-emerald-700" : "bg-destructive/10 text-destructive"}`}>
+                      <span>{runtimeParityReport.ok ? "Runtime parity ok" : "Runtime parity failed"}</span>
+                      <span>{runtimeParityReport.summary.bones} bones / {runtimeParityReport.summary.parts} parts / {runtimeParityReport.summary.animations} clips / {runtimeParityReport.summary.tracks} tracks / {runtimeParityReport.summary.states} states</span>
+                    </div>
+                  ) : null}
                   {lastExportBundle?.summary ? (
                     <div className="grid gap-1 rounded-md bg-muted px-2 py-1 text-xs">
                       <span>Profile: {lastExportBundle.summary.profile}</span>
@@ -1809,7 +1853,13 @@ export default function EditorPage() {
                   {lastExportBundle?.validation.errors.map((error) => (
                     <p className="text-xs text-destructive" key={error}>{error}</p>
                   ))}
+                  {runtimeParityReport?.errors.map((error) => (
+                    <p className="text-xs text-destructive" key={error}>{error}</p>
+                  ))}
                   {lastExportBundle?.validation.warnings.map((warning) => (
+                    <p className="text-xs text-amber-600" key={warning}>{warning}</p>
+                  ))}
+                  {runtimeParityReport?.warnings.map((warning) => (
                     <p className="text-xs text-amber-600" key={warning}>{warning}</p>
                   ))}
                   <div className="grid gap-1">

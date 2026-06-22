@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -73,7 +74,7 @@ import {
   rollbackProjectTransaction,
   undo
 } from "../app/editorState.ts";
-import { EDITOR_DRAFT_KEY, EDITOR_DRAFT_META_KEY, loadDraftMeta, saveDraft, serializeEditorProject } from "../app/projectIo.ts";
+import { createProjectExportBundle, createRuntimeParityReport, EDITOR_DRAFT_KEY, EDITOR_DRAFT_META_KEY, loadDraftMeta, saveDraft, serializeEditorProject } from "../app/projectIo.ts";
 import { vectorizeSvgPart } from "../app/editorVectorImport.ts";
 
 function freshContainer(project = structuredClone(initialEditorProject)) {
@@ -480,6 +481,19 @@ test("timeline empty draft tracks do not break source serialization", () => {
   assert.ok(draftWalk);
   assert.deepEqual(draftWalk.tracks, []);
   assert.equal(withEmptyTrack.project.animations.draftWalk.tracks["body.scaleY"].length, 0);
+});
+
+test("production export has compiled runtime parity", async () => {
+  const bundle = await createProjectExportBundle(structuredClone(initialEditorProject), (assetPath) => readFile(new URL(`../public${assetPath}`, import.meta.url), "utf8"));
+  assert.equal(bundle.validation.ok, true);
+  const source = JSON.parse(bundle.files["hero.source.rig.json"]);
+  const compiled = JSON.parse(bundle.files["hero.compiled.json"]);
+  const report = createRuntimeParityReport(source, compiled);
+
+  assert.equal(source.rigs[0].parts.some((part) => part.type === "svg"), false);
+  assert.equal(report.ok, true);
+  assert.equal(report.summary.bones, source.rigs[0].bones.length);
+  assert.equal(report.summary.parts, source.rigs[0].parts.length);
 });
 
 test("timeline can set a keyed value at the current time without duplicates", () => {

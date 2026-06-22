@@ -59,6 +59,19 @@ export interface ProjectReleaseManifest {
   readonly files: Readonly<Record<string, { readonly bytes: number; readonly sha256: string; readonly encoding?: "utf8" | "base64-gzip" }>>;
 }
 
+export interface RuntimeParityReport {
+  readonly ok: boolean;
+  readonly errors: readonly string[];
+  readonly warnings: readonly string[];
+  readonly summary: {
+    readonly bones: number;
+    readonly parts: number;
+    readonly animations: number;
+    readonly tracks: number;
+    readonly states: number;
+  };
+}
+
 export interface ProjectImportResult {
   readonly project?: EditorProjectState;
   readonly errors: readonly string[];
@@ -102,6 +115,73 @@ export function parseImportedProject(json: string): ProjectImportResult {
     const message = error instanceof SyntaxError ? `Malformed JSON: ${error.message}` : error instanceof Error ? error.message : "Unknown import error";
     return { errors: [message] };
   }
+}
+
+export function createRuntimeParityReport(source: RigProject, compiled: CompiledRigProjectV1): RuntimeParityReport {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const sourceRig = source.rigs[0];
+  const sourceAnimations = source.animations ?? [];
+  const sourceStateMachines = source.stateMachines ?? [];
+  const sourceTracks = sourceAnimations.reduce((count, clip) => count + clip.tracks.length, 0);
+  const compiledTracks = compiled.animations.reduce((count, clip) => count + clip.tracks.length, 0);
+  const sourceStates = sourceStateMachines.reduce((count, machine) => count + machine.states.length, 0);
+  const compiledStates = compiled.stateMachines.reduce((count, machine) => count + machine.states.length, 0);
+
+  if (!sourceRig) {
+    errors.push("Source export has no rig.");
+  } else {
+    compareParityCount("bones", sourceRig.bones.length, compiled.rig.bones.length, errors);
+    compareParityCount("parts", sourceRig.parts?.length ?? 0, compiled.rig.parts.length, errors);
+    for (const bone of sourceRig.bones) {
+      if (compiled.lookups.bones[bone.id] === undefined) {
+        errors.push(`Compiled lookup misses bone '${bone.id}'.`);
+      }
+    }
+    for (const part of sourceRig.parts ?? []) {
+      if (part.type === "svg") {
+        errors.push(`Runtime parity source still contains SVG part '${part.id}'.`);
+      }
+      if (compiled.lookups.parts[part.id] === undefined) {
+        errors.push(`Compiled lookup misses part '${part.id}'.`);
+      }
+    }
+  }
+  compareParityCount("animations", sourceAnimations.length, compiled.animations.length, errors);
+  compareParityCount("tracks", sourceTracks, compiledTracks, errors);
+  compareParityCount("states", sourceStates, compiledStates, errors);
+  for (const clip of sourceAnimations) {
+    if (compiled.lookups.animations[clip.id] === undefined) {
+      errors.push(`Compiled lookup misses animation '${clip.id}'.`);
+    }
+  }
+  for (const machine of sourceStateMachines) {
+    if (compiled.lookups.stateMachines[machine.id] === undefined) {
+      errors.push(`Compiled lookup misses state machine '${machine.id}'.`);
+    }
+  }
+  if (compiled.rig.parts.some((part) => part.type === "svg" || Boolean(part.svg))) {
+    errors.push("Compiled runtime still contains SVG part payloads.");
+  }
+  if (JSON.stringify(compiled).includes("\"editor\"")) {
+    errors.push("Compiled runtime contains editor metadata.");
+  }
+  if (source.rigs.length > 1) {
+    warnings.push("Runtime parity report currently compares the first rig used by the compiler.");
+  }
+
+  return {
+    ok: errors.length === 0,
+    errors,
+    warnings,
+    summary: {
+      bones: compiled.rig.bones.length,
+      parts: compiled.rig.parts.length,
+      animations: compiled.animations.length,
+      tracks: compiledTracks,
+      states: compiledStates
+    }
+  };
 }
 
 export async function createProjectExportBundle(project: EditorProjectState, loadText?: (assetPath: string) => Promise<string>, options: ProjectExportOptions = {}): Promise<ProjectExportBundle> {
@@ -198,6 +278,12 @@ function validateProductionExport(source: RigProject, compiled: CompiledRigProje
     errors.push("Compiled export contains editor metadata.");
   }
   return { errors, warnings };
+}
+
+function compareParityCount(label: string, sourceCount: number, compiledCount: number, errors: string[]): void {
+  if (sourceCount !== compiledCount) {
+    errors.push(`Runtime parity mismatch for ${label}: source ${sourceCount}, compiled ${compiledCount}.`);
+  }
 }
 
 async function createReleaseManifest(source: RigProject, compiled: CompiledRigProjectV1, files: Readonly<Record<string, string>>, profile: ExportProfile): Promise<ProjectReleaseManifest> {
