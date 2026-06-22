@@ -572,36 +572,15 @@ export function createAddBoneCommand(parentId: string, boneId: string): EditorCo
 }
 
 export function createDeleteBoneCommand(boneId: string): EditorCommand {
-  let previous:
-    | {
-        readonly bone?: BoneTransform;
-        readonly parent?: string | null;
-        readonly metadata?: BoneMetadata;
-        readonly hierarchy: readonly string[];
-      }
-    | undefined;
+  let previous: EditorProjectState | undefined;
   return {
     id: `delete-bone:${boneId}`,
     label: "Delete bone",
     do: (state) => {
-      previous = {
-        ...(state.bones[boneId] ? { bone: state.bones[boneId] } : {}),
-        parent: state.parents[boneId] ?? null,
-        ...(state.boneMetadata[boneId] ? { metadata: state.boneMetadata[boneId] } : {}),
-        hierarchy: state.hierarchy
-      };
+      previous = state;
       return removeBone(state, boneId, state.parents[boneId] ?? "root");
     },
-    undo: (state) =>
-      previous?.bone
-        ? {
-            ...markDirty(state, boneId, "bones"),
-            hierarchy: previous.hierarchy,
-            parents: { ...state.parents, [boneId]: previous.parent ?? null },
-            bones: { ...state.bones, [boneId]: previous.bone },
-            boneMetadata: previous.metadata ? { ...state.boneMetadata, [boneId]: previous.metadata } : state.boneMetadata
-          }
-        : state
+    undo: () => previous ?? initialEditorProject
   };
 }
 
@@ -658,6 +637,56 @@ export function createSetBoneMetadataCommand(boneId: string, metadata: BoneMetad
       }
       return { ...markDirty(state, boneId), boneMetadata: nextMetadata };
     }
+  };
+}
+
+export function createMirrorBoneTransformCommand(sourceBoneId: string, targetBoneId = mirrorBoneId(sourceBoneId)): EditorCommand {
+  let previous: BoneTransform | undefined;
+  return {
+    id: `mirror-bone-transform:${sourceBoneId}:${targetBoneId}`,
+    label: "Mirror bone transform",
+    do: (state) => {
+      const source = state.bones[sourceBoneId];
+      const target = state.bones[targetBoneId];
+      if (!source || !target || sourceBoneId === targetBoneId) {
+        return state;
+      }
+      previous = target;
+      return {
+        ...markDirty(state, targetBoneId, "bones"),
+        bones: {
+          ...state.bones,
+          [targetBoneId]: mirrorTransform(source)
+        }
+      };
+    },
+    undo: (state) => (previous ? { ...markDirty(state, targetBoneId, "bones"), bones: { ...state.bones, [targetBoneId]: previous } } : state)
+  };
+}
+
+export function createMirrorBoneBranchCommand(sourceBoneId: string): EditorCommand {
+  let previous: Readonly<Record<string, BoneTransform>> | undefined;
+  return {
+    id: `mirror-bone-branch:${sourceBoneId}`,
+    label: "Mirror bone branch",
+    do: (state) => {
+      const sourceIds = [sourceBoneId, ...getDescendantBoneIds(state, sourceBoneId)];
+      const pairs = sourceIds
+        .map((sourceId) => [sourceId, mirrorBoneId(sourceId)] as const)
+        .filter(([sourceId, targetId]) => sourceId !== targetId && Boolean(state.bones[sourceId]) && Boolean(state.bones[targetId]));
+      if (!pairs.length) {
+        return state;
+      }
+      previous = Object.fromEntries(pairs.map(([, targetId]) => [targetId, state.bones[targetId]!]));
+      const nextBones = { ...state.bones };
+      let nextState = state;
+      for (const [sourceId, targetId] of pairs) {
+        nextBones[targetId] = mirrorTransform(state.bones[sourceId]!);
+        nextState = markDirty(nextState, targetId, "bones");
+      }
+      return { ...nextState, bones: nextBones };
+    },
+    undo: (state) => (previous ? { ...markDirty(state, sourceBoneId, "bones"), bones: { ...state.bones, ...previous } } : state)
   };
 }
 
@@ -1650,16 +1679,54 @@ function inferDirtyScope(state: EditorProjectState, id: string): DirtyScopeName 
 }
 
 function removeBone(state: EditorProjectState, boneId: string, fallbackSelection: string | null): EditorProjectState {
+  const fallbackBoneId = fallbackSelection && state.bones[fallbackSelection] ? fallbackSelection : "root";
+  const affectedPartIds = Object.values(state.parts).filter((part) => part.boneId === boneId).map((part) => part.id);
+  const affectedClipIds = Object.values(state.animations)
+    .filter((clip) => Object.keys(clip.tracks).some((trackId) => trackId.startsWith(`${boneId}.`)))
+    .map((clip) => clip.id);
+  const affectedPoseIds = Object.values(state.poses)
+    .filter((pose) => pose.boneTransforms[boneId])
+    .map((pose) => pose.id);
   const { [boneId]: _removedBone, ...bones } = state.bones;
   const { [boneId]: _removedParent, ...parents } = state.parents;
   const { [boneId]: _removedMetadata, ...boneMetadata } = state.boneMetadata;
+  let dirtyState = markDirty(state, boneId, "bones");
+  for (const partId of affectedPartIds) {
+    dirtyState = markDirty(dirtyState, partId, "parts");
+  }
+  for (const clipId of affectedClipIds) {
+    dirtyState = markDirty(dirtyState, clipId, "animations");
+  }
+  for (const poseId of affectedPoseIds) {
+    dirtyState = markDirty(dirtyState, poseId, "poses");
+  }
+  if (state.procedural.breathing.affectedBones.includes(boneId) || state.procedural.secondaryMotion.target === boneId || state.procedural.squashStretch.targetBone === boneId || state.procedural.footIk.feet.includes(boneId)) {
+    dirtyState = markDirty(dirtyState, "procedural", "procedural");
+  }
   return {
-    ...markDirty(state, boneId, "bones"),
-    selectedBoneId: fallbackSelection ?? "root",
+    ...dirtyState,
+    selectedBoneId: fallbackBoneId,
     hierarchy: state.hierarchy.filter((item) => item !== boneId),
-    parents: Object.fromEntries(Object.entries(parents).map(([childId, parentId]) => [childId, parentId === boneId ? fallbackSelection : parentId])),
+    parents: Object.fromEntries(Object.entries(parents).map(([childId, parentId]) => [childId, parentId === boneId ? fallbackBoneId : parentId])),
     bones,
-    boneMetadata
+    boneMetadata,
+    parts: Object.fromEntries(Object.entries(state.parts).map(([partId, part]) => [partId, part.boneId === boneId ? { ...part, boneId: fallbackBoneId } : part])),
+    animations: Object.fromEntries(
+      Object.entries(state.animations).map(([clipId, clip]) => [
+        clipId,
+        {
+          ...clip,
+          tracks: Object.fromEntries(Object.entries(clip.tracks).filter(([trackId]) => !trackId.startsWith(`${boneId}.`)))
+        }
+      ])
+    ),
+    poses: Object.fromEntries(
+      Object.entries(state.poses).map(([poseId, pose]) => {
+        const { [boneId]: _removedPoseTransform, ...boneTransforms } = pose.boneTransforms;
+        return [poseId, { ...pose, boneTransforms }];
+      })
+    ),
+    procedural: renameProceduralBoneRefs(state.procedural, boneId, fallbackBoneId)
   };
 }
 
@@ -1730,6 +1797,28 @@ function mergeBoneMetadata(previous: BoneMetadata | undefined, patch: BoneMetada
     }
   }
   return next as BoneMetadata;
+}
+
+function mirrorTransform(transform: BoneTransform): BoneTransform {
+  return {
+    ...transform,
+    x: -transform.x,
+    rotation: -transform.rotation
+  };
+}
+
+function getDescendantBoneIds(state: EditorProjectState, boneId: string): readonly string[] {
+  const descendants: string[] = [];
+  const visit = (parentId: string) => {
+    for (const childId of state.hierarchy) {
+      if (state.parents[childId] === parentId) {
+        descendants.push(childId);
+        visit(childId);
+      }
+    }
+  };
+  visit(boneId);
+  return descendants;
 }
 
 function renameProceduralBoneRefs(procedural: ProceduralPresetState, boneId: string, nextId: string): ProceduralPresetState {

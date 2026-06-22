@@ -18,8 +18,11 @@ import {
   createCopyPoseCommand,
   createCopySelectedKeysCommand,
   createBindPartToBoneCommand,
+  createDeleteBoneCommand,
   createEditPathPointCommand,
   createGroupedCommand,
+  createMirrorBoneBranchCommand,
+  createMirrorBoneTransformCommand,
   createMoveBoneCommand,
   createMoveKeyframeCommand,
   createNormalizeLoopCommand,
@@ -125,6 +128,47 @@ test("set parent undo restores the original parent", () => {
 
   const undone = undo(container);
   assert.equal(undone.project.parents.head, "body");
+});
+
+test("delete bone rebinds children and parts and removes animation pose procedural refs", () => {
+  const project = structuredClone(initialEditorProject);
+  project.procedural = {
+    ...project.procedural,
+    secondaryMotion: { ...project.procedural.secondaryMotion, target: "upperArmFront" },
+    breathing: { ...project.procedural.breathing, affectedBones: ["upperArmFront"], affectedBoneTransforms: { upperArmFront: { rotation: 0.2 } } }
+  };
+  const deleted = executeCommand(freshContainer(project), createDeleteBoneCommand("upperArmFront"));
+
+  assert.equal(deleted.project.bones.upperArmFront, undefined);
+  assert.equal(deleted.project.parents.forearmFront, "body");
+  assert.equal(deleted.project.parts.upperArmFrontShape.boneId, "body");
+  assert.equal(deleted.project.animations.walk.tracks["upperArmFront.rotation"], undefined);
+  assert.equal(deleted.project.poses.jump_start.boneTransforms.upperArmFront, undefined);
+  assert.equal(deleted.project.procedural.secondaryMotion.target, "body");
+  assert.deepEqual(deleted.project.procedural.breathing.affectedBones, ["body"]);
+
+  const undone = undo(deleted);
+  assert.ok(undone.project.bones.upperArmFront);
+  assert.equal(undone.project.parents.forearmFront, "upperArmFront");
+  assert.ok(undone.project.animations.walk.tracks["upperArmFront.rotation"]);
+  assert.ok(undone.project.poses.jump_start.boneTransforms.upperArmFront);
+});
+
+test("mirror bone transform and branch copy mirrored transforms to opposite side", () => {
+  const project = structuredClone(initialEditorProject);
+  project.bones.upperArmFront = { x: 64, y: -40, rotation: 0.35, scaleX: 1.1, scaleY: 0.9 };
+  project.bones.forearmFront = { x: 12, y: 42, rotation: -0.25, scaleX: 1, scaleY: 1.2 };
+
+  const mirroredOne = executeCommand(freshContainer(project), createMirrorBoneTransformCommand("upperArmFront"));
+  assert.deepEqual(mirroredOne.project.bones.upperArmBack, { x: -64, y: -40, rotation: -0.35, scaleX: 1.1, scaleY: 0.9 });
+
+  const mirroredBranch = executeCommand(freshContainer(project), createMirrorBoneBranchCommand("upperArmFront"));
+  assert.deepEqual(mirroredBranch.project.bones.upperArmBack, { x: -64, y: -40, rotation: -0.35, scaleX: 1.1, scaleY: 0.9 });
+  assert.deepEqual(mirroredBranch.project.bones.forearmBack, { x: -12, y: 42, rotation: 0.25, scaleX: 1, scaleY: 1.2 });
+
+  const undone = undo(mirroredBranch);
+  assert.deepEqual(undone.project.bones.upperArmBack, project.bones.upperArmBack);
+  assert.deepEqual(undone.project.bones.forearmBack, project.bones.forearmBack);
 });
 
 test("grouped commands undo in reverse as one history entry", () => {

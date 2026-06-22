@@ -35,6 +35,8 @@ import {
   createRenameBoneCommand,
   createSetBoneMetadataCommand,
   createSetBoneTransformCommand,
+  createMirrorBoneBranchCommand,
+  createMirrorBoneTransformCommand,
   createSetParentCommand,
   createBindProceduralPartCommand,
   createBindPartToBoneCommand,
@@ -109,6 +111,7 @@ type ProjectOrigin = "sample" | "empty" | "draft" | "imported";
 const sampleProject = {
   tracks: ["body.scaleY", "head.y", "upperArmFront.rotation", "thighFront.rotation", "thighBack.rotation"]
 };
+const defaultBoneTailLength = 42;
 
 const previewClips = [
   { id: 0, name: "Idle" },
@@ -225,7 +228,7 @@ export default function EditorPage() {
   const [profilerStats, setProfilerStats] = useState<RuntimeProfilerStats | null>(null);
   const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
   const [dragPoint, setDragPoint] = useState<{ readonly index: number; readonly point: readonly [number, number] } | null>(null);
-  const [dragBone, setDragBone] = useState<{ readonly boneId: string; readonly point: readonly [number, number] } | null>(null);
+  const [dragBone, setDragBone] = useState<{ readonly boneId: string; readonly point: readonly [number, number]; readonly handle: "head" | "tail" } | null>(null);
   const [dragTimelineKey, setDragTimelineKey] = useState<{ readonly clipId: string; readonly trackId: string; readonly keyframeId: string; readonly time: number } | null>(null);
   const [selectedPoseId, setSelectedPoseId] = useState("idle_neutral");
   const [selectedPartId, setSelectedPartId] = useState("bodyShape");
@@ -281,13 +284,15 @@ export default function EditorPage() {
   const selectedTransform = editorState.project.bones[selectedBone] ?? editorState.project.bones.root ?? initialEditorProject.bones.body!;
   const selectedBoneMetadata = editorState.project.boneMetadata[selectedBone] ?? {};
   const rigPoints = useMemo(() => getRigWorldPoints(editorState.project), [editorState.project]);
-  const displayedRigPoints = dragBone ? { ...rigPoints, [dragBone.boneId]: dragBone.point } : rigPoints;
+  const displayedRigPoints = dragBone?.handle === "head" ? { ...rigPoints, [dragBone.boneId]: dragBone.point } : rigPoints;
   const rigViewBox = useMemo(() => getShapeViewBox(Object.values(displayedRigPoints)), [displayedRigPoints]);
   const partRows = useMemo(() => Object.values(editorState.project.parts).sort((left, right) => (left.zIndex ?? 0) - (right.zIndex ?? 0)), [editorState.project.parts]);
   const selectedPart = editorState.project.parts[selectedPartId] ?? partRows.find((part) => part.boneId === selectedBone) ?? partRows[0];
   const childBoneCount = editorState.project.hierarchy.filter((boneId) => editorState.project.parents[boneId] === selectedBone).length;
   const boundPartCount = partRows.filter((part) => part.boneId === selectedBone).length;
   const boundTrackCount = Object.values(editorState.project.animations).reduce((count, clip) => count + Object.keys(clip.tracks).filter((trackId) => trackId.startsWith(`${selectedBone}.`)).length, 0);
+  const poseRefCount = Object.values(editorState.project.poses).filter((pose) => pose.boneTransforms[selectedBone]).length;
+  const proceduralRefCount = countProceduralBoneRefs(editorState.project, selectedBone);
   const shapePoints = dragPoint
     ? selectedPart?.points.map((point, index) => (index === dragPoint.index ? dragPoint.point : point)) ?? []
     : selectedPart?.points ?? [];
@@ -407,7 +412,7 @@ export default function EditorPage() {
     };
     const keyTime = activeClip ? clampPanelSize(timelineCurrentTime, 0, activeClip.duration) : timelineCurrentTime;
     const commands = [createSetBoneTransformCommand(boneId, nextTransform)];
-    if (activeClip) {
+    if (activeClip && editorState.project.timeline.autoKey) {
       commands.push(
         createSetKeyframeAtTimeCommand(activeClip.id, `${boneId}.x`, keyTime, nextTransform.x),
         createSetKeyframeAtTimeCommand(activeClip.id, `${boneId}.y`, keyTime, nextTransform.y)
@@ -416,7 +421,7 @@ export default function EditorPage() {
     }
     setTimelineTargetId(boneId);
     setTimelineProperty("x");
-    runCommand(createGroupedCommand(activeClip ? "Move bone at time" : "Move bone", commands));
+    runCommand(createGroupedCommand(activeClip && editorState.project.timeline.autoKey ? "Move bone at time" : "Move bone", commands));
   };
   const startBoneDrag = (event: ReactMouseEvent<SVGCircleElement>, boneId: string, point: readonly [number, number]) => {
     if (editorState.project.boneMetadata[boneId]?.locked) {
@@ -429,16 +434,68 @@ export default function EditorPage() {
     event.preventDefault();
     event.stopPropagation();
     setEditorState((state) => ({ ...state, project: { ...state.project, selectedBoneId: boneId } }));
-    setDragBone({ boneId, point });
+    setDragBone({ boneId, point, handle: "head" });
 
     const onMove = (moveEvent: MouseEvent) => {
-      setDragBone({ boneId, point: svgPointFromClient(svg, moveEvent.clientX, moveEvent.clientY, rigViewBox) });
+      setDragBone({ boneId, point: svgPointFromClient(svg, moveEvent.clientX, moveEvent.clientY, rigViewBox), handle: "head" });
     };
     const onEnd = (upEvent: MouseEvent) => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onEnd);
       const nextPoint = svgPointFromClient(svg, upEvent.clientX, upEvent.clientY, rigViewBox);
       commitBoneDrag(boneId, nextPoint);
+      setDragBone(null);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onEnd);
+  };
+  const commitBoneTailDrag = (boneId: string, point: readonly [number, number]) => {
+    const head = rigPoints[boneId];
+    const current = editorState.project.bones[boneId] ?? selectedTransform;
+    if (!head) {
+      return;
+    }
+    const dx = point[0] - head[0];
+    const dy = point[1] - head[1];
+    const nextTransform = {
+      ...current,
+      rotation: Number(Math.atan2(dy, dx).toFixed(4)),
+      scaleY: Number(clampPanelSize(Math.hypot(dx, dy) / defaultBoneTailLength, 0.15, 4).toFixed(4))
+    };
+    const keyTime = activeClip ? clampPanelSize(timelineCurrentTime, 0, activeClip.duration) : timelineCurrentTime;
+    const commands = [createSetBoneTransformCommand(boneId, nextTransform)];
+    if (activeClip && editorState.project.timeline.autoKey) {
+      commands.push(
+        createSetKeyframeAtTimeCommand(activeClip.id, `${boneId}.rotation`, keyTime, nextTransform.rotation),
+        createSetKeyframeAtTimeCommand(activeClip.id, `${boneId}.scaleY`, keyTime, nextTransform.scaleY)
+      );
+      setTimelineCurrentTime(keyTime);
+    }
+    setTimelineTargetId(boneId);
+    setTimelineProperty("rotation");
+    runCommand(createGroupedCommand(activeClip && editorState.project.timeline.autoKey ? "Rotate bone at time" : "Rotate bone", commands));
+  };
+  const startBoneTailDrag = (event: ReactMouseEvent<SVGCircleElement>, boneId: string, point: readonly [number, number]) => {
+    if (editorState.project.boneMetadata[boneId]?.locked) {
+      return;
+    }
+    const svg = event.currentTarget.ownerSVGElement;
+    if (!svg) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    setEditorState((state) => ({ ...state, project: { ...state.project, selectedBoneId: boneId } }));
+    setDragBone({ boneId, point, handle: "tail" });
+
+    const onMove = (moveEvent: MouseEvent) => {
+      setDragBone({ boneId, point: svgPointFromClient(svg, moveEvent.clientX, moveEvent.clientY, rigViewBox), handle: "tail" });
+    };
+    const onEnd = (upEvent: MouseEvent) => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onEnd);
+      const nextPoint = svgPointFromClient(svg, upEvent.clientX, upEvent.clientY, rigViewBox);
+      commitBoneTailDrag(boneId, nextPoint);
       setDragBone(null);
     };
     window.addEventListener("mousemove", onMove);
@@ -936,19 +993,38 @@ export default function EditorPage() {
                     return null;
                   }
                   const selected = boneId === selectedBone;
+                  const tailPoint = dragBone?.handle === "tail" && dragBone.boneId === boneId ? dragBone.point : getBoneTailPoint(editorState.project, boneId, displayedRigPoints);
                   return (
-                    <circle
-                      cx={point[0]}
-                      cy={point[1]}
-                      fill={selected ? "#ffffff" : "#4f8cff"}
-                      aria-label={`Bone ${boneId}`}
-                      key={boneId}
-                      r={selected ? 5 : 3.5}
-                      stroke="#1b4dcc"
-                      strokeWidth={1.5}
-                      vectorEffect="non-scaling-stroke"
-                      onMouseDown={(event) => startBoneDrag(event, boneId, point)}
-                    />
+                    <g key={boneId}>
+                      {selected ? (
+                        <>
+                          <circle cx={point[0]} cy={point[1]} fill="none" r={Math.max(12, defaultBoneTailLength * 0.45)} stroke="#f59e0b" strokeDasharray="4 4" strokeWidth={1.25} vectorEffect="non-scaling-stroke" />
+                          <line stroke="#f59e0b" strokeWidth={1.5} vectorEffect="non-scaling-stroke" x1={point[0]} x2={tailPoint[0]} y1={point[1]} y2={tailPoint[1]} />
+                          <circle
+                            aria-label={`Bone ${boneId} tail`}
+                            cx={tailPoint[0]}
+                            cy={tailPoint[1]}
+                            fill="#fef3c7"
+                            r={4.5}
+                            stroke="#d97706"
+                            strokeWidth={1.5}
+                            vectorEffect="non-scaling-stroke"
+                            onMouseDown={(event) => startBoneTailDrag(event, boneId, tailPoint)}
+                          />
+                        </>
+                      ) : null}
+                      <circle
+                        cx={point[0]}
+                        cy={point[1]}
+                        fill={selected ? "#ffffff" : "#4f8cff"}
+                        aria-label={`Bone ${boneId}`}
+                        r={selected ? 5 : 3.5}
+                        stroke="#1b4dcc"
+                        strokeWidth={1.5}
+                        vectorEffect="non-scaling-stroke"
+                        onMouseDown={(event) => startBoneDrag(event, boneId, point)}
+                      />
+                    </g>
                   );
                 })}
               </svg>
@@ -1255,7 +1331,9 @@ export default function EditorPage() {
                       </Button>
                     </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">Delete impact: {childBoneCount} children / {boundPartCount} parts / {boundTrackCount} tracks</p>
+                  <p className="text-xs text-muted-foreground">
+                    Delete impact: {childBoneCount} children / {boundPartCount} parts / {boundTrackCount} tracks / {poseRefCount} poses / {proceduralRefCount} procedural refs
+                  </p>
                   <div className="grid grid-cols-2 gap-1">
                     <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetParentCommand(selectedBone, "root"))} disabled={selectedBone === "root"}>
                       Parent Root
@@ -1271,6 +1349,12 @@ export default function EditorPage() {
                     </Button>
                     <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetBoneMetadataCommand(selectedBone, { mirrorGroup: selectedBone.includes("Front") ? "front" : "back" }))}>
                       Mirror ID
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createMirrorBoneTransformCommand(selectedBone))}>
+                      Mirror Transform
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createMirrorBoneBranchCommand(selectedBone))}>
+                      Mirror Branch
                     </Button>
                     <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetBoneMetadataCommand(selectedBone, { tags: [...(selectedBoneMetadata.tags ?? []), "default-pose"] }))}>
                       Tag
@@ -2075,6 +2159,25 @@ function getRigWorldPoints(project: EditorProjectState): Readonly<Record<string,
     visit(boneId);
   }
   return points;
+}
+
+function getBoneTailPoint(project: EditorProjectState, boneId: string, rigPoints: Readonly<Record<string, readonly [number, number]>>): readonly [number, number] {
+  const head = rigPoints[boneId] ?? ([0, 0] as const);
+  const transform = project.bones[boneId] ?? { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 };
+  const length = defaultBoneTailLength * Math.max(0.15, Math.abs(transform.scaleY));
+  return [Number((head[0] + Math.cos(transform.rotation) * length).toFixed(2)), Number((head[1] + Math.sin(transform.rotation) * length).toFixed(2))];
+}
+
+function countProceduralBoneRefs(project: EditorProjectState, boneId: string): number {
+  const procedural = project.procedural;
+  return (
+    procedural.breathing.affectedBones.filter((id) => id === boneId).length +
+    Object.keys(procedural.breathing.affectedBoneTransforms).filter((id) => id === boneId).length +
+    (procedural.secondaryMotion.target === boneId ? 1 : 0) +
+    (procedural.squashStretch.targetBone === boneId ? 1 : 0) +
+    procedural.footIk.feet.filter((id) => id === boneId).length +
+    procedural.footIk.footChains.reduce((count, chain) => count + [chain.footBone, chain.shinBone, chain.thighBone].filter((id) => id === boneId).length, 0)
+  );
 }
 
 function svgPointFromEvent(event: ReactPointerEvent<SVGSVGElement> | ReactMouseEvent<SVGSVGElement>, viewBox: ShapeViewBox): readonly [number, number] {
