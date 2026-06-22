@@ -74,6 +74,7 @@ import {
   createTransitionCommand,
   createUpdateTransitionCommand,
   createUpdateProceduralCommand,
+  createEmptyEditorProject,
   executeCommand,
   initialEditorProject,
   markAutosaveSaved,
@@ -82,13 +83,14 @@ import {
   type EditorProjectState,
   type EditorStateContainer
 } from "./editorState";
-import { createProjectExportBundle, loadDraft, parseImportedProject, saveDraft, serializeEditorProject } from "./projectIo";
+import { createProjectExportBundle, EDITOR_DRAFT_KEY, loadDraft, parseImportedProject, saveDraft, serializeEditorProject } from "./projectIo";
 import { PixiPreview } from "./PixiPreview";
 import { vectorizeSvgPart } from "./editorVectorImport";
 import { createInitialControllerState, toAnimationParameters, updatePlatformerController } from "@bones/platformer-preview";
 import type { QualityPresetName, RuntimeProfilerStats } from "@bones/runtime-pixi";
 
 const modes = ["Rig", "Shape", "Pose", "Timeline", "Curve", "State Machine", "Procedural", "Preview"] as const;
+type ProjectOrigin = "sample" | "empty" | "draft" | "imported";
 
 const sampleProject = {
   tracks: ["body.scaleY", "head.y", "thighFront.rotation", "thighBack.rotation", "cloak.x"]
@@ -130,27 +132,28 @@ export default function EditorPage() {
   const [dragBone, setDragBone] = useState<{ readonly boneId: string; readonly point: readonly [number, number] } | null>(null);
   const [selectedPoseId, setSelectedPoseId] = useState("idle_neutral");
   const [ioStatus, setIoStatus] = useState("ready");
+  const [projectOrigin, setProjectOrigin] = useState<ProjectOrigin>("sample");
   const [editorState, setEditorState] = useState<EditorStateContainer>({
     project: initialEditorProject,
     history: { past: [], future: [] }
   });
   const selectedBone = editorState.project.selectedBoneId;
-  const selectedTransform = editorState.project.bones[selectedBone] ?? initialEditorProject.bones.body!;
+  const selectedTransform = editorState.project.bones[selectedBone] ?? editorState.project.bones.root ?? initialEditorProject.bones.body!;
   const selectedBoneMetadata = editorState.project.boneMetadata[selectedBone] ?? {};
   const rigPoints = useMemo(() => getRigWorldPoints(editorState.project), [editorState.project]);
   const displayedRigPoints = dragBone ? { ...rigPoints, [dragBone.boneId]: dragBone.point } : rigPoints;
   const rigViewBox = useMemo(() => getShapeViewBox(Object.values(displayedRigPoints)), [displayedRigPoints]);
-  const selectedPart = Object.values(editorState.project.parts).find((part) => part.boneId === selectedBone) ?? editorState.project.parts.bodyShape!;
+  const selectedPart = Object.values(editorState.project.parts).find((part) => part.boneId === selectedBone) ?? Object.values(editorState.project.parts)[0];
   const shapePoints = dragPoint
-    ? selectedPart.points.map((point, index) => (index === dragPoint.index ? dragPoint.point : point))
-    : selectedPart.points;
+    ? selectedPart?.points.map((point, index) => (index === dragPoint.index ? dragPoint.point : point)) ?? []
+    : selectedPart?.points ?? [];
   const shapeViewBox = useMemo(() => getShapeViewBox(shapePoints), [shapePoints]);
   const poseIds = Object.keys(editorState.project.poses);
-  const selectedPose = editorState.project.poses[selectedPoseId] ?? editorState.project.poses[poseIds[0]!]!;
-  const selectedPoseTagText = selectedPose.tags.join(", ");
+  const selectedPose = editorState.project.poses[selectedPoseId] ?? (poseIds[0] ? editorState.project.poses[poseIds[0]] : undefined);
+  const selectedPoseTagText = selectedPose?.tags.join(", ") ?? "";
   const clipIds = Object.keys(editorState.project.animations);
-  const activeClip = editorState.project.animations[editorState.project.timeline.selectedClipId] ?? editorState.project.animations.idle!;
-  const activeTrack = activeClip.tracks["body.scaleY"] ?? [];
+  const activeClip = editorState.project.animations[editorState.project.timeline.selectedClipId] ?? (clipIds[0] ? editorState.project.animations[clipIds[0]] : undefined);
+  const activeTrack = activeClip?.tracks["body.scaleY"] ?? [];
   const selectedKeyId = editorState.project.timeline.selectedKeyIds[0] ?? activeTrack[0]?.id ?? "";
   const visibleTimelineTracks = sampleProject.tracks.slice(editorState.project.timeline.virtualWindow.startRow, editorState.project.timeline.virtualWindow.startRow + editorState.project.timeline.virtualWindow.rowCount);
   const previewLevel = useMemo(
@@ -170,6 +173,14 @@ export default function EditorPage() {
     return { state, params: toAnimationParameters(state) };
   }, [previewLevel]);
   const runCommand = (command: Parameters<typeof executeCommand>[1]) => setEditorState((state) => executeCommand(state, command));
+  const replaceProject = (project: EditorProjectState, origin: ProjectOrigin, poseId = "") => {
+    setEditorState({ project, history: { past: [], future: [] } });
+    setProjectOrigin(origin);
+    setSelectedPoseId(poseId);
+    setSelectedPointIndex(null);
+    setDragPoint(null);
+    setDragBone(null);
+  };
   const exportBundle = () => {
     const bundle = createProjectExportBundle(editorState.project);
     setIoStatus(bundle.validation.ok ? `exported ${Object.keys(bundle.files).length} files` : bundle.validation.errors.join("; "));
@@ -179,7 +190,7 @@ export default function EditorPage() {
     const text = await navigator.clipboard?.readText();
     const result = parseImportedProject(text ?? "");
     if (result.project) {
-      setEditorState((state) => ({ ...state, project: result.project! }));
+      replaceProject(result.project, "imported", Object.keys(result.project.poses)[0] ?? "");
     }
     setIoStatus(result.errors.length ? result.errors.join("; ") : "imported source JSON");
   };
@@ -196,6 +207,10 @@ export default function EditorPage() {
     return () => window.clearTimeout(handle);
   }, [editorState.project, editorState.project.autosave]);
   const vectorizeSelectedPart = async () => {
+    if (!selectedPart) {
+      setIoStatus("select an SVG part first");
+      return;
+    }
     const vectorPart = await vectorizeSvgPart(selectedPart);
     runCommand(createSetPartPathCommand(vectorPart.id, vectorPart.points, vectorPart.pathCommands, vectorPart.svgViewBox));
   };
@@ -220,23 +235,23 @@ export default function EditorPage() {
     {
       label: "Shape",
       actions: [
-        { label: "Vectorize", disabled: selectedPart.type !== "svg", onClick: () => void vectorizeSelectedPart() },
+        { label: "Vectorize", disabled: selectedPart?.type !== "svg", onClick: () => void vectorizeSelectedPart() },
         { label: "Bind", onClick: () => runCommand(createBindProceduralPartCommand(`${selectedBone}Shape`, selectedBone, "tapered-limb")) },
-        { label: "Pen", onClick: () => runCommand(createEditPathPointCommand(selectedPart.id, selectedPart.points.length, [12, 4])) },
-        { label: "Mirror", onClick: () => runCommand(createMirrorPathCommand(selectedPart.id)) },
-        { label: "Pivot", onClick: () => runCommand(createSetPartPivotCommand(selectedPart.id, [4, 0])) }
+        { label: "Pen", disabled: !selectedPart, onClick: () => selectedPart && runCommand(createEditPathPointCommand(selectedPart.id, selectedPart.points.length, [12, 4])) },
+        { label: "Mirror", disabled: !selectedPart, onClick: () => selectedPart && runCommand(createMirrorPathCommand(selectedPart.id)) },
+        { label: "Pivot", disabled: !selectedPart, onClick: () => selectedPart && runCommand(createSetPartPivotCommand(selectedPart.id, [4, 0])) }
       ]
     },
     {
       label: "Animate",
       actions: [
-        { label: "Apply Pose", onClick: () => runCommand(createApplyPoseCommand(selectedPose.id)) },
-        { label: "Duplicate Pose", onClick: () => runCommand(createDuplicatePoseCommand(selectedPose.id, `${selectedPose.id}_copy`)) },
-        { label: "Mirror Pose", onClick: () => runCommand(createMirrorPoseCommand(selectedPose.id, `${selectedPose.id}_mirror`)) },
-        { label: "Add Key", onClick: () => runCommand(createAddKeyframeCommand(activeClip.id, "body.scaleY", { id: `key${activeTrack.length}`, time: 0.6, value: 1.025, interpolation: "bezier" })) },
-        { label: "Move Key", disabled: !activeTrack.length, onClick: () => runCommand(createMoveKeyframeCommand(activeClip.id, "body.scaleY", activeTrack[0]?.id ?? "", 0.12)) },
-        { label: "Delete Key", disabled: !activeTrack.length, variant: "destructive", onClick: () => runCommand(createDeleteKeyframeCommand(activeClip.id, "body.scaleY", activeTrack[0]?.id ?? "")) },
-        { label: "Curve", disabled: !activeTrack.length, onClick: () => runCommand(createChangeCurveCommand(activeClip.id, "body.scaleY", activeTrack[0]?.id ?? "", "bezier", [0.2, 0.8, 0.2, 1])) },
+        { label: "Apply Pose", disabled: !selectedPose, onClick: () => selectedPose && runCommand(createApplyPoseCommand(selectedPose.id)) },
+        { label: "Duplicate Pose", disabled: !selectedPose, onClick: () => selectedPose && runCommand(createDuplicatePoseCommand(selectedPose.id, `${selectedPose.id}_copy`)) },
+        { label: "Mirror Pose", disabled: !selectedPose, onClick: () => selectedPose && runCommand(createMirrorPoseCommand(selectedPose.id, `${selectedPose.id}_mirror`)) },
+        { label: "Add Key", disabled: !activeClip, onClick: () => activeClip && runCommand(createAddKeyframeCommand(activeClip.id, "body.scaleY", { id: `key${activeTrack.length}`, time: 0.6, value: 1.025, interpolation: "bezier" })) },
+        { label: "Move Key", disabled: !activeClip || !activeTrack.length, onClick: () => activeClip && runCommand(createMoveKeyframeCommand(activeClip.id, "body.scaleY", activeTrack[0]?.id ?? "", 0.12)) },
+        { label: "Delete Key", disabled: !activeClip || !activeTrack.length, variant: "destructive", onClick: () => activeClip && runCommand(createDeleteKeyframeCommand(activeClip.id, "body.scaleY", activeTrack[0]?.id ?? "")) },
+        { label: "Curve", disabled: !activeClip || !activeTrack.length, onClick: () => activeClip && runCommand(createChangeCurveCommand(activeClip.id, "body.scaleY", activeTrack[0]?.id ?? "", "bezier", [0.2, 0.8, 0.2, 1])) },
         { label: "Transition", onClick: () => runCommand(createTransitionCommand({ id: "walk-jump", fromStateId: "walk", toStateId: "jump", duration: 0.12, easing: "anticipation", priority: 10, canInterrupt: true, syncMode: "none", conditions: [{ parameter: "jumpPressed", op: "==", value: true }] })) }
       ]
     },
@@ -250,8 +265,11 @@ export default function EditorPage() {
     {
       label: "Project",
       actions: [
-        { label: "Save", onClick: () => saveDraft(editorState.project) },
-        { label: "Load", onClick: () => setEditorState((state) => ({ ...state, project: loadDraft() ?? state.project })) },
+        { label: "New Project", onClick: () => { replaceProject(createEmptyEditorProject(), "empty"); setIoStatus("new empty project"); } },
+        { label: "Load Sample", onClick: () => { replaceProject(initialEditorProject, "sample", "idle_neutral"); setIoStatus("sample loaded"); } },
+        { label: "Reset Draft", onClick: () => { window.localStorage.removeItem(EDITOR_DRAFT_KEY); replaceProject(initialEditorProject, "sample", "idle_neutral"); setIoStatus("draft reset"); } },
+        { label: "Save", onClick: () => { saveDraft(editorState.project); setProjectOrigin("draft"); setIoStatus("draft saved"); } },
+        { label: "Load", onClick: () => { const draft = loadDraft(); if (draft) { replaceProject(draft, "draft", Object.keys(draft.poses)[0] ?? ""); setIoStatus("draft loaded"); } else { setIoStatus("no draft found"); } } },
         { label: "Copy JSON", onClick: () => navigator.clipboard?.writeText(serializeEditorProject(editorState.project)) },
         { label: "Export Bundle", onClick: exportBundle },
         { label: "Import Clipboard", onClick: () => void importFromClipboard() }
@@ -267,10 +285,11 @@ export default function EditorPage() {
       ["Y", String(selectedTransform.y)],
       ["Rotation", selectedTransform.rotation.toFixed(2)],
       ["Scale", `${selectedTransform.scaleX}, ${selectedTransform.scaleY}`],
+      ["Origin", projectOrigin],
       ["IO", ioStatus],
       ["Dirty", editorState.project.dirty ? editorState.project.dirtyParts.join(", ") : "clean"]
     ],
-    [editorState.project.dirty, editorState.project.dirtyParts, ioStatus, mode, selectedBone, selectedTransform]
+    [editorState.project.dirty, editorState.project.dirtyParts, ioStatus, mode, projectOrigin, selectedBone, selectedTransform]
   );
 
   return (
@@ -475,7 +494,7 @@ export default function EditorPage() {
                 })}
               </svg>
             ) : null}
-            {mode === "Shape" && shapePoints.length > 0 ? (
+            {mode === "Shape" && selectedPart && shapePoints.length > 0 ? (
               <svg
                 aria-label="Shape point editor"
                 className="absolute inset-0 z-10 size-full touch-none"
@@ -574,22 +593,22 @@ export default function EditorPage() {
                   <CardTitle>Shape</CardTitle>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-2">
-                  <p className="truncate text-xs text-muted-foreground">{selectedPart.id}</p>
-                  <ReadOnlyField label="Type" value={selectedPart.type} />
-                  <ReadOnlyField label="Asset" value={selectedPart.assetPath?.split("/").pop() ?? "none"} />
-                  <ReadOnlyField label="Pivot" value={selectedPart.pivot.join(", ")} />
-                  <ReadOnlyField label="Points" value={String(selectedPart.points.length)} />
+                  <p className="truncate text-xs text-muted-foreground">{selectedPart?.id ?? "No part selected"}</p>
+                  <ReadOnlyField label="Type" value={selectedPart?.type ?? "none"} />
+                  <ReadOnlyField label="Asset" value={selectedPart?.assetPath?.split("/").pop() ?? "none"} />
+                  <ReadOnlyField label="Pivot" value={selectedPart?.pivot.join(", ") ?? "none"} />
+                  <ReadOnlyField label="Points" value={String(selectedPart?.points.length ?? 0)} />
                   <div className="grid grid-cols-2 gap-1">
-                    <Button size="sm" type="button" variant="outline" onClick={() => void vectorizeSelectedPart()} disabled={selectedPart.type !== "svg"}>
+                    <Button size="sm" type="button" variant="outline" onClick={() => void vectorizeSelectedPart()} disabled={selectedPart?.type !== "svg"}>
                       Vectorize
                     </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createMirrorPathCommand(selectedPart.id))} disabled={!selectedPart.points.length}>
+                    <Button size="sm" type="button" variant="outline" onClick={() => selectedPart && runCommand(createMirrorPathCommand(selectedPart.id))} disabled={!selectedPart?.points.length}>
                       Mirror
                     </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetPartPivotCommand(selectedPart.id, [0, 0]))}>
+                    <Button size="sm" type="button" variant="outline" onClick={() => selectedPart && runCommand(createSetPartPivotCommand(selectedPart.id, [0, 0]))} disabled={!selectedPart}>
                       Pivot 0
                     </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetPartDrawOrderCommand(selectedPart.id, (selectedPart.zIndex ?? 0) + 1))}>
+                    <Button size="sm" type="button" variant="outline" onClick={() => selectedPart && runCommand(createSetPartDrawOrderCommand(selectedPart.id, (selectedPart.zIndex ?? 0) + 1))} disabled={!selectedPart}>
                       Layer +
                     </Button>
                   </div>
@@ -609,7 +628,7 @@ export default function EditorPage() {
                   <CardTitle>Pose Library</CardTitle>
                 </CardHeader>
                 <CardContent className="grid gap-2">
-                  <Select value={selectedPose.id} onValueChange={setSelectedPoseId}>
+                  <Select value={selectedPose?.id ?? ""} onValueChange={setSelectedPoseId} disabled={!selectedPose}>
                     <SelectTrigger className="h-7 w-full" aria-label="Selected pose">
                       <SelectValue />
                     </SelectTrigger>
@@ -625,28 +644,28 @@ export default function EditorPage() {
                   </Select>
                   <p className="line-clamp-2 text-xs text-muted-foreground">{selectedPoseTagText || "untagged"}</p>
                   <div className="grid grid-cols-2 gap-1">
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createApplyPoseCommand(selectedPose.id))}>
+                    <Button size="sm" type="button" variant="outline" onClick={() => selectedPose && runCommand(createApplyPoseCommand(selectedPose.id))} disabled={!selectedPose}>
                       Apply
                     </Button>
                     <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createPoseFromCurrentCommand(`pose_${poseIds.length + 1}`, `Pose ${poseIds.length + 1}`, ["custom"]))}>
                       Capture
                     </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createRenamePoseCommand(selectedPose.id, `${selectedPose.name}*`))}>
+                    <Button size="sm" type="button" variant="outline" onClick={() => selectedPose && runCommand(createRenamePoseCommand(selectedPose.id, `${selectedPose.name}*`))} disabled={!selectedPose}>
                       Rename
                     </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createDuplicatePoseCommand(selectedPose.id, `${selectedPose.id}_copy`))}>
+                    <Button size="sm" type="button" variant="outline" onClick={() => selectedPose && runCommand(createDuplicatePoseCommand(selectedPose.id, `${selectedPose.id}_copy`))} disabled={!selectedPose}>
                       Duplicate
                     </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createMirrorPoseCommand(selectedPose.id, `${selectedPose.id}_mirror`))}>
+                    <Button size="sm" type="button" variant="outline" onClick={() => selectedPose && runCommand(createMirrorPoseCommand(selectedPose.id, `${selectedPose.id}_mirror`))} disabled={!selectedPose}>
                       Mirror
                     </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createCopyPoseCommand(selectedPose.id))}>
+                    <Button size="sm" type="button" variant="outline" onClick={() => selectedPose && runCommand(createCopyPoseCommand(selectedPose.id))} disabled={!selectedPose}>
                       Copy
                     </Button>
                     <Button size="sm" type="button" variant="outline" disabled={!editorState.project.poseClipboard} onClick={() => runCommand(createPastePoseCommand(`pose_paste_${poseIds.length + 1}`))}>
                       Paste
                     </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createUpdatePoseTagsCommand(selectedPose.id, Array.from(new Set([...selectedPose.tags, "reviewed"]))))}>
+                    <Button size="sm" type="button" variant="outline" onClick={() => selectedPose && runCommand(createUpdatePoseTagsCommand(selectedPose.id, Array.from(new Set([...selectedPose.tags, "reviewed"]))))} disabled={!selectedPose}>
                       Tag
                     </Button>
                   </div>
@@ -660,14 +679,14 @@ export default function EditorPage() {
                   <p className="line-clamp-2 text-xs text-muted-foreground">{activeTrack.map((key) => `${key.id}: ${key.interpolation}`).join(", ")}</p>
                   <div className="grid grid-cols-2 gap-1">
                     {(["easeIn", "easeOut", "easeInOut", "spring", "overshoot", "anticipation"] as const).map((preset) => (
-                      <Button key={preset} size="sm" type="button" variant="outline" disabled={!selectedKeyId} onClick={() => runCommand(createApplyCurvePresetCommand(activeClip.id, "body.scaleY", selectedKeyId, preset))}>
+                      <Button key={preset} size="sm" type="button" variant="outline" disabled={!activeClip || !selectedKeyId} onClick={() => activeClip && runCommand(createApplyCurvePresetCommand(activeClip.id, "body.scaleY", selectedKeyId, preset))}>
                         {preset}
                       </Button>
                     ))}
-                    <Button size="sm" type="button" variant="outline" disabled={!selectedKeyId} onClick={() => runCommand(createEditBezierHandlesCommand(activeClip.id, "body.scaleY", selectedKeyId, [0.18, 0.92, 0.22, 1]))}>
+                    <Button size="sm" type="button" variant="outline" disabled={!activeClip || !selectedKeyId} onClick={() => activeClip && runCommand(createEditBezierHandlesCommand(activeClip.id, "body.scaleY", selectedKeyId, [0.18, 0.92, 0.22, 1]))}>
                       Handles
                     </Button>
-                    <Button size="sm" type="button" variant="outline" disabled={!selectedKeyId} onClick={() => runCommand(createSetKeyframeTangentsCommand(activeClip.id, "body.scaleY", selectedKeyId, -0.2, 0.35))}>
+                    <Button size="sm" type="button" variant="outline" disabled={!activeClip || !selectedKeyId} onClick={() => activeClip && runCommand(createSetKeyframeTangentsCommand(activeClip.id, "body.scaleY", selectedKeyId, -0.2, 0.35))}>
                       Tangents
                     </Button>
                   </div>
@@ -765,7 +784,7 @@ export default function EditorPage() {
         <CardHeader className="flex flex-row items-center justify-between px-2.5 py-0">
           <div className="flex min-w-0 items-center gap-2">
             <CardTitle className="text-sm">Timeline</CardTitle>
-            <Select value={activeClip.id} onValueChange={(clipId) => runCommand(createSetTimelineSelectionCommand(clipId, []))}>
+            <Select value={activeClip?.id ?? ""} onValueChange={(clipId) => runCommand(createSetTimelineSelectionCommand(clipId, []))} disabled={!activeClip}>
               <SelectTrigger className="h-7 w-28" aria-label="Timeline clip">
                 <SelectValue />
               </SelectTrigger>
@@ -783,25 +802,25 @@ export default function EditorPage() {
               <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createAnimationClipCommand(`clip_${clipIds.length + 1}`, `Clip ${clipIds.length + 1}`, 1, true))}>
                 Clip +
               </Button>
-              <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createReverseClipCommand(activeClip.id))}>
+              <Button size="sm" type="button" variant="outline" onClick={() => activeClip && runCommand(createReverseClipCommand(activeClip.id))} disabled={!activeClip}>
                 Reverse
               </Button>
-              <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createRetimeClipCommand(activeClip.id, activeClip.duration + 0.12))}>
+              <Button size="sm" type="button" variant="outline" onClick={() => activeClip && runCommand(createRetimeClipCommand(activeClip.id, activeClip.duration + 0.12))} disabled={!activeClip}>
                 Retime
               </Button>
-              <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createNormalizeLoopCommand(activeClip.id))}>
+              <Button size="sm" type="button" variant="outline" onClick={() => activeClip && runCommand(createNormalizeLoopCommand(activeClip.id))} disabled={!activeClip}>
                 Loop
               </Button>
-              <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createAddTimelineMarkerCommand(activeClip.id, { id: `${activeClip.id}-marker-${activeClip.markers.length}`, time: activeClip.duration * 0.5, label: "Breakdown", color: "#f59e0b" }))}>
+              <Button size="sm" type="button" variant="outline" onClick={() => activeClip && runCommand(createAddTimelineMarkerCommand(activeClip.id, { id: `${activeClip.id}-marker-${activeClip.markers.length}`, time: activeClip.duration * 0.5, label: "Breakdown", color: "#f59e0b" }))} disabled={!activeClip}>
                 Marker
               </Button>
-              <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createAddTimelineEventCommand(activeClip.id, { id: `${activeClip.id}-event-${activeClip.events.length}`, time: activeClip.duration * 0.5, type: "cue" }))}>
+              <Button size="sm" type="button" variant="outline" onClick={() => activeClip && runCommand(createAddTimelineEventCommand(activeClip.id, { id: `${activeClip.id}-event-${activeClip.events.length}`, time: activeClip.duration * 0.5, type: "cue" }))} disabled={!activeClip}>
                 Event
               </Button>
               <Button size="sm" type="button" variant="outline" disabled={!editorState.project.timeline.selectedKeyIds.length} onClick={() => runCommand(createCopySelectedKeysCommand())}>
                 Copy Keys
               </Button>
-              <Button size="sm" type="button" variant="outline" disabled={!editorState.project.timeline.keyClipboard.length} onClick={() => runCommand(createPasteKeysCommand(activeClip.id, activeClip.duration * 0.5))}>
+              <Button size="sm" type="button" variant="outline" disabled={!activeClip || !editorState.project.timeline.keyClipboard.length} onClick={() => activeClip && runCommand(createPasteKeysCommand(activeClip.id, activeClip.duration * 0.5))}>
                 Paste Keys
               </Button>
             </div>
@@ -809,7 +828,7 @@ export default function EditorPage() {
           <Badge variant="outline">00:00 / 01:12</Badge>
         </CardHeader>
         <CardContent className="mt-1 grid gap-1 px-2.5">
-          {visibleTimelineTracks.map((track, index) => (
+          {activeClip ? visibleTimelineTracks.map((track, index) => (
             <div className="relative grid min-h-[17px] grid-cols-[140px_1fr] items-center rounded-md bg-muted" key={track}>
               <span className="truncate pl-2 text-xs text-muted-foreground">{track}</span>
               {(activeClip.tracks[track] ?? []).map((keyframe) => (
@@ -834,7 +853,7 @@ export default function EditorPage() {
               ))}
               <span className="absolute top-[5px] size-[7px] rounded-full bg-primary" style={{ left: `${52 + index * 5}%` }} />
             </div>
-          ))}
+          )) : <p className="text-xs text-muted-foreground">No animation clip selected.</p>}
         </CardContent>
       </Card>
     </main>

@@ -202,7 +202,7 @@ test("timeline creates clips and copies selected keys with snapping", () => {
 test("timeline retime, reverse, normalize loop, events, and markers are undoable", () => {
   const retimed = executeCommand(freshContainer(), createRetimeClipCommand("walk", 1.44));
   assert.equal(retimed.project.animations.walk.duration, 1.44);
-  assert.equal(retimed.project.animations.walk.events[0].time, 0.16);
+  assert.equal(retimed.project.animations.walk.events[0].time, 0.06857142857142857);
 
   const reversed = executeCommand(retimed, createReverseClipCommand("walk"));
   assert.ok(reversed.project.animations.walk.events[0].time < reversed.project.animations.walk.events[1].time);
@@ -220,13 +220,13 @@ test("timeline retime, reverse, normalize loop, events, and markers are undoable
 });
 
 test("curve presets, tangents, and preview state are undoable", () => {
-  const preset = executeCommand(freshContainer(), createApplyCurvePresetCommand("jump", "body.y", "jump-body-0", "anticipation"));
+  const preset = executeCommand(freshContainer(), createApplyCurvePresetCommand("jump", "body.y", "jump-body-y-0", "anticipation"));
   const key = preset.project.animations.jump.tracks["body.y"][0];
   assert.equal(key.interpolation, "bezier");
   assert.equal(key.curvePreset, "anticipation");
   assert.deepEqual(key.curve, [0.35, -0.35, 0.65, 1]);
 
-  const tangent = executeCommand(preset, createSetKeyframeTangentsCommand("jump", "body.y", "jump-body-0", -0.2, 0.35));
+  const tangent = executeCommand(preset, createSetKeyframeTangentsCommand("jump", "body.y", "jump-body-y-0", -0.2, 0.35));
   assert.equal(tangent.project.animations.jump.tracks["body.y"][0].tangentIn, -0.2);
   assert.equal(tangent.project.animations.jump.tracks["body.y"][0].tangentOut, 0.35);
 

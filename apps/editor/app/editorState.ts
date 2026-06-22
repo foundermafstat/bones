@@ -239,6 +239,36 @@ export const initialAutosaveState: AutosaveState = {
   nextSaveAt: 0
 };
 
+const emptyProceduralState: ProceduralPresetState = {
+  inputs: { velocityX: 0, velocityY: 0, gravity: 1, wind: 0, grounded: true, jumpStart: false, landHeavy: false },
+  breathing: { enabled: false, frequency: 0.8, amplitude: 0, affectedBones: [], affectedBoneTransforms: {} },
+  secondaryMotion: { enabled: false, target: "root", stiffness: 0, damping: 0, velocityInfluence: 0, gravityInfluence: 0, windInfluence: 0, maxOffset: 0 },
+  squashStretch: { enabled: false, targetBone: "root", landingImpactScale: 0, rules: [] },
+  footIk: { enabled: false, feet: [], footChains: [], maxCorrection: 0, blend: 0 }
+};
+
+export function createEmptyEditorProject(): EditorProjectState {
+  return {
+    name: "Untitled Rig",
+    selectedBoneId: "root",
+    hierarchy: ["root"],
+    parents: { root: null },
+    bones: { root: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 } },
+    boneMetadata: {},
+    parts: {},
+    poses: {},
+    poseClipboard: null,
+    animations: {},
+    timeline: { selectedClipId: "", selectedKeyIds: [], keyClipboard: [], autoKey: false, snappingFps: 60, virtualWindow: { startRow: 0, rowCount: 12 }, curvePreview: { fromClipId: "", toClipId: "", weight: 0 } },
+    stateMachine: { initialStateId: "idle", states: [{ id: "idle", clipId: "" }], transitions: [], parameters: {}, preview: { fromStateId: "idle", toStateId: "idle", weight: 0 } },
+    procedural: emptyProceduralState,
+    dirtyScopes: cleanDirtyScopes,
+    autosave: initialAutosaveState,
+    dirty: false,
+    dirtyParts: []
+  };
+}
+
 export const initialEditorProject: EditorProjectState = {
   name: "Shadow Hero",
   selectedBoneId: "body",
