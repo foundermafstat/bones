@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createInitialControllerState, toAnimationParameters, updatePlatformerController } from "../dist/index.js";
+import { createInitialControllerState, toAnimationParameters, updatePlatformerController } from "../src/index.ts";
 
 const level = {
   colliders: [
@@ -23,6 +23,10 @@ test("controller collides with LDtk preview level and exposes debug params", () 
 test("controller supports jump/fall/wall slide and death zone debug", () => {
   const jump = updatePlatformerController(createInitialControllerState(0, 0), { moveX: 0, jumpPressed: true }, 0.016, level);
   assert.equal(jump.animationState, "jump");
+
+  const land = updatePlatformerController({ ...createInitialControllerState(0, 10), grounded: false, wasGrounded: false, velocityY: 180 }, { moveX: 0, jumpPressed: false }, 0.05, level);
+  assert.equal(land.animationState, "land");
+  assert.ok(toAnimationParameters(land).landingImpact > 0);
 
   const wall = updatePlatformerController({ ...createInitialControllerState(39, -12), grounded: false, velocityY: 120 }, { moveX: 1, jumpPressed: false }, 0.016, level);
   assert.equal(wall.animationState, "wallSlide");

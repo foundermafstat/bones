@@ -97,6 +97,7 @@ import {
 import { createProjectExportBundle, EDITOR_DRAFT_KEY, loadDraft, parseImportedProject, saveDraft, serializeEditorProject, type ProjectExportBundle } from "./projectIo";
 import { PixiPreview } from "./PixiPreview";
 import { vectorizeSvgPart } from "./editorVectorImport";
+import { parseLdtkLevel } from "@bones/ldtk-adapter";
 import { createInitialControllerState, toAnimationParameters, updatePlatformerController } from "@bones/platformer-preview";
 import type { QualityPresetName, RuntimeProfilerStats } from "@bones/runtime-pixi";
 
@@ -114,6 +115,25 @@ const previewClips = [
   { id: 3, name: "Fall" },
   { id: 4, name: "Land" }
 ] as const;
+
+const previewScenarios = ["idle", "walk", "jump", "fall", "land"] as const;
+
+const sampleLdtkLevel = {
+  identifier: "BonesPreviewRoom",
+  layerInstances: [
+    {
+      __identifier: "Entities",
+      entityInstances: [
+        { __identifier: "Spawn", px: [0, 0], width: 16, height: 32, fieldInstances: [{ __identifier: "id", __value: "player" }] },
+        { __identifier: "Collider", px: [-120, 34], width: 260, height: 16 },
+        { __identifier: "WallJumpSurface", px: [96, -42], width: 12, height: 76 },
+        { __identifier: "DeathZone", px: [150, 20], width: 36, height: 18 },
+        { __identifier: "CameraZone", px: [-64, -96], width: 180, height: 120 },
+        { __identifier: "AnimationTrigger", px: [96, -10], width: 16, height: 16, fieldInstances: [{ __identifier: "state", __value: "wallSlide" }] }
+      ]
+    }
+  ]
+} as const;
 
 const interpolationOptions: Keyframe["interpolation"][] = ["linear", "step", "hold", "bezier", "spring"];
 const curvePresetOptions: CurvePreset[] = ["linear", "step", "hold", "bezier", "spring", "anticipation", "overshoot"];
@@ -175,6 +195,7 @@ export default function EditorPage() {
   const [mode, setMode] = useState<EditorMode>("Rig");
   const [previewPlaying, setPreviewPlaying] = useState(true);
   const [previewClipId, setPreviewClipId] = useState(0);
+  const [previewScenario, setPreviewScenario] = useState<(typeof previewScenarios)[number]>("idle");
   const [previewQuality, setPreviewQuality] = useState<QualityPresetName>("medium");
   const [profilerStats, setProfilerStats] = useState<RuntimeProfilerStats | null>(null);
   const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
@@ -266,22 +287,20 @@ export default function EditorPage() {
   const smTransitionId = `${smFromStateId}-${smToStateId}`;
   const selectedTransition = editorState.project.stateMachine.transitions.find((transition) => transition.id === smSelectedTransitionId) ?? editorState.project.stateMachine.transitions[0];
   const exportFileEntries = useMemo(() => Object.entries(lastExportBundle?.files ?? {}), [lastExportBundle]);
-  const previewLevel = useMemo(
-    () => ({
-      colliders: [
-        { x: -120, y: 34, width: 260, height: 16, kind: "solid" as const },
-        { x: 96, y: -42, width: 12, height: 76, kind: "wallJump" as const },
-        { x: 150, y: 20, width: 36, height: 18, kind: "deathZone" as const }
-      ],
-      cameraZones: [{ x: -64, y: -96, width: 180, height: 120, kind: "solid" as const }],
-      animationTriggers: [{ x: 96, y: -10, state: "wallSlide" }]
-    }),
-    []
-  );
+  const previewLevel = useMemo(() => parseLdtkLevel(sampleLdtkLevel), []);
   const platformerDebug = useMemo(() => {
-    const state = updatePlatformerController(createInitialControllerState(0, 0), { moveX: 1, jumpPressed: false }, 0.2, previewLevel);
+    const state =
+      previewScenario === "walk"
+        ? updatePlatformerController(createInitialControllerState(0, 0), { moveX: 1, jumpPressed: false }, 0.2, previewLevel)
+        : previewScenario === "jump"
+          ? updatePlatformerController(createInitialControllerState(0, 0), { moveX: 0, jumpPressed: true }, 0.016, previewLevel)
+          : previewScenario === "fall"
+            ? updatePlatformerController({ ...createInitialControllerState(0, -48), grounded: false, wasGrounded: false, velocityY: 96 }, { moveX: 0, jumpPressed: false }, 0.016, previewLevel)
+            : previewScenario === "land"
+              ? updatePlatformerController({ ...createInitialControllerState(0, 10), grounded: false, wasGrounded: false, velocityY: 180 }, { moveX: 0, jumpPressed: false }, 0.05, previewLevel)
+              : updatePlatformerController(createInitialControllerState(0, 0), { moveX: 0, jumpPressed: false }, 0.016, previewLevel);
     return { state, params: toAnimationParameters(state) };
-  }, [previewLevel]);
+  }, [previewLevel, previewScenario]);
   const runCommand = (command: Parameters<typeof executeCommand>[1]) => setEditorState((state) => executeCommand(state, command));
   useEffect(() => {
     setRenameBoneId(selectedBone);
@@ -615,6 +634,57 @@ export default function EditorPage() {
           </CardHeader>
           <CardContent className="relative min-h-0 flex-1 overflow-hidden bg-[linear-gradient(var(--border)_1px,transparent_1px),linear-gradient(90deg,var(--border)_1px,transparent_1px)] bg-[size:24px_24px] p-0" aria-label="PixiJS canvas viewport">
             <PixiPreview clipId={previewClipId} playing={previewPlaying} project={editorState.project} quality={previewQuality} showSkeleton={mode !== "Preview"} onProfilerStats={setProfilerStats} />
+            {mode === "Preview" ? (
+              <div className="absolute inset-0 z-20 pointer-events-none">
+                <div className="pointer-events-auto absolute left-3 top-3 grid w-[min(560px,calc(100%-24px))] gap-2 rounded-md border bg-card/95 p-3 shadow-sm" aria-label="Gameplay preview overlay">
+                  <div className="flex flex-wrap items-center gap-1">
+                    {previewScenarios.map((scenario, index) => (
+                      <Button
+                        key={scenario}
+                        size="sm"
+                        type="button"
+                        variant={previewScenario === scenario ? "default" : "outline"}
+                        onClick={() => {
+                          setPreviewScenario(scenario);
+                          setPreviewClipId(index);
+                        }}
+                      >
+                        {scenario}
+                      </Button>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <p className="font-medium">State {platformerDebug.state.animationState}</p>
+                      <p className="text-muted-foreground">Clip {previewClips[previewClipId]?.name ?? "Unknown"} / transition {editorState.project.stateMachine.preview.weight.toFixed(2)}</p>
+                      <p className="text-muted-foreground">Params absSpeed {platformerDebug.params.absSpeed} velocityY {platformerDebug.params.velocityY}</p>
+                      <p className="text-muted-foreground">grounded {String(platformerDebug.params.grounded)} landing {platformerDebug.params.landingImpact}</p>
+                    </div>
+                    <div>
+                      <p className="font-medium">Events</p>
+                      <p className="text-muted-foreground">colliders {platformerDebug.state.debug.activeColliders.length} / death {String(platformerDebug.state.debug.touchedDeathZone)}</p>
+                      <p className="text-muted-foreground">camera {platformerDebug.state.cameraX.toFixed(0)}, {platformerDebug.state.cameraY.toFixed(0)}</p>
+                      <p className="text-muted-foreground">room {previewLevel.id}</p>
+                    </div>
+                  </div>
+                </div>
+                <svg className="absolute bottom-3 left-3 h-36 w-64 rounded-md border bg-card/90 p-2" viewBox="-150 -110 360 180" aria-label="Collision debug overlay">
+                  {previewLevel.colliders.map((collider, index) => (
+                    <rect
+                      fill={collider.kind === "deathZone" ? "rgba(239,68,68,0.45)" : collider.kind === "wallJump" ? "rgba(34,197,94,0.45)" : "rgba(79,140,255,0.35)"}
+                      height={collider.height}
+                      key={`${collider.kind}-${index}`}
+                      stroke="currentColor"
+                      strokeWidth="1"
+                      width={collider.width}
+                      x={collider.x}
+                      y={collider.y}
+                    />
+                  ))}
+                  <circle cx={platformerDebug.state.x} cy={platformerDebug.state.y} r="6" fill="#f59e0b" />
+                </svg>
+              </div>
+            ) : null}
             {mode === "Rig" ? (
               <svg
                 aria-label="Rig bone editor"

@@ -17,6 +17,8 @@ export interface PlatformerControllerState {
   readonly velocityX: number;
   readonly velocityY: number;
   readonly grounded: boolean;
+  readonly wasGrounded: boolean;
+  readonly landingImpact: number;
   readonly facing: -1 | 1;
   readonly wallContact: "left" | "right" | "none";
   readonly animationState: "idle" | "walk" | "jump" | "fall" | "land" | "wallSlide";
@@ -47,7 +49,7 @@ export interface PlatformerDebugState {
 }
 
 export function createInitialControllerState(x = 0, y = 0): PlatformerControllerState {
-  return { x, y, velocityX: 0, velocityY: 0, grounded: true, facing: 1, wallContact: "none", animationState: "idle", cameraX: x, cameraY: y, debug: { activeColliders: [], touchedDeathZone: false } };
+  return { x, y, velocityX: 0, velocityY: 0, grounded: true, wasGrounded: true, landingImpact: 0, facing: 1, wallContact: "none", animationState: "idle", cameraX: x, cameraY: y, debug: { activeColliders: [], touchedDeathZone: false } };
 }
 
 export function updatePlatformerController(state: PlatformerControllerState, input: PlatformerInputState, dt: number, level?: PlatformerPreviewLevelData): PlatformerControllerState {
@@ -63,10 +65,11 @@ export function updatePlatformerController(state: PlatformerControllerState, inp
   const x = collision.x;
   const grounded = collision.grounded || y >= 0;
   const nextVelocityY = grounded ? 0 : velocityY;
+  const landingImpact = !state.grounded && grounded && velocityY > 0 ? Math.min(1, velocityY / 320) : 0;
   const nextY = grounded && !level ? 0 : y;
   const facing = velocityX < 0 ? -1 : velocityX > 0 ? 1 : state.facing;
   const activeTrigger = level?.animationTriggers?.find((trigger) => Math.abs(trigger.x - x) < 16 && Math.abs(trigger.y - nextY) < 24)?.state;
-  const animationState = activeTrigger === "wallSlide" ? "wallSlide" : selectAnimationState(velocityX, nextVelocityY, grounded, jumpPressed, collision.wallContact);
+  const animationState = landingImpact > 0 ? "land" : activeTrigger === "wallSlide" ? "wallSlide" : selectAnimationState(velocityX, nextVelocityY, grounded, jumpPressed, collision.wallContact);
   const camera = resolveCamera(x, nextY, level);
   return {
     x,
@@ -74,6 +77,8 @@ export function updatePlatformerController(state: PlatformerControllerState, inp
     velocityX,
     velocityY: nextVelocityY,
     grounded,
+    wasGrounded: state.grounded,
+    landingImpact,
     facing,
     wallContact: collision.wallContact,
     animationState,
@@ -90,6 +95,8 @@ export function toAnimationParameters(state: PlatformerControllerState): Record<
     velocityX: state.velocityX,
     velocityY: state.velocityY,
     grounded: state.grounded,
+    wasGrounded: state.wasGrounded,
+    landingImpact: state.landingImpact,
     jumpPressed: state.animationState === "jump",
     facing: state.facing,
     wallContact: state.wallContact,
