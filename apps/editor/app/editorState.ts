@@ -143,7 +143,13 @@ export interface EditorStateMachine {
   readonly states: readonly EditorStateNode[];
   readonly transitions: readonly EditorTransition[];
   readonly parameters: Readonly<Record<string, number | boolean | string>>;
+  readonly nodePositions?: Readonly<Record<string, StateMachineNodePosition>>;
   readonly preview: { readonly fromStateId: string; readonly toStateId: string; readonly weight: number };
+}
+
+export interface StateMachineNodePosition {
+  readonly x: number;
+  readonly y: number;
 }
 
 export interface EditorStateNode {
@@ -168,6 +174,7 @@ export interface EditorTransition {
   readonly priority: number;
   readonly canInterrupt: boolean;
   readonly syncMode: "none" | "normalizedTime" | "phaseMatch";
+  readonly interruptWindow?: readonly [number, number];
   readonly conditions: readonly EditorTransitionCondition[];
 }
 
@@ -175,6 +182,14 @@ export interface EditorTransitionCondition {
   readonly parameter: string;
   readonly op: "==" | "!=" | ">" | ">=" | "<" | "<=";
   readonly value: number | boolean | string;
+}
+
+export interface StateMachineSimulation {
+  readonly activeStateId: string;
+  readonly previousStateId: string;
+  readonly transitionId?: string;
+  readonly transitionWeight: number;
+  readonly blendWeights: readonly { readonly clipId: string; readonly weight: number }[];
 }
 
 export interface ProceduralPresetState {
@@ -1741,6 +1756,36 @@ export function createSetInitialStateCommand(stateId: string): EditorCommand {
   };
 }
 
+export function createMoveStateMachineNodeCommand(stateId: string, position: StateMachineNodePosition): EditorCommand {
+  let previous: StateMachineNodePosition | undefined;
+  return {
+    id: `state-node-position:${stateId}`,
+    label: "Move state node",
+    do: (state) => {
+      previous = state.stateMachine.nodePositions?.[stateId];
+      return {
+        ...markDirty(state, stateId, "stateMachine"),
+        stateMachine: {
+          ...state.stateMachine,
+          nodePositions: {
+            ...(state.stateMachine.nodePositions ?? {}),
+            [stateId]: { x: Number(position.x.toFixed(2)), y: Number(position.y.toFixed(2)) }
+          }
+        }
+      };
+    },
+    undo: (state) => {
+      const nodePositions = { ...(state.stateMachine.nodePositions ?? {}) };
+      if (previous) {
+        nodePositions[stateId] = previous;
+      } else {
+        delete nodePositions[stateId];
+      }
+      return { ...markDirty(state, stateId, "stateMachine"), stateMachine: { ...state.stateMachine, nodePositions } };
+    }
+  };
+}
+
 export function createUpdateTransitionCommand(transitionId: string, patch: Partial<EditorTransition>): EditorCommand {
   let previous: EditorTransition | undefined;
   return {
@@ -1754,6 +1799,60 @@ export function createUpdateTransitionCommand(transitionId: string, patch: Parti
       };
     },
     undo: (state) => (previous ? { ...markDirty(state, transitionId, "stateMachine"), stateMachine: { ...state.stateMachine, transitions: state.stateMachine.transitions.map((transition) => (transition.id === transitionId ? previous! : transition)) } } : state)
+  };
+}
+
+export function createDeleteTransitionCommand(transitionId: string): EditorCommand {
+  let previous: EditorTransition | undefined;
+  return {
+    id: `transition-delete:${transitionId}`,
+    label: "Delete transition",
+    do: (state) => {
+      previous = state.stateMachine.transitions.find((transition) => transition.id === transitionId);
+      return {
+        ...markDirty(state, transitionId, "stateMachine"),
+        stateMachine: { ...state.stateMachine, transitions: state.stateMachine.transitions.filter((transition) => transition.id !== transitionId) }
+      };
+    },
+    undo: (state) =>
+      previous
+        ? { ...markDirty(state, transitionId, "stateMachine"), stateMachine: { ...state.stateMachine, transitions: [...state.stateMachine.transitions, previous] } }
+        : state
+  };
+}
+
+export function createDeleteStateMachineStateCommand(stateId: string): EditorCommand {
+  let previous: EditorStateMachine | undefined;
+  return {
+    id: `state-delete:${stateId}`,
+    label: "Delete state",
+    do: (state) => {
+      const target = state.stateMachine.states.find((item) => item.id === stateId);
+      if (!target || state.stateMachine.states.length <= 1) {
+        return state;
+      }
+      previous = state.stateMachine;
+      const states = state.stateMachine.states.filter((item) => item.id !== stateId);
+      const fallbackId = states[0]?.id ?? state.stateMachine.initialStateId;
+      const nodePositions = { ...(state.stateMachine.nodePositions ?? {}) };
+      delete nodePositions[stateId];
+      return {
+        ...markDirty(state, stateId, "stateMachine"),
+        stateMachine: {
+          ...state.stateMachine,
+          initialStateId: state.stateMachine.initialStateId === stateId ? fallbackId : state.stateMachine.initialStateId,
+          states,
+          transitions: state.stateMachine.transitions.filter((transition) => transition.fromStateId !== stateId && transition.toStateId !== stateId),
+          nodePositions,
+          preview: {
+            fromStateId: state.stateMachine.preview.fromStateId === stateId ? fallbackId : state.stateMachine.preview.fromStateId,
+            toStateId: state.stateMachine.preview.toStateId === stateId ? fallbackId : state.stateMachine.preview.toStateId,
+            weight: state.stateMachine.preview.weight
+          }
+        }
+      };
+    },
+    undo: (state) => (previous ? { ...markDirty(state, stateId, "stateMachine"), stateMachine: previous } : state)
   };
 }
 
@@ -1805,6 +1904,24 @@ export function createSetStateMachinePreviewCommand(fromStateId: string, toState
       return { ...markDirty(state, "stateMachinePreview", "preview"), stateMachine: { ...state.stateMachine, preview: { fromStateId, toStateId, weight: Math.max(0, Math.min(1, weight)) } } };
     },
     undo: (state) => (previous ? { ...markDirty(state, "stateMachinePreview", "preview"), stateMachine: { ...state.stateMachine, preview: previous } } : state)
+  };
+}
+
+export function evaluateStateMachinePreview(stateMachine: EditorStateMachine): StateMachineSimulation {
+  const preview = stateMachine.preview;
+  const activeStateId = preview.weight >= 1 ? preview.toStateId : preview.fromStateId;
+  const candidate = [...stateMachine.transitions]
+    .filter((transition) => transition.fromStateId === activeStateId && transition.conditions.every((condition) => isTransitionConditionMet(stateMachine.parameters[condition.parameter], condition)))
+    .sort((left, right) => right.priority - left.priority)[0];
+  const transition = candidate ?? stateMachine.transitions.find((item) => item.fromStateId === preview.fromStateId && item.toStateId === preview.toStateId);
+  const toStateId = candidate?.toStateId ?? preview.toStateId;
+  const toState = stateMachine.states.find((state) => state.id === toStateId);
+  return {
+    activeStateId: toStateId,
+    previousStateId: activeStateId,
+    ...(transition ? { transitionId: transition.id } : {}),
+    transitionWeight: candidate ? 1 : preview.weight,
+    blendWeights: toState?.blendTree ? evaluateBlendTree(toState.blendTree, stateMachine.parameters[toState.blendTree.parameter]) : toState?.clipId ? [{ clipId: toState.clipId, weight: 1 }] : []
   };
 }
 
@@ -2282,6 +2399,48 @@ function curvePresetToKeyframe(preset: CurvePreset): { readonly interpolation: K
     default:
       return { interpolation: "bezier", curve: [0.2, 0.8, 0.2, 1] };
   }
+}
+
+function isTransitionConditionMet(actual: number | boolean | string | undefined, condition: EditorTransitionCondition): boolean {
+  if (actual === undefined) {
+    return false;
+  }
+  switch (condition.op) {
+    case "==":
+      return actual === condition.value;
+    case "!=":
+      return actual !== condition.value;
+    case ">":
+      return Number(actual) > Number(condition.value);
+    case ">=":
+      return Number(actual) >= Number(condition.value);
+    case "<":
+      return Number(actual) < Number(condition.value);
+    case "<=":
+      return Number(actual) <= Number(condition.value);
+    default:
+      return false;
+  }
+}
+
+function evaluateBlendTree(blendTree: BlendTree1D, parameterValue: number | boolean | string | undefined): readonly { readonly clipId: string; readonly weight: number }[] {
+  const children = [...blendTree.children].sort((left, right) => left.threshold - right.threshold);
+  if (!children.length) {
+    return [];
+  }
+  const value = Number(parameterValue ?? 0);
+  const first = children[0]!;
+  const last = children[children.length - 1]!;
+  const lower = [...children].reverse().find((child) => child.threshold <= value) ?? first;
+  const upper = children.find((child) => child.threshold >= value) ?? last;
+  if (lower.clipId === upper.clipId || lower.threshold === upper.threshold) {
+    return [{ clipId: lower.clipId, weight: 1 }];
+  }
+  const alpha = Math.max(0, Math.min(1, (value - lower.threshold) / (upper.threshold - lower.threshold)));
+  return [
+    { clipId: lower.clipId, weight: Number((1 - alpha).toFixed(3)) },
+    { clipId: upper.clipId, weight: Number(alpha.toFixed(3)) }
+  ].filter((entry) => entry.weight > 0);
 }
 
 function renameAnimation(state: EditorProjectState, clipId: string, nextId: string): EditorProjectState {

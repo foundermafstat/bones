@@ -23,6 +23,8 @@ import {
   createDeleteSelectedKeysCommand,
   createBindPartToBoneCommand,
   createDeleteBoneCommand,
+  createDeleteStateMachineStateCommand,
+  createDeleteTransitionCommand,
   createEditPathPointCommand,
   createConvertLineToCubicCommand,
   createGroupedCommand,
@@ -30,6 +32,7 @@ import {
   createMirrorBoneTransformCommand,
   createMoveBoneCommand,
   createMoveKeyframeCommand,
+  createMoveStateMachineNodeCommand,
   createNormalizeLoopCommand,
   createPasteKeysCommand,
   createPastePoseCommand,
@@ -60,6 +63,7 @@ import {
   createUpdateStateMachineStateCommand,
   createUpdateTransitionCommand,
   createUpdateProceduralCommand,
+  evaluateStateMachinePreview,
   executeCommand,
   initialEditorProject,
   redo,
@@ -571,6 +575,30 @@ test("state machine graph commands edit states, transitions, parameters, blend t
 
   const undone = undo(preview);
   assert.deepEqual(undone.project.stateMachine.preview, blend.project.stateMachine.preview);
+});
+
+test("state machine graph supports node positions delete impact and live simulation", () => {
+  const positioned = executeCommand(freshContainer(), createMoveStateMachineNodeCommand("walk", { x: 410.25, y: 190.5 }));
+  assert.deepEqual(positioned.project.stateMachine.nodePositions.walk, { x: 410.25, y: 190.5 });
+
+  const deletedTransition = executeCommand(positioned, createDeleteTransitionCommand("idle-walk"));
+  assert.equal(deletedTransition.project.stateMachine.transitions.some((transition) => transition.id === "idle-walk"), false);
+  assert.equal(undo(deletedTransition).project.stateMachine.transitions.some((transition) => transition.id === "idle-walk"), true);
+
+  const deletedState = executeCommand(positioned, createDeleteStateMachineStateCommand("walk"));
+  assert.equal(deletedState.project.stateMachine.states.some((state) => state.id === "walk"), false);
+  assert.equal(deletedState.project.stateMachine.transitions.some((transition) => transition.fromStateId === "walk" || transition.toStateId === "walk"), false);
+  assert.equal(deletedState.project.stateMachine.nodePositions.walk, undefined);
+
+  const fast = executeCommand(freshContainer(), createSetStateMachineParameterCommand("absSpeed", 96));
+  const simulation = evaluateStateMachinePreview(fast.project.stateMachine);
+  assert.equal(simulation.transitionId, "idle-walk");
+  assert.equal(simulation.activeStateId, "walk");
+  assert.deepEqual(simulation.blendWeights, [{ clipId: "walk", weight: 1 }]);
+
+  const locomotion = executeCommand(fast, createSetStateMachinePreviewCommand("idle", "locomotion", 1));
+  const blendSimulation = evaluateStateMachinePreview(locomotion.project.stateMachine);
+  assert.deepEqual(blendSimulation.blendWeights, [{ clipId: "walk", weight: 1 }]);
 });
 
 test("undo and redo restore timeline selection and graph preview ui snapshots", () => {

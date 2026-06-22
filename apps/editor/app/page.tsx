@@ -84,6 +84,9 @@ import {
   createSelectTrackKeysCommand,
   createSetTimelineSelectionCommand,
   createGroupedCommand,
+  createDeleteStateMachineStateCommand,
+  createDeleteTransitionCommand,
+  createMoveStateMachineNodeCommand,
   createSetBlendTreeCommand,
   createSetInitialStateCommand,
   createSetStateMachineParameterCommand,
@@ -98,6 +101,7 @@ import {
   createUpdateProceduralCommand,
   createUpdateKeyframeCommand,
   createEmptyEditorProject,
+  evaluateStateMachinePreview,
   executeCommand,
   initialEditorProject,
   markAutosaveSaved,
@@ -108,7 +112,8 @@ import {
   type EditorTransition,
   type EditorTransitionCondition,
   type EditorStateContainer,
-  type Keyframe
+  type Keyframe,
+  type StateMachineNodePosition
 } from "./editorState";
 import { createProjectExportBundle, EDITOR_DRAFT_KEY, loadDraft, parseImportedProject, saveDraft, serializeEditorProject, type ProjectExportBundle, type ProjectImportResult } from "./projectIo";
 import { PixiPreview } from "./PixiPreview";
@@ -118,6 +123,7 @@ import { createInitialControllerState, toAnimationParameters, updatePlatformerCo
 import type { QualityPresetName, RuntimeProfilerStats } from "@bones/runtime-pixi";
 
 const modes = ["Rig", "Shape", "Pose", "Timeline", "Curve", "State Machine", "Procedural", "Preview"] as const;
+const stateMachineViewBox = { x: 0, y: 0, width: 640, height: 360 } as const;
 type ProjectOrigin = "sample" | "empty" | "draft" | "imported";
 
 const sampleProject = {
@@ -278,6 +284,9 @@ export default function EditorPage() {
   const [smConditionOp, setSmConditionOp] = useState("==");
   const [smConditionValue, setSmConditionValue] = useState("true");
   const [smSelectedTransitionId, setSmSelectedTransitionId] = useState("any-jump");
+  const [smDragNodeId, setSmDragNodeId] = useState<string | null>(null);
+  const [smDraftNodePositions, setSmDraftNodePositions] = useState<Record<string, StateMachineNodePosition>>({});
+  const [smConnectorStartId, setSmConnectorStartId] = useState<string | null>(null);
   const [proceduralBonesText, setProceduralBonesText] = useState("body, head");
   const [proceduralFeetText, setProceduralFeetText] = useState("footFront, footBack");
   const [squashCondition, setSquashCondition] = useState("jumpStart");
@@ -343,18 +352,21 @@ export default function EditorPage() {
   const parameterIds = Object.keys(editorState.project.stateMachine.parameters);
   const smTransitionId = `${smFromStateId}-${smToStateId}`;
   const selectedTransition = editorState.project.stateMachine.transitions.find((transition) => transition.id === smSelectedTransitionId) ?? editorState.project.stateMachine.transitions[0];
+  const stateMachineSimulation = useMemo(() => evaluateStateMachinePreview(editorState.project.stateMachine), [editorState.project.stateMachine]);
   const stateMachineGraph = useMemo(() => {
     const states = editorState.project.stateMachine.states;
     const centerX = 320;
     const centerY = 180;
     const radiusX = 220;
     const radiusY = 112;
+    const nodePositions = { ...(editorState.project.stateMachine.nodePositions ?? {}), ...smDraftNodePositions };
     const nodes = states.map((state, index) => {
       const angle = states.length > 1 ? (Math.PI * 2 * index) / states.length - Math.PI / 2 : -Math.PI / 2;
+      const position = nodePositions[state.id];
       return {
         state,
-        x: centerX + Math.cos(angle) * radiusX,
-        y: centerY + Math.sin(angle) * radiusY
+        x: position?.x ?? centerX + Math.cos(angle) * radiusX,
+        y: position?.y ?? centerY + Math.sin(angle) * radiusY
       };
     });
     const byId = new Map(nodes.map((node) => [node.state.id, node]));
@@ -364,7 +376,7 @@ export default function EditorPage() {
       return from && to ? [{ transition, from, to }] : [];
     });
     return { nodes, transitions };
-  }, [editorState.project.stateMachine.states, editorState.project.stateMachine.transitions]);
+  }, [editorState.project.stateMachine.nodePositions, editorState.project.stateMachine.states, editorState.project.stateMachine.transitions, smDraftNodePositions]);
   const exportFileEntries = useMemo(() => Object.entries(lastExportBundle?.files ?? {}), [lastExportBundle]);
   const previewLevel = useMemo(() => parseLdtkLevel(sampleLdtkLevel), []);
   const platformerDebug = useMemo(() => {
@@ -383,6 +395,38 @@ export default function EditorPage() {
   const runCommand = (command: Parameters<typeof executeCommand>[1]) => {
     setLastCommand(command.label);
     setEditorState((state) => executeCommand(state, command));
+  };
+  const commitStateNodePosition = (stateId: string, position: StateMachineNodePosition) => {
+    setSmDraftNodePositions((positions) => {
+      const next = { ...positions };
+      delete next[stateId];
+      return next;
+    });
+    setSmDragNodeId(null);
+    runCommand(createMoveStateMachineNodeCommand(stateId, position));
+  };
+  const createTransitionFromConnector = (fromStateId: string, toStateId: string) => {
+    if (fromStateId === toStateId) {
+      setSmConnectorStartId(null);
+      return;
+    }
+    const transition: EditorTransition = {
+      id: `${fromStateId}-${toStateId}`,
+      fromStateId,
+      toStateId,
+      duration: smDuration,
+      easing: smEasing as EditorTransition["easing"],
+      priority: smPriority,
+      canInterrupt: smCanInterrupt,
+      syncMode: smSyncMode as EditorTransition["syncMode"],
+      interruptWindow: [0, Math.max(0.01, smDuration)],
+      conditions: [{ parameter: smConditionParameter, op: smConditionOp as EditorTransitionCondition["op"], value: parseStateMachineValue(smConditionValue) }]
+    };
+    setSmFromStateId(fromStateId);
+    setSmToStateId(toStateId);
+    setSmSelectedTransitionId(transition.id);
+    setSmConnectorStartId(null);
+    runCommand(createTransitionCommand(transition));
   };
   const timelineTimeFromLane = (lane: HTMLElement, clientX: number, duration: number) => {
     const rect = lane.getBoundingClientRect();
@@ -1130,7 +1174,26 @@ export default function EditorPage() {
                       ))}
                     </div>
                   </div>
-                  <svg className="h-[min(360px,calc(100dvh-360px))] min-h-60 w-full rounded-md border bg-background" viewBox="0 0 640 360" role="img" aria-label="State machine states and transitions">
+                  <svg
+                    className="h-[min(360px,calc(100dvh-360px))] min-h-60 w-full rounded-md border bg-background"
+                    viewBox="0 0 640 360"
+                    role="img"
+                    aria-label="State machine states and transitions"
+                    onPointerMove={(event) => {
+                      if (!smDragNodeId) {
+                        return;
+                      }
+                      const [x, y] = svgPointFromEvent(event, stateMachineViewBox);
+                      setSmDraftNodePositions((positions) => ({ ...positions, [smDragNodeId]: { x, y } }));
+                    }}
+                    onPointerUp={(event) => {
+                      if (!smDragNodeId) {
+                        return;
+                      }
+                      const [x, y] = svgPointFromEvent(event, stateMachineViewBox);
+                      commitStateNodePosition(smDragNodeId, { x, y });
+                    }}
+                  >
                     <defs>
                       <marker id="state-machine-arrow" markerHeight="8" markerWidth="8" orient="auto" refX="7" refY="4">
                         <path d="M 0 0 L 8 4 L 0 8 Z" fill="#4f8cff" />
@@ -1198,6 +1261,17 @@ export default function EditorPage() {
                             setSmStateId(state.id);
                             setSmStateClipId(state.clipId);
                           }}
+                          onPointerDown={(event) => {
+                            event.preventDefault();
+                            event.currentTarget.setPointerCapture(event.pointerId);
+                            setSmDragNodeId(state.id);
+                            setSmDraftNodePositions((positions) => ({ ...positions, [state.id]: { x, y } }));
+                          }}
+                          onPointerUp={() => {
+                            if (smConnectorStartId) {
+                              createTransitionFromConnector(smConnectorStartId, state.id);
+                            }
+                          }}
                         >
                           <rect fill={selected ? "#dbeafe" : preview ? "#eff6ff" : "var(--card)"} height="56" rx="8" stroke={selected ? "#1d4ed8" : initial ? "#f59e0b" : "#cbd5e1"} strokeWidth={selected ? 3 : 2} width="112" x={x - 56} y={y - 28} />
                           <text fill="currentColor" fontSize="13" fontWeight="600" textAnchor="middle" x={x} y={y - 4}>
@@ -1206,6 +1280,20 @@ export default function EditorPage() {
                           <text fill="#64748b" fontSize="10" textAnchor="middle" x={x} y={y + 13}>
                             {state.clipId || "no clip"}
                           </text>
+                          <circle
+                            aria-label={`Create transition from ${state.id}`}
+                            cx={x + 48}
+                            cy={y}
+                            fill={smConnectorStartId === state.id ? "#1d4ed8" : "#ffffff"}
+                            r="6"
+                            stroke="#1d4ed8"
+                            strokeWidth="2"
+                            onPointerDown={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              setSmConnectorStartId(state.id);
+                            }}
+                          />
                         </g>
                       );
                     })}
@@ -1769,6 +1857,9 @@ export default function EditorPage() {
                     <Button size="sm" type="button" variant="outline" disabled={!smFromStateId} onClick={() => runCommand(createSetInitialStateCommand(smFromStateId))}>
                       Set Initial
                     </Button>
+                    <Button size="sm" type="button" variant="outline" disabled={!smFromStateId} onClick={() => runCommand(createDeleteStateMachineStateCommand(smFromStateId))}>
+                      Delete State
+                    </Button>
                     <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetBlendTreeCommand("locomotion", { type: "1d", parameter: "absSpeed", children: [{ threshold: 0, clipId: "idle" }, { threshold: 80, clipId: "walk" }, { threshold: 150, clipId: "walk" }] }))}>
                       Blend 1D
                     </Button>
@@ -1885,6 +1976,35 @@ export default function EditorPage() {
                     <Button size="sm" type="button" variant="outline" disabled={!selectedTransition} onClick={() => selectedTransition && runCommand(createUpdateTransitionCommand(selectedTransition.id, { duration: smDuration, easing: smEasing as EditorTransition["easing"], priority: smPriority, canInterrupt: smCanInterrupt, syncMode: smSyncMode as EditorTransition["syncMode"] }))}>
                       Update Transition
                     </Button>
+                    <Button size="sm" type="button" variant="outline" disabled={!selectedTransition} onClick={() => selectedTransition && runCommand(createDeleteTransitionCommand(selectedTransition.id))}>
+                      Delete Transition
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1 rounded-md border p-2">
+                    {["absSpeed", "velocityY", "timeInState"].map((parameterId) => (
+                      <label className="grid gap-1 text-xs" key={parameterId}>
+                        <span className="text-muted-foreground">{parameterId}</span>
+                        <Input
+                          className="h-7 text-xs"
+                          type="number"
+                          step="1"
+                          value={Number(editorState.project.stateMachine.parameters[parameterId] ?? 0)}
+                          onChange={(event) => runCommand(createSetStateMachineParameterCommand(parameterId, Number(event.target.value)))}
+                          aria-label={`Live parameter ${parameterId}`}
+                        />
+                      </label>
+                    ))}
+                    {["grounded", "jumpPressed"].map((parameterId) => (
+                      <Button
+                        key={parameterId}
+                        size="sm"
+                        type="button"
+                        variant={editorState.project.stateMachine.parameters[parameterId] === true ? "default" : "outline"}
+                        onClick={() => runCommand(createSetStateMachineParameterCommand(parameterId, editorState.project.stateMachine.parameters[parameterId] !== true))}
+                      >
+                        {parameterId}
+                      </Button>
+                    ))}
                   </div>
                   <div className="grid grid-cols-2 gap-1">
                     <Select value={selectedTransition?.id ?? ""} onValueChange={setSmSelectedTransitionId}>
@@ -1907,6 +2027,12 @@ export default function EditorPage() {
                     initial {editorState.project.stateMachine.initialStateId} / active {editorState.project.stateMachine.preview.fromStateId}
                     {" -> "}
                     {editorState.project.stateMachine.preview.toStateId} weight {editorState.project.stateMachine.preview.weight.toFixed(1)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    simulation {stateMachineSimulation.previousStateId}
+                    {" -> "}
+                    {stateMachineSimulation.activeStateId} / {stateMachineSimulation.transitionId ?? "no transition"} / weight {stateMachineSimulation.transitionWeight.toFixed(2)} / clips{" "}
+                    {stateMachineSimulation.blendWeights.map((entry) => `${entry.clipId}:${entry.weight.toFixed(2)}`).join(", ") || "none"}
                   </p>
                 </CardContent>
               </InspectorSection>
