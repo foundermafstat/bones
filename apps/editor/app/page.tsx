@@ -118,6 +118,17 @@ const previewClips = [
 
 const previewScenarios = ["idle", "walk", "jump", "fall", "land"] as const;
 
+const modeSurfaceDescriptions: Record<string, string> = {
+  Rig: "Skeleton hierarchy and transforms",
+  Shape: "Vector/path point editing",
+  Pose: "Pose library and capture",
+  Timeline: "Dopesheet keyframes",
+  Curve: "Graph editor",
+  "State Machine": "States, transitions, conditions",
+  Procedural: "Runtime additive layers",
+  Preview: "LDtk gameplay validation"
+};
+
 const sampleLdtkLevel = {
   identifier: "BonesPreviewRoom",
   layerInstances: [
@@ -150,7 +161,12 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid gap-1">
       <Label className="truncate text-xs text-muted-foreground">{label}</Label>
-      <Input className="h-7 text-xs" readOnly value={value} />
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-1">
+        <Input className="h-7 min-w-0 text-xs" readOnly title={value} value={value} />
+        <Button className="h-7 px-2 text-xs" type="button" variant="outline" onClick={() => void navigator.clipboard.writeText(value)}>
+          Copy
+        </Button>
+      </div>
     </div>
   );
 }
@@ -243,6 +259,7 @@ export default function EditorPage() {
   const [squashScaleY, setSquashScaleY] = useState(1.12);
   const [squashDuration, setSquashDuration] = useState(0.08);
   const [ioStatus, setIoStatus] = useState("ready");
+  const [lastCommand, setLastCommand] = useState("none");
   const [projectOrigin, setProjectOrigin] = useState<ProjectOrigin>("sample");
   const [lastExportBundle, setLastExportBundle] = useState<ProjectExportBundle | null>(null);
   const [editorState, setEditorState] = useState<EditorStateContainer>({
@@ -301,7 +318,10 @@ export default function EditorPage() {
               : updatePlatformerController(createInitialControllerState(0, 0), { moveX: 0, jumpPressed: false }, 0.016, previewLevel);
     return { state, params: toAnimationParameters(state) };
   }, [previewLevel, previewScenario]);
-  const runCommand = (command: Parameters<typeof executeCommand>[1]) => setEditorState((state) => executeCommand(state, command));
+  const runCommand = (command: Parameters<typeof executeCommand>[1]) => {
+    setLastCommand(command.label);
+    setEditorState((state) => executeCommand(state, command));
+  };
   useEffect(() => {
     setRenameBoneId(selectedBone);
     setNewBoneParentId(selectedBone);
@@ -480,6 +500,15 @@ export default function EditorPage() {
       ]
     }
   ];
+  const activeToolbarActions = (
+    mode === "Rig" || mode === "Shape"
+      ? toolbarGroups.find((group) => group.label === "Rig / Shape")?.actions
+      : mode === "Procedural"
+        ? toolbarGroups.find((group) => group.label === "Procedural")?.actions
+        : mode === "Timeline" || mode === "Curve" || mode === "State Machine" || mode === "Pose"
+          ? toolbarGroups.find((group) => group.label === "Animate")?.actions
+          : toolbarGroups.find((group) => group.label === "Project")?.actions
+  )?.slice(0, 4) ?? [];
   const inspectorRows = useMemo<Array<[string, string]>>(
     () => [
       ["Mode", mode],
@@ -491,9 +520,12 @@ export default function EditorPage() {
       ["Scale", `${selectedTransform.scaleX}, ${selectedTransform.scaleY}`],
       ["Origin", projectOrigin],
       ["IO", ioStatus],
+      ["Last command", lastCommand],
+      ["Validation", lastExportBundle ? (lastExportBundle.validation.ok ? "ok" : lastExportBundle.validation.errors.join(", ")) : "not run"],
+      ["Autosave", `${editorState.project.autosave.status} r${editorState.project.autosave.revision}`],
       ["Dirty", editorState.project.dirty ? editorState.project.dirtyParts.join(", ") : "clean"]
     ],
-    [editorState.project.dirty, editorState.project.dirtyParts, ioStatus, mode, projectOrigin, selectedBone, selectedTransform]
+    [editorState.project.autosave.revision, editorState.project.autosave.status, editorState.project.dirty, editorState.project.dirtyParts, ioStatus, lastCommand, lastExportBundle, mode, projectOrigin, selectedBone, selectedTransform]
   );
 
   return (
@@ -563,6 +595,14 @@ export default function EditorPage() {
           </div>
         </div>
         <div className="flex min-w-0 items-center gap-2 overflow-visible">
+          <div className="flex min-w-0 items-center gap-1 overflow-hidden" aria-label="Active mode actions">
+            {activeToolbarActions.map((action) => (
+              <Button className="min-w-0 shrink px-2 text-xs" disabled={action.disabled ?? false} key={action.label} size="sm" type="button" variant={action.variant ?? "outline"} onClick={action.onClick}>
+                <span className="truncate">{action.label}</span>
+              </Button>
+            ))}
+          </div>
+          <Separator className="h-5" orientation="vertical" />
           {toolbarGroups.map((group) => (
             <DropdownMenu key={group.label}>
               <DropdownMenuTrigger asChild>
@@ -593,7 +633,7 @@ export default function EditorPage() {
         </div>
       </header>
 
-      <section className="grid min-h-0 min-w-0 grid-cols-[220px_minmax(360px,1fr)_320px]" aria-label="Editor workspace">
+      <section className="grid min-h-0 min-w-0 grid-cols-[220px_minmax(360px,1fr)_minmax(380px,440px)]" aria-label="Editor workspace">
         <Card className="min-h-0 rounded-none border-0 border-r py-3 ring-0">
           <CardHeader className="px-3">
             <CardTitle className="text-sm">Hierarchy</CardTitle>
@@ -625,7 +665,10 @@ export default function EditorPage() {
 
         <Card className="min-h-0 min-w-0 rounded-none border-0 py-0 ring-0">
           <CardHeader className="flex h-[30px] flex-row items-center justify-between border-b px-3 py-0">
-            <Badge variant="secondary">{mode}</Badge>
+            <div className="flex min-w-0 items-center gap-2">
+              <Badge variant="secondary">{mode}</Badge>
+              <span className="truncate text-xs text-muted-foreground">{modeSurfaceDescriptions[mode]}</span>
+            </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span>{previewClips.find((clip) => clip.id === previewClipId)?.name}</span>
               <Separator className="h-4" orientation="vertical" />
@@ -818,7 +861,7 @@ export default function EditorPage() {
           </CardContent>
         </Card>
 
-        <aside className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] border-l bg-card p-2.5">
+        <aside className="grid min-h-0 min-w-[380px] resize-x grid-rows-[auto_minmax(0,1fr)] overflow-auto border-l bg-card p-2.5">
           <div className="flex items-center justify-between px-1">
             <h2 className="text-sm font-medium">Inspector</h2>
             <Badge variant={editorState.project.dirty ? "destructive" : "outline"}>{editorState.project.dirty ? "Dirty" : "Clean"}</Badge>
