@@ -84,8 +84,10 @@ import {
   markAutosaveSaved,
   redo,
   undo,
+  type CurvePreset,
   type EditorProjectState,
-  type EditorStateContainer
+  type EditorStateContainer,
+  type Keyframe
 } from "./editorState";
 import { createProjectExportBundle, EDITOR_DRAFT_KEY, loadDraft, parseImportedProject, saveDraft, serializeEditorProject, type ProjectExportBundle } from "./projectIo";
 import { PixiPreview } from "./PixiPreview";
@@ -107,6 +109,9 @@ const previewClips = [
   { id: 3, name: "Fall" },
   { id: 4, name: "Land" }
 ] as const;
+
+const interpolationOptions: Keyframe["interpolation"][] = ["linear", "step", "hold", "bezier", "spring"];
+const curvePresetOptions: CurvePreset[] = ["linear", "step", "hold", "bezier", "spring", "anticipation", "overshoot"];
 
 type EditorMode = (typeof modes)[number];
 type ToolbarAction = {
@@ -191,6 +196,9 @@ export default function EditorPage() {
   const timelineTrackId = `${timelineTargetId}.${timelineProperty}`;
   const selectedTimelineTrackId = activeClip ? Object.entries(activeClip.tracks).find(([, keys]) => keys.some((key) => key.id === selectedKeyId))?.[0] ?? timelineTrackId : timelineTrackId;
   const selectedTimelineKey = activeClip ? activeClip.tracks[selectedTimelineTrackId]?.find((key) => key.id === selectedKeyId) : undefined;
+  const selectedCurve = selectedTimelineKey?.curve ?? [0, 0, 1, 1] as const;
+  const curvePath = `M 12 88 C ${12 + selectedCurve[0] * 96} ${88 - selectedCurve[1] * 72}, ${12 + selectedCurve[2] * 96} ${88 - selectedCurve[3] * 72}, 108 16`;
+  const selectedKeyCurvePreset = selectedTimelineKey?.curvePreset ?? (selectedTimelineKey?.interpolation === "bezier" ? "bezier" : selectedTimelineKey?.interpolation ?? "linear");
   const visibleTimelineTracks = sampleProject.tracks.slice(editorState.project.timeline.virtualWindow.startRow, editorState.project.timeline.virtualWindow.startRow + editorState.project.timeline.virtualWindow.rowCount);
   const exportFileEntries = useMemo(() => Object.entries(lastExportBundle?.files ?? {}), [lastExportBundle]);
   const previewLevel = useMemo(
@@ -1029,18 +1037,87 @@ export default function EditorPage() {
                 </CardHeader>
                 <CardContent className="grid gap-2">
                   <p className="line-clamp-2 text-xs text-muted-foreground">{activeTrack.map((key) => `${key.id}: ${key.interpolation}`).join(", ")}</p>
+                  <svg viewBox="0 0 120 100" className="h-28 w-full rounded-md border bg-muted" role="img" aria-label="Curve graph">
+                    <path d="M 12 88 H 108 M 12 88 V 16" fill="none" stroke="hsl(var(--border))" strokeWidth="1" />
+                    <path d={curvePath} fill="none" stroke="hsl(var(--primary))" strokeWidth="3" />
+                    <line x1="12" y1="88" x2={12 + selectedCurve[0] * 96} y2={88 - selectedCurve[1] * 72} stroke="hsl(var(--muted-foreground))" strokeDasharray="4 3" />
+                    <line x1="108" y1="16" x2={12 + selectedCurve[2] * 96} y2={88 - selectedCurve[3] * 72} stroke="hsl(var(--muted-foreground))" strokeDasharray="4 3" />
+                    <circle cx={12 + selectedCurve[0] * 96} cy={88 - selectedCurve[1] * 72} r="4" fill="hsl(var(--primary))" />
+                    <circle cx={12 + selectedCurve[2] * 96} cy={88 - selectedCurve[3] * 72} r="4" fill="hsl(var(--primary))" />
+                  </svg>
                   <div className="grid grid-cols-2 gap-1">
-                    {(["easeIn", "easeOut", "easeInOut", "spring", "overshoot", "anticipation"] as const).map((preset) => (
-                      <Button key={preset} size="sm" type="button" variant="outline" disabled={!activeClip || !selectedKeyId} onClick={() => activeClip && runCommand(createApplyCurvePresetCommand(activeClip.id, "body.scaleY", selectedKeyId, preset))}>
-                        {preset}
-                      </Button>
+                    <Select
+                      value={selectedTimelineKey?.interpolation ?? "linear"}
+                      onValueChange={(value) => activeClip && selectedTimelineKey && runCommand(createChangeCurveCommand(activeClip.id, selectedTimelineTrackId, selectedTimelineKey.id, value as Keyframe["interpolation"], selectedCurve, selectedKeyCurvePreset as CurvePreset))}
+                      disabled={!activeClip || !selectedTimelineKey}
+                    >
+                      <SelectTrigger className="h-8" aria-label="Curve interpolation">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {interpolationOptions.map((interpolation) => (
+                            <SelectItem key={interpolation} value={interpolation}>{interpolation}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={selectedKeyCurvePreset}
+                      onValueChange={(preset) => activeClip && selectedTimelineKey && runCommand(createApplyCurvePresetCommand(activeClip.id, selectedTimelineTrackId, selectedTimelineKey.id, preset as CurvePreset))}
+                      disabled={!activeClip || !selectedTimelineKey}
+                    >
+                      <SelectTrigger className="h-8" aria-label="Curve preset">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {curvePresetOptions.map((preset) => (
+                            <SelectItem key={preset} value={preset}>{preset}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1">
+                    {selectedCurve.map((value, index) => (
+                      <Input
+                        key={index}
+                        className="h-7 text-xs"
+                        type="number"
+                        step="0.01"
+                        value={value}
+                        onChange={(event) => {
+                          if (!activeClip || !selectedTimelineKey) {
+                            return;
+                          }
+                          const nextCurve = [...selectedCurve] as [number, number, number, number];
+                          nextCurve[index] = Number(event.target.value);
+                          runCommand(createEditBezierHandlesCommand(activeClip.id, selectedTimelineTrackId, selectedTimelineKey.id, nextCurve));
+                        }}
+                        aria-label={`Curve ${["x1", "y1", "x2", "y2"][index]}`}
+                      />
                     ))}
-                    <Button size="sm" type="button" variant="outline" disabled={!activeClip || !selectedKeyId} onClick={() => activeClip && runCommand(createEditBezierHandlesCommand(activeClip.id, "body.scaleY", selectedKeyId, [0.18, 0.92, 0.22, 1]))}>
-                      Handles
-                    </Button>
-                    <Button size="sm" type="button" variant="outline" disabled={!activeClip || !selectedKeyId} onClick={() => activeClip && runCommand(createSetKeyframeTangentsCommand(activeClip.id, "body.scaleY", selectedKeyId, -0.2, 0.35))}>
-                      Tangents
-                    </Button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1">
+                    <Input
+                      className="h-7 text-xs"
+                      type="number"
+                      step="0.01"
+                      value={selectedTimelineKey?.tangentIn ?? 0}
+                      onChange={(event) => activeClip && selectedTimelineKey && runCommand(createSetKeyframeTangentsCommand(activeClip.id, selectedTimelineTrackId, selectedTimelineKey.id, Number(event.target.value), selectedTimelineKey.tangentOut ?? 0))}
+                      aria-label="Curve tangent in"
+                      disabled={!activeClip || !selectedTimelineKey}
+                    />
+                    <Input
+                      className="h-7 text-xs"
+                      type="number"
+                      step="0.01"
+                      value={selectedTimelineKey?.tangentOut ?? 0}
+                      onChange={(event) => activeClip && selectedTimelineKey && runCommand(createSetKeyframeTangentsCommand(activeClip.id, selectedTimelineTrackId, selectedTimelineKey.id, selectedTimelineKey.tangentIn ?? 0, Number(event.target.value)))}
+                      aria-label="Curve tangent out"
+                      disabled={!activeClip || !selectedTimelineKey}
+                    />
                   </div>
                   <div className="flex items-center gap-1">
                     <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetCurvePreviewCommand("jump", "land", Math.min(1, editorState.project.timeline.curvePreview.weight + 0.1)))}>

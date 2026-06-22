@@ -11,6 +11,7 @@ import {
   createAddAnimationTrackCommand,
   createAnimationClipCommand,
   createApplyCurvePresetCommand,
+  createChangeCurveCommand,
   createCopyPoseCommand,
   createCopySelectedKeysCommand,
   createBindPartToBoneCommand,
@@ -271,6 +272,15 @@ test("curve presets, tangents, and preview state are undoable", () => {
   assert.equal(key.interpolation, "bezier");
   assert.equal(key.curvePreset, "anticipation");
   assert.deepEqual(key.curve, [0.35, -0.35, 0.65, 1]);
+
+  const bezier = executeCommand(preset, createApplyCurvePresetCommand("jump", "body.y", "jump-body-y-0", "bezier"));
+  assert.equal(bezier.project.animations.jump.tracks["body.y"][0].curvePreset, "bezier");
+  assert.deepEqual(bezier.project.animations.jump.tracks["body.y"][0].curve, [0.2, 0.8, 0.2, 1]);
+
+  const changed = executeCommand(bezier, createChangeCurveCommand("jump", "body.y", "jump-body-y-0", "spring", [0.25, 1.35, 0.35, 1], "spring"));
+  const restored = undo(changed);
+  assert.equal(restored.project.animations.jump.tracks["body.y"][0].curvePreset, "bezier");
+  assert.deepEqual(restored.project.animations.jump.tracks["body.y"][0].curve, [0.2, 0.8, 0.2, 1]);
 
   const tangent = executeCommand(preset, createSetKeyframeTangentsCommand("jump", "body.y", "jump-body-y-0", -0.2, 0.35));
   assert.equal(tangent.project.animations.jump.tracks["body.y"][0].tangentIn, -0.2);

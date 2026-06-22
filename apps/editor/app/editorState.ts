@@ -90,7 +90,7 @@ export interface Keyframe {
   readonly tangentOut?: number;
 }
 
-export type CurvePreset = "linear" | "easeIn" | "easeOut" | "easeInOut" | "cubicBezier" | "stepped" | "spring" | "overshoot" | "anticipation" | "custom";
+export type CurvePreset = "linear" | "step" | "hold" | "bezier" | "easeIn" | "easeOut" | "easeInOut" | "cubicBezier" | "stepped" | "spring" | "overshoot" | "anticipation" | "custom";
 
 export interface TimelineEvent {
   readonly id: string;
@@ -1204,21 +1204,21 @@ export function createChangeCurveCommand(
   preset: CurvePreset = "cubicBezier"
 ): EditorCommand {
   let previous: Keyframe | undefined;
-  const change = (state: EditorProjectState, next: { interpolation: Keyframe["interpolation"]; curve: readonly [number, number, number, number] }) =>
+  const change = (state: EditorProjectState, next: { interpolation: Keyframe["interpolation"]; curve: readonly [number, number, number, number]; preset: CurvePreset }) =>
     updateClipTrack(state, clipId, trackId, (keys) =>
       keys.map((key) => {
         if (key.id !== keyframeId) {
           return key;
         }
-        previous = key;
-        return { ...key, interpolation: next.interpolation, curve: next.curve, curvePreset: preset };
+        previous = previous ?? key;
+        return { ...key, interpolation: next.interpolation, curve: next.curve, curvePreset: next.preset };
       })
     );
   return {
     id: `curve:${clipId}:${trackId}:${keyframeId}`,
     label: "Change curve",
-    do: (state) => change(state, { interpolation, curve }),
-    undo: (state) => (previous ? change(state, { interpolation: previous.interpolation, curve: previous.curve ?? [0, 0, 1, 1] }) : state)
+    do: (state) => change(state, { interpolation, curve, preset }),
+    undo: (state) => (previous ? updateClipTrack(state, clipId, trackId, (keys) => keys.map((key) => (key.id === keyframeId ? previous! : key))) : state)
   };
 }
 
@@ -1652,14 +1652,21 @@ function curvePresetToKeyframe(preset: CurvePreset): { readonly interpolation: K
   switch (preset) {
     case "linear":
       return { interpolation: "linear", curve: [0, 0, 1, 1] };
+    case "step":
+    case "stepped":
+      return { interpolation: "step", curve: [0, 0, 1, 1] };
+    case "hold":
+      return { interpolation: "hold", curve: [0, 0, 1, 1] };
+    case "bezier":
     case "easeIn":
+      if (preset === "bezier") {
+        return { interpolation: "bezier", curve: [0.2, 0.8, 0.2, 1] };
+      }
       return { interpolation: "bezier", curve: [0.42, 0, 1, 1] };
     case "easeOut":
       return { interpolation: "bezier", curve: [0, 0, 0.58, 1] };
     case "easeInOut":
       return { interpolation: "bezier", curve: [0.42, 0, 0.58, 1] };
-    case "stepped":
-      return { interpolation: "step", curve: [0, 0, 1, 1] };
     case "spring":
       return { interpolation: "spring", curve: [0.25, 1.35, 0.35, 1] };
     case "overshoot":

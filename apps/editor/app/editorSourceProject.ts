@@ -334,6 +334,9 @@ function fromSourceKeyframe(keyframe: SourceAnimationClip["tracks"][number]["key
 function readCurvePreset(value: unknown): Keyframe["curvePreset"] | undefined {
   const preset = stringValue(value);
   return preset === "linear" ||
+    preset === "step" ||
+    preset === "hold" ||
+    preset === "bezier" ||
     preset === "easeIn" ||
     preset === "easeOut" ||
     preset === "easeInOut" ||
