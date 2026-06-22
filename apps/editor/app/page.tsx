@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type MouseEvent, type PointerEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -186,6 +186,10 @@ function parseCsvIds(value: string): string[] {
   return value.split(",").map((item) => item.trim()).filter(Boolean);
 }
 
+function clampPanelSize(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
 function InspectorSection({ children, title }: { children: ReactNode; title: string }) {
   const [collapsed, setCollapsed] = useState(false);
 
@@ -209,6 +213,9 @@ function InspectorSection({ children, title }: { children: ReactNode; title: str
 
 export default function EditorPage() {
   const [mode, setMode] = useState<EditorMode>("Rig");
+  const [leftPanelWidth, setLeftPanelWidth] = useState(220);
+  const [rightPanelWidth, setRightPanelWidth] = useState(420);
+  const [timelineHeight, setTimelineHeight] = useState(178);
   const [previewPlaying, setPreviewPlaying] = useState(true);
   const [previewClipId, setPreviewClipId] = useState(0);
   const [previewScenario, setPreviewScenario] = useState<(typeof previewScenarios)[number]>("idle");
@@ -322,6 +329,33 @@ export default function EditorPage() {
   const runCommand = (command: Parameters<typeof executeCommand>[1]) => {
     setLastCommand(command.label);
     setEditorState((state) => executeCommand(state, command));
+  };
+  const startPanelResize = (panel: "left" | "right" | "timeline", event: ReactPointerEvent<HTMLElement> | ReactMouseEvent<HTMLElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startLeft = leftPanelWidth;
+    const startRight = rightPanelWidth;
+    const startTimeline = timelineHeight;
+    const onResizeMove = (moveEvent: PointerEvent | MouseEvent) => {
+      if (panel === "left") {
+        setLeftPanelWidth(clampPanelSize(startLeft + moveEvent.clientX - startX, 180, 360));
+      } else if (panel === "right") {
+        setRightPanelWidth(clampPanelSize(startRight - (moveEvent.clientX - startX), 340, 560));
+      } else {
+        setTimelineHeight(clampPanelSize(startTimeline - (moveEvent.clientY - startY), 136, 280));
+      }
+    };
+    const onResizeEnd = () => {
+      window.removeEventListener("pointermove", onResizeMove);
+      window.removeEventListener("pointerup", onResizeEnd);
+      window.removeEventListener("mousemove", onResizeMove);
+      window.removeEventListener("mouseup", onResizeEnd);
+    };
+    window.addEventListener("pointermove", onResizeMove);
+    window.addEventListener("pointerup", onResizeEnd);
+    window.addEventListener("mousemove", onResizeMove);
+    window.addEventListener("mouseup", onResizeEnd);
   };
   useEffect(() => {
     setRenameBoneId(selectedBone);
@@ -536,7 +570,11 @@ export default function EditorPage() {
   );
 
   return (
-    <main className="grid h-dvh w-screen min-w-0 grid-rows-[84px_minmax(0,1fr)_118px] overflow-hidden bg-background text-foreground" aria-label="Bones editor shell">
+    <main
+      className="grid h-dvh w-screen min-w-0 overflow-hidden bg-background text-foreground"
+      style={{ gridTemplateRows: `84px minmax(0,1fr) ${timelineHeight}px` }}
+      aria-label="Bones editor shell"
+    >
       <header className="relative z-10 grid min-w-0 grid-rows-[44px_40px] border-b bg-card px-2.5">
         <div className="grid min-w-0 grid-cols-[142px_minmax(0,1fr)_max-content] items-center gap-2.5">
           <div className="grid min-w-0 gap-0.5">
@@ -640,8 +678,20 @@ export default function EditorPage() {
         </div>
       </header>
 
-      <section className="grid min-h-0 min-w-0 grid-cols-[220px_minmax(360px,1fr)_minmax(380px,440px)]" aria-label="Editor workspace">
-        <Card className="min-h-0 rounded-none border-0 border-r py-3 ring-0">
+      <section
+        className="grid min-h-0 min-w-0"
+        style={{ gridTemplateColumns: `${leftPanelWidth}px minmax(360px,1fr) ${rightPanelWidth}px` }}
+        aria-label="Editor workspace"
+      >
+        <Card className="relative z-20 min-h-0 rounded-none border-0 border-r py-3 ring-0">
+          <div
+            className="absolute right-0 top-0 z-30 h-full w-2 touch-none cursor-col-resize bg-transparent hover:bg-primary/30"
+            role="separator"
+            aria-label="Resize hierarchy panel"
+            aria-orientation="vertical"
+            onPointerDown={(event) => startPanelResize("left", event)}
+            onMouseDown={(event) => startPanelResize("left", event)}
+          />
           <CardHeader className="px-3">
             <CardTitle className="text-sm">Hierarchy</CardTitle>
           </CardHeader>
@@ -868,7 +918,15 @@ export default function EditorPage() {
           </CardContent>
         </Card>
 
-        <aside className="grid min-h-0 min-w-[380px] resize-x grid-rows-[auto_minmax(0,1fr)] overflow-auto border-l bg-card p-2.5">
+        <aside className="relative z-20 grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden border-l bg-card p-2.5">
+          <div
+            className="absolute left-0 top-0 z-30 h-full w-2 touch-none cursor-col-resize bg-transparent hover:bg-primary/30"
+            role="separator"
+            aria-label="Resize inspector panel"
+            aria-orientation="vertical"
+            onPointerDown={(event) => startPanelResize("right", event)}
+            onMouseDown={(event) => startPanelResize("right", event)}
+          />
           <div className="flex items-center justify-between px-1">
             <h2 className="text-sm font-medium">Inspector</h2>
             <Badge variant={editorState.project.dirty ? "destructive" : "outline"}>{editorState.project.dirty ? "Dirty" : "Clean"}</Badge>
@@ -1593,9 +1651,18 @@ export default function EditorPage() {
         </aside>
       </section>
 
-      <Card className="min-w-0 rounded-none border-0 border-t py-2 ring-0" aria-label="Timeline and dopesheet">
-        <CardHeader className="flex flex-row items-center justify-between px-2.5 py-0">
-          <div className="flex min-w-0 items-center gap-2">
+      <Card className="relative grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-none border-0 border-t py-0 ring-0" aria-label="Timeline and dopesheet">
+        <div
+          className="absolute left-0 top-0 z-30 h-2 w-full touch-none cursor-row-resize bg-transparent hover:bg-primary/30"
+          role="separator"
+          aria-label="Resize timeline panel"
+          aria-orientation="horizontal"
+          onPointerDown={(event) => startPanelResize("timeline", event)}
+          onMouseDown={(event) => startPanelResize("timeline", event)}
+        />
+        <CardHeader className="grid min-h-[52px] grid-cols-[minmax(0,1fr)_auto] items-center gap-2 overflow-hidden px-2.5 pb-1 pt-2">
+          <div className="min-w-0 overflow-x-auto pb-1">
+            <div className="flex w-max min-w-full items-center gap-2">
             <CardTitle className="text-sm">Timeline</CardTitle>
             <Input className="h-7 w-24 text-xs" value={newClipId} onChange={(event) => setNewClipId(event.target.value)} aria-label="New clip id" />
             <Input className="h-7 w-16 text-xs" type="number" step="0.1" value={newClipDuration} onChange={(event) => setNewClipDuration(Number(event.target.value))} aria-label="New clip duration" />
@@ -1691,10 +1758,11 @@ export default function EditorPage() {
               </Button>
               <Badge variant={editorState.project.timeline.autoKey ? "default" : "outline"}>Auto-key {editorState.project.timeline.autoKey ? "on" : "off"}</Badge>
             </div>
+            </div>
           </div>
           <Badge variant="outline">00:00 / 01:12</Badge>
         </CardHeader>
-        <CardContent className="mt-1 grid gap-1 px-2.5">
+        <CardContent className="grid min-h-0 gap-1 overflow-auto px-2.5 pb-2">
           {selectedTimelineKey ? (
             <div className="mb-1 flex items-center gap-1">
               <span className="text-xs text-muted-foreground">{selectedTimelineTrackId}</span>
@@ -1782,7 +1850,7 @@ function getRigWorldPoints(project: EditorProjectState): Readonly<Record<string,
   return points;
 }
 
-function svgPointFromEvent(event: PointerEvent<SVGSVGElement> | MouseEvent<SVGSVGElement>, viewBox: ShapeViewBox): readonly [number, number] {
+function svgPointFromEvent(event: ReactPointerEvent<SVGSVGElement> | ReactMouseEvent<SVGSVGElement>, viewBox: ShapeViewBox): readonly [number, number] {
   const rect = event.currentTarget.getBoundingClientRect();
   const x = viewBox.x + ((event.clientX - rect.left) / Math.max(1, rect.width)) * viewBox.width;
   const y = viewBox.y + ((event.clientY - rect.top) / Math.max(1, rect.height)) * viewBox.height;

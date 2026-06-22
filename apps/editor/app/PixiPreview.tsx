@@ -77,6 +77,29 @@ export function PixiPreview({ clipId, playing, project, quality, showSkeleton, o
 
         let time = 0;
         let activeClipId = stateRef.current.clipId;
+        let resizeFrame = 0;
+        const resizePreview = () => {
+          const currentHost = hostRef.current;
+          if (!currentHost) {
+            return;
+          }
+          const width = Math.max(1, Math.round(currentHost.clientWidth));
+          const height = Math.max(1, Math.round(currentHost.clientHeight));
+          app.renderer.resize(width, height);
+        };
+        const scheduleResize = () => {
+          if (resizeFrame) {
+            cancelAnimationFrame(resizeFrame);
+          }
+          resizeFrame = requestAnimationFrame(() => {
+            resizeFrame = 0;
+            resizePreview();
+          });
+        };
+        const resizeObserver = new ResizeObserver(scheduleResize);
+        resizeObserver.observe(hostRef.current);
+        resizePreview();
+
         const tick = (ticker: { deltaMS: number }) => {
           const current = stateRef.current;
           if (current.clipId !== activeClipId) {
@@ -109,6 +132,10 @@ export function PixiPreview({ clipId, playing, project, quality, showSkeleton, o
 
         app.ticker.add(tick);
         cleanup = () => {
+          if (resizeFrame) {
+            cancelAnimationFrame(resizeFrame);
+          }
+          resizeObserver.disconnect();
           app.ticker.remove(tick);
           app.destroy(true, { children: true });
         };
