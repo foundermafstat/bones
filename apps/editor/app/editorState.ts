@@ -1026,24 +1026,29 @@ export function createDeleteKeyframeCommand(clipId: string, trackId: string, key
 }
 
 export function createMoveKeyframeCommand(clipId: string, trackId: string, keyframeId: string, nextTime: number): EditorCommand {
-  let previousTime = 0;
-  const move = (state: EditorProjectState, time: number) =>
-    updateClipTrack(state, clipId, trackId, (keys) =>
-      keys
-        .map((key) => {
-          if (key.id !== keyframeId) {
-            return key;
-          }
-          previousTime = key.time;
-          return snapKeyframe(state, { ...key, time });
-        })
-        .sort((a, b) => a.time - b.time)
-    );
+  let previous: AnimationClip | undefined;
   return {
     id: `move-key:${clipId}:${trackId}:${keyframeId}`,
     label: "Move keyframe",
-    do: (state) => move(state, nextTime),
-    undo: (state) => move(state, previousTime)
+    do: (state) => {
+      const clip = state.animations[clipId];
+      const draggedKey = clip?.tracks[trackId]?.find((key) => key.id === keyframeId);
+      previous = clip;
+      if (!clip || !draggedKey) {
+        return state;
+      }
+      const selectedIds = state.timeline.selectedClipId === clipId && state.timeline.selectedKeyIds.includes(keyframeId) ? new Set(state.timeline.selectedKeyIds) : new Set([keyframeId]);
+      const snappedTime = snapKeyframe(state, { ...draggedKey, time: nextTime }).time;
+      const delta = snappedTime - draggedKey.time;
+      return {
+        ...markDirty(state, clipId, "animations"),
+        animations: {
+          ...state.animations,
+          [clipId]: mapClipKeys(clip, (key) => (selectedIds.has(key.id) ? snapKeyframe(state, { ...key, time: Math.max(0, Math.min(clip.duration, key.time + delta)) }) : key))
+        }
+      };
+    },
+    undo: (state) => (previous ? { ...markDirty(state, clipId, "animations"), animations: { ...state.animations, [clipId]: previous } } : state)
   };
 }
 

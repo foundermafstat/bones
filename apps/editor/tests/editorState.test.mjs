@@ -18,6 +18,7 @@ import {
   createEditPathPointCommand,
   createGroupedCommand,
   createMoveBoneCommand,
+  createMoveKeyframeCommand,
   createNormalizeLoopCommand,
   createPasteKeysCommand,
   createPastePoseCommand,
@@ -262,6 +263,18 @@ test("timeline can set a keyed value at the current time without duplicates", ()
 
   const undone = undo(updated);
   assert.equal(undone.project.animations.idle.tracks["body.x"][0].value, 12);
+});
+
+test("timeline moves selected keys together with undo", () => {
+  const selected = executeCommand(freshContainer(), createSetTimelineSelectionCommand("walk", ["walk-body-x-1", "walk-head-1"]));
+  const moved = executeCommand(selected, createMoveKeyframeCommand("walk", "body.x", "walk-body-x-1", 0.5));
+
+  assert.equal(moved.project.animations.walk.tracks["body.x"].find((key) => key.id === "walk-body-x-1")?.time, 0.5);
+  assert.equal(moved.project.animations.walk.tracks["head.rotation"].find((key) => key.id === "walk-head-1")?.time, 0.5);
+
+  const undone = undo(moved);
+  assert.equal(undone.project.animations.walk.tracks["body.x"].find((key) => key.id === "walk-body-x-1")?.time, 0.42);
+  assert.equal(undone.project.animations.walk.tracks["head.rotation"].find((key) => key.id === "walk-head-1")?.time, 0.42);
 });
 
 test("timeline retime, reverse, normalize loop, events, and markers are undoable", () => {

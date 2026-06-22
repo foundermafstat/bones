@@ -346,9 +346,17 @@ export default function EditorPage() {
     }
     event.preventDefault();
     event.stopPropagation();
+    const selectedIds = editorState.project.timeline.selectedClipId === clipId ? editorState.project.timeline.selectedKeyIds : [];
+    if (event.shiftKey) {
+      const nextSelection = selectedIds.includes(keyframeId) ? selectedIds.filter((id) => id !== keyframeId) : [...selectedIds, keyframeId];
+      runCommand(createSetTimelineSelectionCommand(clipId, nextSelection));
+      return;
+    }
+    if (!selectedIds.includes(keyframeId)) {
+      runCommand(createSetTimelineSelectionCommand(clipId, [keyframeId]));
+    }
     setDragTimelineKey({ clipId, trackId, keyframeId, time });
     setTimelineCurrentTime(time);
-    runCommand(createSetTimelineSelectionCommand(clipId, [keyframeId]));
 
     const onMove = (moveEvent: MouseEvent) => {
       const nextTime = timelineTimeFromLane(lane, moveEvent.clientX, duration);
@@ -1857,7 +1865,7 @@ export default function EditorPage() {
                   {trackKeys.map((keyframe) => {
                     const dragging = dragTimelineKey?.clipId === activeClip.id && dragTimelineKey.trackId === track && dragTimelineKey.keyframeId === keyframe.id;
                     const displayedTime = dragging ? dragTimelineKey.time : keyframe.time;
-                    const selected = selectedKeyId === keyframe.id;
+                    const selected = editorState.project.timeline.selectedClipId === activeClip.id && editorState.project.timeline.selectedKeyIds.includes(keyframe.id);
 
                     return (
                       <Tooltip key={keyframe.id}>
@@ -1868,7 +1876,6 @@ export default function EditorPage() {
                             type="button"
                             aria-label={`Key ${keyframe.id} at ${displayedTime.toFixed(3)}`}
                             onMouseDown={(event) => startTimelineKeyDrag(event, activeClip.id, track, keyframe.id, keyframe.time, activeClip.duration)}
-                            onClick={() => runCommand(createSetTimelineSelectionCommand(activeClip.id, [keyframe.id]))}
                           />
                         </TooltipTrigger>
                         <TooltipContent className="pointer-events-none">{keyframe.id}</TooltipContent>
