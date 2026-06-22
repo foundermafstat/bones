@@ -50,19 +50,6 @@
           "length": 18
         },
         {
-          "id": "cloak",
-          "name": "Cloak",
-          "parentId": "body",
-          "local": {
-            "x": -18,
-            "y": -12,
-            "rotation": -0.08,
-            "scaleX": 1,
-            "scaleY": 1
-          },
-          "length": 70
-        },
-        {
           "id": "thighFront",
           "name": "Thigh Front",
           "parentId": "root",
@@ -180,47 +167,6 @@
           }
         },
         {
-          "id": "cloakShape",
-          "name": "Cloak Mesh",
-          "boneId": "cloak",
-          "type": "mesh",
-          "drawOrder": 1,
-          "fill": {
-            "color": "#050505",
-            "alpha": 1
-          },
-          "mesh": {
-            "vertices": [
-              0,
-              0,
-              -68,
-              44,
-              -46,
-              72,
-              -18,
-              58,
-              18,
-              70,
-              34,
-              38
-            ],
-            "indices": [
-              0,
-              1,
-              2,
-              0,
-              2,
-              3,
-              0,
-              3,
-              4,
-              0,
-              4,
-              5
-            ]
-          }
-        },
-        {
           "id": "frontLegShape",
           "name": "Front Leg",
           "boneId": "thighFront",
@@ -320,28 +266,6 @@
             {
               "time": 1.2,
               "value": -34
-            }
-          ]
-        },
-        {
-          "id": "idle.cloak.rotation",
-          "target": {
-            "kind": "bone",
-            "id": "cloak"
-          },
-          "property": "transform.rotation",
-          "keyframes": [
-            {
-              "time": 0,
-              "value": -0.08
-            },
-            {
-              "time": 0.6,
-              "value": -0.11
-            },
-            {
-              "time": 1.2,
-              "value": -0.08
             }
           ]
         }
@@ -957,49 +881,6 @@
               ]
             }
           ]
-        },
-        {
-          "id": "walk.cloak.rotation",
-          "target": {
-            "kind": "bone",
-            "id": "cloak"
-          },
-          "property": "transform.rotation",
-          "keyframes": [
-            {
-              "time": 0,
-              "value": 0.08,
-              "interpolation": "bezier",
-              "curve": [
-                0.3,
-                0,
-                0.7,
-                1
-              ]
-            },
-            {
-              "time": 0.42,
-              "value": -0.15,
-              "interpolation": "bezier",
-              "curve": [
-                0.3,
-                0,
-                0.7,
-                1
-              ]
-            },
-            {
-              "time": 0.84,
-              "value": 0.08,
-              "interpolation": "bezier",
-              "curve": [
-                0.3,
-                0,
-                0.7,
-                1
-              ]
-            }
-          ]
         }
       ],
       "markers": [
@@ -1449,49 +1330,6 @@
               ]
             }
           ]
-        },
-        {
-          "id": "jump.cloak.rotation",
-          "target": {
-            "kind": "bone",
-            "id": "cloak"
-          },
-          "property": "transform.rotation",
-          "keyframes": [
-            {
-              "time": 0,
-              "value": -0.04,
-              "interpolation": "bezier",
-              "curve": [
-                0.2,
-                0,
-                0.2,
-                1
-              ]
-            },
-            {
-              "time": 0.28,
-              "value": -0.22,
-              "interpolation": "bezier",
-              "curve": [
-                0.2,
-                0,
-                0.2,
-                1
-              ]
-            },
-            {
-              "time": 0.56,
-              "value": -0.14,
-              "interpolation": "bezier",
-              "curve": [
-                0.2,
-                0,
-                0.2,
-                1
-              ]
-            }
-          ]
         }
       ],
       "markers": [
@@ -1533,24 +1371,6 @@
             {
               "time": 0.6,
               "value": -42
-            }
-          ]
-        },
-        {
-          "id": "fall.cloak.rotation",
-          "target": {
-            "kind": "bone",
-            "id": "cloak"
-          },
-          "property": "transform.rotation",
-          "keyframes": [
-            {
-              "time": 0,
-              "value": -0.22
-            },
-            {
-              "time": 0.6,
-              "value": -0.1
             }
           ]
         }
@@ -1774,16 +1594,16 @@
       }
     },
     {
-      "id": "cloakLag",
+      "id": "headSecondary",
       "type": "secondaryMotion",
       "enabled": true,
-      "target": "cloak",
+      "target": "head",
       "stiffness": 0.18,
       "damping": 0.72,
       "velocityInfluence": 0.24,
       "gravityInfluence": 0.1,
       "windInfluence": 0.18,
-      "maxOffset": 18
+      "maxOffset": 8
     },
     {
       "id": "landingSquash",

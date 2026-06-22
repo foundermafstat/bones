@@ -107,7 +107,7 @@ const modes = ["Rig", "Shape", "Pose", "Timeline", "Curve", "State Machine", "Pr
 type ProjectOrigin = "sample" | "empty" | "draft" | "imported";
 
 const sampleProject = {
-  tracks: ["body.scaleY", "head.y", "thighFront.rotation", "thighBack.rotation", "cloak.x"]
+  tracks: ["body.scaleY", "head.y", "upperArmFront.rotation", "thighFront.rotation", "thighBack.rotation"]
 };
 
 const previewClips = [
@@ -608,7 +608,7 @@ export default function EditorPage() {
     {
       label: "Procedural",
       actions: [
-        { label: "Breathing", onClick: () => runCommand(createUpdateProceduralCommand({ breathing: { ...editorState.project.procedural.breathing, enabled: true, frequency: 1, amplitude: 1.2, affectedBones: ["body", "head", "cloak"] } })) },
+        { label: "Breathing", onClick: () => runCommand(createUpdateProceduralCommand({ breathing: { ...editorState.project.procedural.breathing, enabled: true, frequency: 1, amplitude: 1.2, affectedBones: ["body", "head", "upperArmFront", "upperArmBack"] } })) },
         { label: "Foot IK", onClick: () => runCommand(createUpdateProceduralCommand({ footIk: { ...editorState.project.procedural.footIk, enabled: true, feet: ["footFront", "footBack"], maxCorrection: 8, blend: 0.75 } })) }
       ]
     },

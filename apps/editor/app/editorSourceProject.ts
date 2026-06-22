@@ -479,7 +479,7 @@ function proceduralPresetsToSource(procedural: ProceduralPresetState) {
   return [
     { id: "breathing", type: "breathing" as const, enabled: procedural.breathing.enabled, frequency: procedural.breathing.frequency, amplitude: procedural.breathing.amplitude, affectedBones: procedural.breathing.affectedBoneTransforms },
     {
-      id: "cloak-secondary",
+      id: "secondary-motion",
       type: "secondaryMotion" as const,
       enabled: procedural.secondaryMotion.enabled,
       target: procedural.secondaryMotion.target,
