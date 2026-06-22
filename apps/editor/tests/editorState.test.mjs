@@ -71,11 +71,26 @@ import {
   rollbackProjectTransaction,
   undo
 } from "../app/editorState.ts";
-import { serializeEditorProject } from "../app/projectIo.ts";
+import { EDITOR_DRAFT_KEY, EDITOR_DRAFT_META_KEY, loadDraftMeta, saveDraft, serializeEditorProject } from "../app/projectIo.ts";
 import { vectorizeSvgPart } from "../app/editorVectorImport.ts";
 
 function freshContainer(project = structuredClone(initialEditorProject)) {
   return { project, history: { past: [], future: [] } };
+}
+
+function memoryStorage() {
+  const values = new Map();
+  return {
+    getItem(key) {
+      return values.get(key) ?? null;
+    },
+    setItem(key, value) {
+      values.set(key, String(value));
+    },
+    removeItem(key) {
+      values.delete(key);
+    }
+  };
 }
 
 test("bone commands update dirty scopes and autosave state", () => {
@@ -96,6 +111,19 @@ test("bone commands update dirty scopes and autosave state", () => {
   const redone = redo(undone);
   assert.equal(redone.project.bones.body.x, beforeX + 4);
   assert.equal(redone.history.past.length, 1);
+});
+
+test("draft save writes source JSON and startup metadata", () => {
+  const storage = memoryStorage();
+  const project = executeCommand(freshContainer(), createMoveBoneCommand("body", 2, 0)).project;
+
+  saveDraft(project, storage);
+
+  const saved = JSON.parse(storage.getItem(EDITOR_DRAFT_KEY));
+  assert.equal(saved.runtimeTarget, "pixi-v8");
+  assert.equal(Object.prototype.hasOwnProperty.call(saved, "project"), false);
+  assert.equal(storage.getItem(EDITOR_DRAFT_META_KEY)?.includes(project.name), true);
+  assert.equal(loadDraftMeta(storage)?.bones, project.hierarchy.length);
 });
 
 test("undo restores selection around selection-changing commands", () => {

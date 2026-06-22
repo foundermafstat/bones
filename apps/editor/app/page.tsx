@@ -117,7 +117,7 @@ import {
   type Keyframe,
   type StateMachineNodePosition
 } from "./editorState";
-import { createProjectExportBundle, EDITOR_DRAFT_KEY, loadDraft, parseImportedProject, saveDraft, serializeEditorProject, type ProjectExportBundle, type ProjectImportResult } from "./projectIo";
+import { createProjectExportBundle, EDITOR_DRAFT_KEY, EDITOR_DRAFT_META_KEY, loadDraft, loadDraftMeta, parseImportedProject, saveDraft, serializeEditorProject, type DraftMetadata, type ProjectExportBundle, type ProjectImportResult } from "./projectIo";
 import { PixiPreview } from "./PixiPreview";
 import { inspectSvgVector, vectorizeSvgPart } from "./editorVectorImport";
 import { parseLdtkLevel } from "@bones/ldtk-adapter";
@@ -310,6 +310,7 @@ export default function EditorPage() {
   const [ioStatus, setIoStatus] = useState("ready");
   const [lastCommand, setLastCommand] = useState("none");
   const [projectOrigin, setProjectOrigin] = useState<ProjectOrigin>("sample");
+  const [availableDraft, setAvailableDraft] = useState<DraftMetadata | null>(null);
   const [lastExportBundle, setLastExportBundle] = useState<ProjectExportBundle | null>(null);
   const [pendingImport, setPendingImport] = useState<ProjectImportResult | null>(null);
   const [editorState, setEditorState] = useState<EditorStateContainer>({
@@ -672,6 +673,9 @@ export default function EditorPage() {
     setRenameBoneId(selectedBone);
     setNewBoneParentId(selectedBone);
   }, [selectedBone]);
+  useEffect(() => {
+    setAvailableDraft(loadDraftMeta());
+  }, []);
   const replaceProject = (project: EditorProjectState, origin: ProjectOrigin, poseId = "") => {
     setEditorState({ project, history: { past: [], future: [] } });
     setProjectOrigin(origin);
@@ -681,6 +685,28 @@ export default function EditorPage() {
     setDragPoint(null);
     setDragBone(null);
     setDragTimelineKey(null);
+  };
+  const loadDraftProject = () => {
+    const draft = loadDraft();
+    if (!draft) {
+      setAvailableDraft(null);
+      setIoStatus("no draft found");
+      return;
+    }
+    replaceProject(draft, "draft", Object.keys(draft.poses)[0] ?? "");
+    setAvailableDraft(loadDraftMeta());
+    setIoStatus("draft loaded");
+  };
+  const resetToSampleProject = () => {
+    window.localStorage.removeItem(EDITOR_DRAFT_KEY);
+    window.localStorage.removeItem(EDITOR_DRAFT_META_KEY);
+    setAvailableDraft(null);
+    replaceProject(structuredClone(initialEditorProject), "sample", "idle_neutral");
+    setIoStatus("sample loaded; draft cleared");
+  };
+  const startEmptyProject = () => {
+    replaceProject(createEmptyEditorProject(), "empty");
+    setIoStatus("new empty project");
   };
   const exportBundle = async () => {
     const bundle = await createProjectExportBundle(editorState.project);
@@ -859,11 +885,11 @@ export default function EditorPage() {
     {
       label: "Project",
       actions: [
-        { label: "New Project", onClick: () => { replaceProject(createEmptyEditorProject(), "empty"); setIoStatus("new empty project"); } },
-        { label: "Load Sample", onClick: () => { replaceProject(initialEditorProject, "sample", "idle_neutral"); setIoStatus("sample loaded"); } },
-        { label: "Reset Draft", onClick: () => { window.localStorage.removeItem(EDITOR_DRAFT_KEY); replaceProject(initialEditorProject, "sample", "idle_neutral"); setIoStatus("draft reset"); } },
-        { label: "Save Draft", onClick: () => { saveDraft(editorState.project); setProjectOrigin("draft"); setIoStatus("draft saved"); } },
-        { label: "Load", onClick: () => { const draft = loadDraft(); if (draft) { replaceProject(draft, "draft", Object.keys(draft.poses)[0] ?? ""); setIoStatus("draft loaded"); } else { setIoStatus("no draft found"); } } },
+        { label: "New Project", onClick: startEmptyProject },
+        { label: "Load Sample", onClick: resetToSampleProject },
+        { label: "Reset Draft", onClick: resetToSampleProject },
+        { label: "Save Draft", onClick: () => { saveDraft(editorState.project); setAvailableDraft(loadDraftMeta()); setProjectOrigin("draft"); setIoStatus("draft saved"); } },
+        { label: "Load", onClick: loadDraftProject },
         { label: "Copy Source JSON", onClick: () => void copySourceJson() },
         { label: "Export Bundle", onClick: () => void exportBundle() },
         { label: "Import Clipboard", onClick: () => void importFromClipboard() }
@@ -897,14 +923,15 @@ export default function EditorPage() {
     ],
     [editorState.project.autosave.revision, editorState.project.autosave.status, editorState.project.dirty, editorState.project.dirtyParts, ioStatus, lastCommand, lastExportBundle, mode, projectOrigin, selectedBone, selectedTransform]
   );
+  const showDraftBanner = availableDraft !== null && projectOrigin !== "draft";
 
   return (
     <main
       className="grid h-dvh w-screen min-w-0 overflow-hidden bg-background text-foreground"
-      style={{ gridTemplateRows: `84px minmax(0,1fr) ${timelineHeight}px` }}
+      style={{ gridTemplateRows: `${showDraftBanner ? 118 : 84}px minmax(0,1fr) ${timelineHeight}px` }}
       aria-label="Bones editor shell"
     >
-      <header className="relative z-10 grid min-w-0 grid-rows-[44px_40px] border-b bg-card px-2.5">
+      <header className="relative z-10 grid min-w-0 grid-rows-[44px_40px_auto] border-b bg-card px-2.5">
         <div className="grid min-w-0 grid-cols-[142px_minmax(0,1fr)_max-content] items-center gap-2.5">
           <div className="grid min-w-0 gap-0.5">
             <strong className="truncate text-sm">Bones</strong>
@@ -1005,6 +1032,22 @@ export default function EditorPage() {
             </DropdownMenu>
           ))}
         </div>
+        {showDraftBanner ? (
+          <div className="flex min-w-0 items-center gap-2 border-t border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800" role="status" aria-label="Local draft available">
+            <span className="min-w-0 flex-1 truncate">
+              Draft available: {availableDraft.name} / {availableDraft.bones} bones / {availableDraft.parts} parts / {availableDraft.animations} clips
+            </span>
+            <Button className="h-6 px-2 text-xs" size="sm" type="button" variant="outline" onClick={loadDraftProject}>
+              Continue Draft
+            </Button>
+            <Button className="h-6 px-2 text-xs" size="sm" type="button" variant="outline" onClick={resetToSampleProject}>
+              Reset to Sample
+            </Button>
+            <Button className="h-6 px-2 text-xs" size="sm" type="button" variant="outline" onClick={startEmptyProject}>
+              New Empty
+            </Button>
+          </div>
+        ) : null}
       </header>
 
       <section

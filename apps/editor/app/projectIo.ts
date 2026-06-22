@@ -6,6 +6,7 @@ import { compileRig, type CompiledRigProjectV1 } from "@bones/compiler";
 import type { RigProject } from "@bones/schema";
 
 export const EDITOR_DRAFT_KEY = "bones:editor:draft:v1";
+export const EDITOR_DRAFT_META_KEY = "bones:editor:draft-meta:v1";
 export const CURRENT_EDITOR_SCHEMA_VERSION = "1.0.0";
 
 export interface SerializedEditorProject {
@@ -63,6 +64,14 @@ export interface ProjectImportResult {
   readonly errors: readonly string[];
   readonly kind?: "source" | "legacy-wrapper";
   readonly summary?: string;
+}
+
+export interface DraftMetadata {
+  readonly savedAt: string;
+  readonly name: string;
+  readonly bones: number;
+  readonly parts: number;
+  readonly animations: number;
 }
 
 export function serializeEditorProject(project: EditorProjectState): string {
@@ -266,11 +275,43 @@ function bytesToBase64(bytes: Uint8Array): string {
 
 export function saveDraft(project: EditorProjectState, storage: Pick<Storage, "setItem"> = window.localStorage): void {
   storage.setItem(EDITOR_DRAFT_KEY, serializeEditorProject(project));
+  storage.setItem(EDITOR_DRAFT_META_KEY, JSON.stringify(createDraftMetadata(project)));
 }
 
 export function loadDraft(storage: Pick<Storage, "getItem"> = window.localStorage): EditorProjectState | undefined {
   const value = storage.getItem(EDITOR_DRAFT_KEY);
   return value ? parseEditorProject(value) : undefined;
+}
+
+export function loadDraftMeta(storage: Pick<Storage, "getItem"> = window.localStorage): DraftMetadata | null {
+  const value = storage.getItem(EDITOR_DRAFT_META_KEY);
+  if (!value) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(value) as Partial<DraftMetadata>;
+    return typeof parsed.savedAt === "string" && typeof parsed.name === "string"
+      ? {
+          savedAt: parsed.savedAt,
+          name: parsed.name,
+          bones: Number(parsed.bones ?? 0),
+          parts: Number(parsed.parts ?? 0),
+          animations: Number(parsed.animations ?? 0)
+        }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function createDraftMetadata(project: EditorProjectState): DraftMetadata {
+  return {
+    savedAt: new Date().toISOString(),
+    name: project.name,
+    bones: project.hierarchy.length,
+    parts: Object.keys(project.parts).length,
+    animations: Object.keys(project.animations).length
+  };
 }
 
 function migrateEditorProject(serialized: Partial<SerializedEditorProject>): EditorProjectState {
