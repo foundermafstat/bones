@@ -11,16 +11,135 @@
       "name": "Shadow Hero",
       "rootBoneId": "root",
       "bones": [
-        { "id": "root", "name": "Root", "local": { "x": 0, "y": 0, "rotation": 0, "scaleX": 1, "scaleY": 1 }, "length": 0 },
-        { "id": "body", "name": "Body", "parentId": "root", "local": { "x": 0, "y": -36, "rotation": 0, "scaleX": 1, "scaleY": 1 }, "length": 48 },
-        { "id": "head", "name": "Head", "parentId": "body", "local": { "x": 0, "y": -34, "rotation": 0, "scaleX": 1, "scaleY": 1 }, "length": 18 },
-        { "id": "cloak", "name": "Cloak", "parentId": "body", "local": { "x": -18, "y": -12, "rotation": -0.08, "scaleX": 1, "scaleY": 1 }, "length": 70 },
-        { "id": "thighFront", "name": "Thigh Front", "parentId": "root", "local": { "x": 8, "y": -6, "rotation": 1.36, "scaleX": 1, "scaleY": 1 }, "length": 26 },
-        { "id": "shinFront", "name": "Shin Front", "parentId": "thighFront", "local": { "x": 24, "y": 0, "rotation": -0.08, "scaleX": 1, "scaleY": 1 }, "length": 26 },
-        { "id": "footFront", "name": "Foot Front", "parentId": "shinFront", "local": { "x": 24, "y": 0, "rotation": -1.18, "scaleX": 1, "scaleY": 1 }, "length": 12 },
-        { "id": "thighBack", "name": "Thigh Back", "parentId": "root", "local": { "x": -8, "y": -6, "rotation": 1.72, "scaleX": 1, "scaleY": 1 }, "length": 26 },
-        { "id": "shinBack", "name": "Shin Back", "parentId": "thighBack", "local": { "x": 24, "y": 0, "rotation": 0.16, "scaleX": 1, "scaleY": 1 }, "length": 26 },
-        { "id": "footBack", "name": "Foot Back", "parentId": "shinBack", "local": { "x": 24, "y": 0, "rotation": -1.1, "scaleX": 1, "scaleY": 1 }, "length": 12 }
+        {
+          "id": "root",
+          "name": "Root",
+          "local": {
+            "x": 0,
+            "y": 0,
+            "rotation": 0,
+            "scaleX": 1,
+            "scaleY": 1
+          },
+          "length": 0
+        },
+        {
+          "id": "body",
+          "name": "Body",
+          "parentId": "root",
+          "local": {
+            "x": 0,
+            "y": -36,
+            "rotation": 0,
+            "scaleX": 1,
+            "scaleY": 1
+          },
+          "length": 48
+        },
+        {
+          "id": "head",
+          "name": "Head",
+          "parentId": "body",
+          "local": {
+            "x": 0,
+            "y": -34,
+            "rotation": 0,
+            "scaleX": 1,
+            "scaleY": 1
+          },
+          "length": 18
+        },
+        {
+          "id": "cloak",
+          "name": "Cloak",
+          "parentId": "body",
+          "local": {
+            "x": -18,
+            "y": -12,
+            "rotation": -0.08,
+            "scaleX": 1,
+            "scaleY": 1
+          },
+          "length": 70
+        },
+        {
+          "id": "thighFront",
+          "name": "Thigh Front",
+          "parentId": "root",
+          "local": {
+            "x": 8,
+            "y": -6,
+            "rotation": 1.36,
+            "scaleX": 1,
+            "scaleY": 1
+          },
+          "length": 26
+        },
+        {
+          "id": "shinFront",
+          "name": "Shin Front",
+          "parentId": "thighFront",
+          "local": {
+            "x": 24,
+            "y": 0,
+            "rotation": -0.08,
+            "scaleX": 1,
+            "scaleY": 1
+          },
+          "length": 26
+        },
+        {
+          "id": "footFront",
+          "name": "Foot Front",
+          "parentId": "shinFront",
+          "local": {
+            "x": 24,
+            "y": 0,
+            "rotation": -1.18,
+            "scaleX": 1,
+            "scaleY": 1
+          },
+          "length": 12
+        },
+        {
+          "id": "thighBack",
+          "name": "Thigh Back",
+          "parentId": "root",
+          "local": {
+            "x": -8,
+            "y": -6,
+            "rotation": 1.72,
+            "scaleX": 1,
+            "scaleY": 1
+          },
+          "length": 26
+        },
+        {
+          "id": "shinBack",
+          "name": "Shin Back",
+          "parentId": "thighBack",
+          "local": {
+            "x": 24,
+            "y": 0,
+            "rotation": 0.16,
+            "scaleX": 1,
+            "scaleY": 1
+          },
+          "length": 26
+        },
+        {
+          "id": "footBack",
+          "name": "Foot Back",
+          "parentId": "shinBack",
+          "local": {
+            "x": 24,
+            "y": 0,
+            "rotation": -1.1,
+            "scaleX": 1,
+            "scaleY": 1
+          },
+          "length": 12
+        }
       ],
       "parts": [
         {
@@ -29,8 +148,18 @@
           "boneId": "body",
           "type": "procedural",
           "drawOrder": 10,
-          "fill": { "color": "#050505", "alpha": 1 },
-          "procedural": { "preset": "organic-blob", "params": { "width": 38, "height": 62, "taper": 0.18 } }
+          "fill": {
+            "color": "#050505",
+            "alpha": 1
+          },
+          "procedural": {
+            "preset": "organic-blob",
+            "params": {
+              "width": 38,
+              "height": 62,
+              "taper": 0.18
+            }
+          }
         },
         {
           "id": "headShape",
@@ -38,8 +167,17 @@
           "boneId": "head",
           "type": "procedural",
           "drawOrder": 20,
-          "fill": { "color": "#050505", "alpha": 1 },
-          "procedural": { "preset": "circle", "params": { "radius": 24, "spikes": 6 } }
+          "fill": {
+            "color": "#050505",
+            "alpha": 1
+          },
+          "procedural": {
+            "preset": "circle",
+            "params": {
+              "radius": 24,
+              "spikes": 6
+            }
+          }
         },
         {
           "id": "cloakShape",
@@ -47,10 +185,39 @@
           "boneId": "cloak",
           "type": "mesh",
           "drawOrder": 1,
-          "fill": { "color": "#050505", "alpha": 1 },
+          "fill": {
+            "color": "#050505",
+            "alpha": 1
+          },
           "mesh": {
-            "vertices": [0, 0, -68, 44, -46, 72, -18, 58, 18, 70, 34, 38],
-            "indices": [0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 5]
+            "vertices": [
+              0,
+              0,
+              -68,
+              44,
+              -46,
+              72,
+              -18,
+              58,
+              18,
+              70,
+              34,
+              38
+            ],
+            "indices": [
+              0,
+              1,
+              2,
+              0,
+              2,
+              3,
+              0,
+              3,
+              4,
+              0,
+              4,
+              5
+            ]
           }
         },
         {
@@ -59,8 +226,18 @@
           "boneId": "thighFront",
           "type": "procedural",
           "drawOrder": 12,
-          "fill": { "color": "#050505", "alpha": 1 },
-          "procedural": { "preset": "tapered-limb", "params": { "length": 54, "startWidth": 10, "endWidth": 7 } }
+          "fill": {
+            "color": "#050505",
+            "alpha": 1
+          },
+          "procedural": {
+            "preset": "tapered-limb",
+            "params": {
+              "length": 54,
+              "startWidth": 10,
+              "endWidth": 7
+            }
+          }
         },
         {
           "id": "backLegShape",
@@ -68,8 +245,18 @@
           "boneId": "thighBack",
           "type": "procedural",
           "drawOrder": 8,
-          "fill": { "color": "#050505", "alpha": 1 },
-          "procedural": { "preset": "tapered-limb", "params": { "length": 54, "startWidth": 10, "endWidth": 7 } }
+          "fill": {
+            "color": "#050505",
+            "alpha": 1
+          },
+          "procedural": {
+            "preset": "tapered-limb",
+            "params": {
+              "length": 54,
+              "startWidth": 10,
+              "endWidth": 7
+            }
+          }
         }
       ]
     }
@@ -80,37 +267,1246 @@
       "name": "Idle breathing",
       "duration": 1.2,
       "loop": true,
-      "tags": ["idle", "breathing"],
+      "tags": [
+        "idle",
+        "breathing"
+      ],
       "tracks": [
-        { "id": "idle.body.scaleY", "target": { "kind": "bone", "id": "body" }, "property": "transform.scaleY", "keyframes": [{ "time": 0, "value": 1 }, { "time": 0.6, "value": 1.025, "interpolation": "bezier", "curve": [0.4, 0, 0.2, 1] }, { "time": 1.2, "value": 1 }] },
-        { "id": "idle.head.y", "target": { "kind": "bone", "id": "head" }, "property": "transform.y", "keyframes": [{ "time": 0, "value": -34 }, { "time": 0.6, "value": -35.4 }, { "time": 1.2, "value": -34 }] },
-        { "id": "idle.cloak.rotation", "target": { "kind": "bone", "id": "cloak" }, "property": "transform.rotation", "keyframes": [{ "time": 0, "value": -0.08 }, { "time": 0.6, "value": -0.11 }, { "time": 1.2, "value": -0.08 }] }
+        {
+          "id": "idle.body.scaleY",
+          "target": {
+            "kind": "bone",
+            "id": "body"
+          },
+          "property": "transform.scaleY",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": 1
+            },
+            {
+              "time": 0.6,
+              "value": 1.025,
+              "interpolation": "bezier",
+              "curve": [
+                0.4,
+                0,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 1.2,
+              "value": 1
+            }
+          ]
+        },
+        {
+          "id": "idle.head.y",
+          "target": {
+            "kind": "bone",
+            "id": "head"
+          },
+          "property": "transform.y",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": -34
+            },
+            {
+              "time": 0.6,
+              "value": -35.4
+            },
+            {
+              "time": 1.2,
+              "value": -34
+            }
+          ]
+        },
+        {
+          "id": "idle.cloak.rotation",
+          "target": {
+            "kind": "bone",
+            "id": "cloak"
+          },
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": -0.08
+            },
+            {
+              "time": 0.6,
+              "value": -0.11
+            },
+            {
+              "time": 1.2,
+              "value": -0.08
+            }
+          ]
+        }
       ]
     },
     {
       "id": "walk",
       "name": "Walk contact",
-      "duration": 0.72,
+      "duration": 0.84,
       "loop": true,
-      "tags": ["locomotion"],
-      "events": [{ "time": 0.18, "type": "footstep", "payload": { "foot": "front" } }, { "time": 0.54, "type": "footstep", "payload": { "foot": "back" } }],
+      "tags": [
+        "locomotion"
+      ],
+      "events": [
+        {
+          "time": 0.04,
+          "type": "footstep",
+          "payload": {
+            "foot": "front",
+            "weight": 0.9
+          }
+        },
+        {
+          "time": 0.46,
+          "type": "footstep",
+          "payload": {
+            "foot": "back",
+            "weight": 0.9
+          }
+        }
+      ],
       "tracks": [
-        { "id": "walk.body.y", "target": { "kind": "bone", "id": "body" }, "property": "transform.y", "keyframes": [{ "time": 0, "value": -36 }, { "time": 0.36, "value": -38 }, { "time": 0.72, "value": -36 }] },
-        { "id": "walk.thighFront.rotation", "target": { "kind": "bone", "id": "thighFront" }, "property": "transform.rotation", "keyframes": [{ "time": 0, "value": 1.05 }, { "time": 0.36, "value": 1.72 }, { "time": 0.72, "value": 1.05 }] },
-        { "id": "walk.thighBack.rotation", "target": { "kind": "bone", "id": "thighBack" }, "property": "transform.rotation", "keyframes": [{ "time": 0, "value": 1.76 }, { "time": 0.36, "value": 1.08 }, { "time": 0.72, "value": 1.76 }] },
-        { "id": "walk.cloak.rotation", "target": { "kind": "bone", "id": "cloak" }, "property": "transform.rotation", "keyframes": [{ "time": 0, "value": -0.14 }, { "time": 0.36, "value": -0.04 }, { "time": 0.72, "value": -0.14 }] }
+        {
+          "id": "walk.body.x",
+          "target": {
+            "kind": "bone",
+            "id": "body"
+          },
+          "property": "transform.x",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": -1.2,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            },
+            {
+              "time": 0.42,
+              "value": 1.2,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            },
+            {
+              "time": 0.84,
+              "value": -1.2,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": "walk.body.y",
+          "target": {
+            "kind": "bone",
+            "id": "body"
+          },
+          "property": "transform.y",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": -36,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            },
+            {
+              "time": 0.21,
+              "value": -33.5,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            },
+            {
+              "time": 0.42,
+              "value": -35.5,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            },
+            {
+              "time": 0.63,
+              "value": -33.5,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            },
+            {
+              "time": 0.84,
+              "value": -36,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": "walk.body.rotation",
+          "target": {
+            "kind": "bone",
+            "id": "body"
+          },
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": -0.025,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            },
+            {
+              "time": 0.42,
+              "value": 0.025,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            },
+            {
+              "time": 0.84,
+              "value": -0.025,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": "walk.head.rotation",
+          "target": {
+            "kind": "bone",
+            "id": "head"
+          },
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": 0.035,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            },
+            {
+              "time": 0.42,
+              "value": -0.03,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            },
+            {
+              "time": 0.84,
+              "value": 0.035,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": "walk.thighFront.rotation",
+          "target": {
+            "kind": "bone",
+            "id": "thighFront"
+          },
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": 1.12,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.21,
+              "value": 1.46,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.42,
+              "value": 1.82,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.63,
+              "value": 1.42,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.84,
+              "value": 1.12,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": "walk.shinFront.rotation",
+          "target": {
+            "kind": "bone",
+            "id": "shinFront"
+          },
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": 0.12,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.21,
+              "value": -0.28,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.42,
+              "value": -0.06,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.63,
+              "value": 0.28,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.84,
+              "value": 0.12,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": "walk.footFront.rotation",
+          "target": {
+            "kind": "bone",
+            "id": "footFront"
+          },
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": -1.02,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.21,
+              "value": -1.32,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.42,
+              "value": -0.96,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.63,
+              "value": -1.42,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.84,
+              "value": -1.02,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": "walk.thighBack.rotation",
+          "target": {
+            "kind": "bone",
+            "id": "thighBack"
+          },
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": 1.86,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.21,
+              "value": 1.42,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.42,
+              "value": 1.12,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.63,
+              "value": 1.46,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.84,
+              "value": 1.86,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": "walk.shinBack.rotation",
+          "target": {
+            "kind": "bone",
+            "id": "shinBack"
+          },
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": -0.04,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.21,
+              "value": 0.32,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.42,
+              "value": 0.12,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.63,
+              "value": -0.28,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.84,
+              "value": -0.04,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": "walk.footBack.rotation",
+          "target": {
+            "kind": "bone",
+            "id": "footBack"
+          },
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": -0.94,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.21,
+              "value": -1.38,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.42,
+              "value": -1.02,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.63,
+              "value": -1.28,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.84,
+              "value": -0.94,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": "walk.cloak.rotation",
+          "target": {
+            "kind": "bone",
+            "id": "cloak"
+          },
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": 0.08,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            },
+            {
+              "time": 0.42,
+              "value": -0.15,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            },
+            {
+              "time": 0.84,
+              "value": 0.08,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            }
+          ]
+        }
+      ],
+      "markers": [
+        {
+          "id": "walk-loop",
+          "time": 0.84,
+          "label": "Loop",
+          "color": "#4f8cff"
+        }
       ]
     },
     {
       "id": "jump",
       "name": "Jump anticipation",
-      "duration": 0.46,
+      "duration": 0.56,
       "loop": false,
-      "tags": ["jump"],
-      "events": [{ "time": 0.08, "type": "liftoff" }],
+      "tags": [
+        "jump"
+      ],
+      "events": [
+        {
+          "time": 0.08,
+          "type": "anticipation"
+        },
+        {
+          "time": 0.12,
+          "type": "liftoff"
+        }
+      ],
       "tracks": [
-        { "id": "jump.body.y", "target": { "kind": "bone", "id": "body" }, "property": "transform.y", "keyframes": [{ "time": 0, "value": -32 }, { "time": 0.12, "value": -30 }, { "time": 0.46, "value": -50 }] },
-        { "id": "jump.body.scaleY", "target": { "kind": "bone", "id": "body" }, "property": "transform.scaleY", "keyframes": [{ "time": 0, "value": 0.9 }, { "time": 0.12, "value": 0.86 }, { "time": 0.46, "value": 1.08 }] }
+        {
+          "id": "jump.body.y",
+          "target": {
+            "kind": "bone",
+            "id": "body"
+          },
+          "property": "transform.y",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": -34,
+              "interpolation": "bezier",
+              "curve": [
+                0.1,
+                0.8,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 0.1,
+              "value": -31,
+              "interpolation": "bezier",
+              "curve": [
+                0.1,
+                0.8,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 0.28,
+              "value": -46,
+              "interpolation": "bezier",
+              "curve": [
+                0.1,
+                0.8,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 0.56,
+              "value": -56,
+              "interpolation": "bezier",
+              "curve": [
+                0.1,
+                0.8,
+                0.2,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": "jump.body.rotation",
+          "target": {
+            "kind": "bone",
+            "id": "body"
+          },
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": 0.04,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 0.1,
+              "value": -0.08,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 0.56,
+              "value": -0.03,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0,
+                0.2,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": "jump.body.scaleX",
+          "target": {
+            "kind": "bone",
+            "id": "body"
+          },
+          "property": "transform.scaleX",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": 1.02,
+              "interpolation": "bezier",
+              "curve": [
+                0.1,
+                0.8,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 0.1,
+              "value": 1.12,
+              "interpolation": "bezier",
+              "curve": [
+                0.1,
+                0.8,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 0.28,
+              "value": 0.94,
+              "interpolation": "bezier",
+              "curve": [
+                0.1,
+                0.8,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 0.56,
+              "value": 0.98,
+              "interpolation": "bezier",
+              "curve": [
+                0.1,
+                0.8,
+                0.2,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": "jump.body.scaleY",
+          "target": {
+            "kind": "bone",
+            "id": "body"
+          },
+          "property": "transform.scaleY",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": 0.98,
+              "interpolation": "bezier",
+              "curve": [
+                0.1,
+                0.8,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 0.1,
+              "value": 0.82,
+              "interpolation": "bezier",
+              "curve": [
+                0.1,
+                0.8,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 0.28,
+              "value": 1.16,
+              "interpolation": "bezier",
+              "curve": [
+                0.1,
+                0.8,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 0.56,
+              "value": 1.06,
+              "interpolation": "bezier",
+              "curve": [
+                0.1,
+                0.8,
+                0.2,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": "jump.head.rotation",
+          "target": {
+            "kind": "bone",
+            "id": "head"
+          },
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": 0.08,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 0.28,
+              "value": -0.06,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 0.56,
+              "value": -0.02,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0,
+                0.2,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": "jump.thighFront.rotation",
+          "target": {
+            "kind": "bone",
+            "id": "thighFront"
+          },
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": 1.32,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 0.1,
+              "value": 1.75,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 0.56,
+              "value": 1.9,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0,
+                0.2,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": "jump.shinFront.rotation",
+          "target": {
+            "kind": "bone",
+            "id": "shinFront"
+          },
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": -0.04,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 0.1,
+              "value": -0.42,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 0.56,
+              "value": -0.24,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0,
+                0.2,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": "jump.thighBack.rotation",
+          "target": {
+            "kind": "bone",
+            "id": "thighBack"
+          },
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": 1.64,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 0.1,
+              "value": 1.28,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 0.56,
+              "value": 1.5,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0,
+                0.2,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": "jump.shinBack.rotation",
+          "target": {
+            "kind": "bone",
+            "id": "shinBack"
+          },
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": 0.18,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 0.1,
+              "value": 0.42,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 0.56,
+              "value": 0.24,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0,
+                0.2,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": "jump.cloak.rotation",
+          "target": {
+            "kind": "bone",
+            "id": "cloak"
+          },
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": -0.04,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 0.28,
+              "value": -0.22,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 0.56,
+              "value": -0.14,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0,
+                0.2,
+                1
+              ]
+            }
+          ]
+        }
+      ],
+      "markers": [
+        {
+          "id": "jump-compress",
+          "time": 0.1,
+          "label": "Compress",
+          "color": "#f97316"
+        },
+        {
+          "id": "jump-peak",
+          "time": 0.56,
+          "label": "Peak",
+          "color": "#8b5cf6"
+        }
       ]
     },
     {
@@ -118,10 +1514,46 @@
       "name": "Fall reaction",
       "duration": 0.6,
       "loop": true,
-      "tags": ["fall"],
+      "tags": [
+        "fall"
+      ],
       "tracks": [
-        { "id": "fall.body.y", "target": { "kind": "bone", "id": "body" }, "property": "transform.y", "keyframes": [{ "time": 0, "value": -50 }, { "time": 0.6, "value": -42 }] },
-        { "id": "fall.cloak.rotation", "target": { "kind": "bone", "id": "cloak" }, "property": "transform.rotation", "keyframes": [{ "time": 0, "value": -0.22 }, { "time": 0.6, "value": -0.1 }] }
+        {
+          "id": "fall.body.y",
+          "target": {
+            "kind": "bone",
+            "id": "body"
+          },
+          "property": "transform.y",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": -50
+            },
+            {
+              "time": 0.6,
+              "value": -42
+            }
+          ]
+        },
+        {
+          "id": "fall.cloak.rotation",
+          "target": {
+            "kind": "bone",
+            "id": "cloak"
+          },
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": -0.22
+            },
+            {
+              "time": 0.6,
+              "value": -0.1
+            }
+          ]
+        }
       ]
     },
     {
@@ -129,11 +1561,55 @@
       "name": "Land squash",
       "duration": 0.34,
       "loop": false,
-      "tags": ["land"],
-      "events": [{ "time": 0, "type": "dust", "payload": { "strength": 1 } }],
+      "tags": [
+        "land"
+      ],
+      "events": [
+        {
+          "time": 0,
+          "type": "dust",
+          "payload": {
+            "strength": 1
+          }
+        }
+      ],
       "tracks": [
-        { "id": "land.body.scaleX", "target": { "kind": "bone", "id": "body" }, "property": "transform.scaleX", "keyframes": [{ "time": 0, "value": 1.14 }, { "time": 0.34, "value": 1 }] },
-        { "id": "land.body.scaleY", "target": { "kind": "bone", "id": "body" }, "property": "transform.scaleY", "keyframes": [{ "time": 0, "value": 0.82 }, { "time": 0.34, "value": 1 }] }
+        {
+          "id": "land.body.scaleX",
+          "target": {
+            "kind": "bone",
+            "id": "body"
+          },
+          "property": "transform.scaleX",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": 1.14
+            },
+            {
+              "time": 0.34,
+              "value": 1
+            }
+          ]
+        },
+        {
+          "id": "land.body.scaleY",
+          "target": {
+            "kind": "bone",
+            "id": "body"
+          },
+          "property": "transform.scaleY",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": 0.82
+            },
+            {
+              "time": 0.34,
+              "value": 1
+            }
+          ]
+        }
       ]
     }
   ],
@@ -143,33 +1619,198 @@
       "name": "Platformer Locomotion",
       "initialStateId": "idle",
       "parameters": [
-        { "id": "absSpeed", "type": "number", "defaultValue": 0 },
-        { "id": "velocityY", "type": "number", "defaultValue": 0 },
-        { "id": "grounded", "type": "boolean", "defaultValue": true },
-        { "id": "landed", "type": "boolean", "defaultValue": false }
+        {
+          "id": "absSpeed",
+          "type": "number",
+          "defaultValue": 0
+        },
+        {
+          "id": "velocityY",
+          "type": "number",
+          "defaultValue": 0
+        },
+        {
+          "id": "grounded",
+          "type": "boolean",
+          "defaultValue": true
+        },
+        {
+          "id": "landed",
+          "type": "boolean",
+          "defaultValue": false
+        }
       ],
       "states": [
-        { "id": "idle", "name": "Idle", "clipId": "idle" },
-        { "id": "walk", "name": "Walk", "clipId": "walk" },
-        { "id": "jump", "name": "Jump", "clipId": "jump" },
-        { "id": "fall", "name": "Fall", "clipId": "fall" },
-        { "id": "land", "name": "Land", "clipId": "land" }
+        {
+          "id": "idle",
+          "name": "Idle",
+          "clipId": "idle"
+        },
+        {
+          "id": "walk",
+          "name": "Walk",
+          "clipId": "walk"
+        },
+        {
+          "id": "jump",
+          "name": "Jump",
+          "clipId": "jump"
+        },
+        {
+          "id": "fall",
+          "name": "Fall",
+          "clipId": "fall"
+        },
+        {
+          "id": "land",
+          "name": "Land",
+          "clipId": "land"
+        }
       ],
       "transitions": [
-        { "id": "idle.walk", "fromStateId": "idle", "toStateId": "walk", "duration": 0.14, "easing": "easeOut", "conditions": [{ "parameterId": "absSpeed", "operator": ">", "value": 20 }] },
-        { "id": "walk.idle", "fromStateId": "walk", "toStateId": "idle", "duration": 0.18, "easing": "easeInOut", "conditions": [{ "parameterId": "absSpeed", "operator": "<=", "value": 20 }] },
-        { "id": "any.jump", "fromStateId": "walk", "toStateId": "jump", "duration": 0.08, "easing": "anticipation", "priority": 5, "conditions": [{ "parameterId": "velocityY", "operator": "<", "value": -1 }] },
-        { "id": "jump.fall", "fromStateId": "jump", "toStateId": "fall", "duration": 0.16, "easing": "easeIn", "conditions": [{ "parameterId": "velocityY", "operator": ">", "value": 0 }] },
-        { "id": "fall.land", "fromStateId": "fall", "toStateId": "land", "duration": 0.06, "easing": "easeOut", "priority": 8, "conditions": [{ "parameterId": "landed", "operator": "==", "value": true }] },
-        { "id": "land.idle", "fromStateId": "land", "toStateId": "idle", "duration": 0.14, "easing": "easeOut", "conditions": [{ "parameterId": "grounded", "operator": "==", "value": true }] }
+        {
+          "id": "idle.walk",
+          "fromStateId": "idle",
+          "toStateId": "walk",
+          "duration": 0.14,
+          "easing": "easeOut",
+          "conditions": [
+            {
+              "parameterId": "absSpeed",
+              "operator": ">",
+              "value": 20
+            }
+          ]
+        },
+        {
+          "id": "walk.idle",
+          "fromStateId": "walk",
+          "toStateId": "idle",
+          "duration": 0.18,
+          "easing": "easeInOut",
+          "conditions": [
+            {
+              "parameterId": "absSpeed",
+              "operator": "<=",
+              "value": 20
+            }
+          ]
+        },
+        {
+          "id": "any.jump",
+          "fromStateId": "walk",
+          "toStateId": "jump",
+          "duration": 0.08,
+          "easing": "anticipation",
+          "priority": 5,
+          "conditions": [
+            {
+              "parameterId": "velocityY",
+              "operator": "<",
+              "value": -1
+            }
+          ]
+        },
+        {
+          "id": "jump.fall",
+          "fromStateId": "jump",
+          "toStateId": "fall",
+          "duration": 0.16,
+          "easing": "easeIn",
+          "conditions": [
+            {
+              "parameterId": "velocityY",
+              "operator": ">",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "id": "fall.land",
+          "fromStateId": "fall",
+          "toStateId": "land",
+          "duration": 0.06,
+          "easing": "easeOut",
+          "priority": 8,
+          "conditions": [
+            {
+              "parameterId": "landed",
+              "operator": "==",
+              "value": true
+            }
+          ]
+        },
+        {
+          "id": "land.idle",
+          "fromStateId": "land",
+          "toStateId": "idle",
+          "duration": 0.14,
+          "easing": "easeOut",
+          "conditions": [
+            {
+              "parameterId": "grounded",
+              "operator": "==",
+              "value": true
+            }
+          ]
+        }
       ]
     }
   ],
   "proceduralPresets": [
-    { "id": "breathing", "type": "breathing", "enabled": true, "frequency": 0.8, "amplitude": 1.1, "affectedBones": { "body": { "scaleY": 1.02 }, "head": { "y": -1 } } },
-    { "id": "cloakLag", "type": "secondaryMotion", "enabled": true, "target": "cloak", "stiffness": 0.18, "damping": 0.72, "velocityInfluence": 0.24, "gravityInfluence": 0.1, "windInfluence": 0.18, "maxOffset": 18 },
-    { "id": "landingSquash", "type": "squashStretch", "enabled": true, "targetBone": "body", "landingImpactScale": 0.82 },
-    { "id": "feet", "type": "footIK", "enabled": true, "feet": [{ "footBone": "footFront", "shinBone": "shinFront", "thighBone": "thighFront" }, { "footBone": "footBack", "shinBone": "shinBack", "thighBone": "thighBack" }], "maxCorrection": 10, "blend": 0.85 }
+    {
+      "id": "breathing",
+      "type": "breathing",
+      "enabled": true,
+      "frequency": 0.8,
+      "amplitude": 1.1,
+      "affectedBones": {
+        "body": {
+          "scaleY": 1.02
+        },
+        "head": {
+          "y": -1
+        }
+      }
+    },
+    {
+      "id": "cloakLag",
+      "type": "secondaryMotion",
+      "enabled": true,
+      "target": "cloak",
+      "stiffness": 0.18,
+      "damping": 0.72,
+      "velocityInfluence": 0.24,
+      "gravityInfluence": 0.1,
+      "windInfluence": 0.18,
+      "maxOffset": 18
+    },
+    {
+      "id": "landingSquash",
+      "type": "squashStretch",
+      "enabled": true,
+      "targetBone": "body",
+      "landingImpactScale": 0.82
+    },
+    {
+      "id": "feet",
+      "type": "footIK",
+      "enabled": true,
+      "feet": [
+        {
+          "footBone": "footFront",
+          "shinBone": "shinFront",
+          "thighBone": "thighFront"
+        },
+        {
+          "footBone": "footBack",
+          "shinBone": "shinBack",
+          "thighBone": "thighBack"
+        }
+      ],
+      "maxCorrection": 10,
+      "blend": 0.85
+    }
   ],
   "preview": {
     "ldtkPath": "examples/ldtk/sample-room.ldtk.json",
