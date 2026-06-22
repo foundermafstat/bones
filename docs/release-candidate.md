@@ -9,6 +9,9 @@ This package is the RC handoff for the current Bones vertical slice: editor sour
 - LDtk room sample: `examples/ldtk/sample-room.ldtk.json`
 - PixiJS platformer integration example: `examples/pixi-platformer/integration.ts`
 - RC smoke command: `pnpm rc:smoke`
+- Release export command: `pnpm export:sample`
+- Runtime performance gate: `pnpm perf:runtime`
+- Browser smoke gate: `pnpm smoke:editor-browser`
 - Canonical product target: `doc.md`
 - Execution plan: `docs/production-readiness-plan.md`
 
@@ -134,30 +137,33 @@ pnpm --filter @bones/ldtk-adapter test
 pnpm --filter @bones/platformer-preview test
 pnpm --filter @bones/editor test
 pnpm --filter @bones/editor typecheck
+pnpm export:sample
+pnpm perf:runtime
 ```
 
 Run browser smoke for the editor:
 
 ```bash
 pnpm dev
+pnpm smoke:editor-browser
 ```
 
-Then verify:
+If Playwright is unavailable, use `docs/editor-browser-visual-smoke.ru.md`. Then verify:
 
 - canvas renders one character
 - Rig mode shows editable skeleton
 - Preview quality selector changes low/medium/high
 - Profiler frame count and update/render values change while playing
-- Export Bundle copies source/compiled bundle data
+- Export Bundle reports `7 files ready` and includes manifest/gzip artifacts.
 
 ## Character Quality Checklist
 
 - Idle breathing: body/head scale and y-motion are visible without breaking silhouette.
 - Walk/run weight transfer: front/back legs oppose each other and body y shifts on contact.
 - Jump anticipation: body compresses before liftoff and stretches after takeoff.
-- Fall reaction: cloak/hair lags upward/backward and body pose reads airborne.
+- Fall reaction: body/head/legs read airborne without cloak by default.
 - Land squash/dust event: land clip compresses body and emits a dust event at impact.
-- Cloak/hair secondary motion: cloak mesh exists and secondary-motion preset targets it.
+- No cloak by default: canonical sample keeps the silhouette clean unless an optional part is explicitly added.
 - Foot IK: front/back feet are declared with shin/thigh chains and grounded gating.
 - Silhouette readability: black filled parts remain readable as a single character at mobile scale.
 - Mobile quality: low preset disables expensive extras, medium is default, high is desktop preview.
@@ -168,7 +174,7 @@ Then verify:
 - Full body mesh skinning is out of scope; mesh deformation is part-level and lightweight.
 - The editor is a production-oriented vertical slice, but not yet a polished DCC replacement.
 - Server sync, marketplace, multi-format export, and remote asset libraries are out of scope.
-- Browser visual QA is local-dev based; automated pixel baselines are not part of this RC.
+- Browser visual QA is local-dev based; `pnpm smoke:editor-browser` is structural smoke, not pixel-baseline diffing.
 
 ## Release Readiness Gate
 
