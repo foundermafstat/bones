@@ -181,10 +181,24 @@ export default function EditorPage() {
     setDragPoint(null);
     setDragBone(null);
   };
-  const exportBundle = () => {
+  const exportBundle = async () => {
     const bundle = createProjectExportBundle(editorState.project);
-    setIoStatus(bundle.validation.ok ? `exported ${Object.keys(bundle.files).length} files` : bundle.validation.errors.join("; "));
-    void navigator.clipboard?.writeText(JSON.stringify(bundle.files, null, 2));
+    if (!bundle.validation.ok) {
+      setIoStatus(bundle.validation.errors.join("; "));
+      return;
+    }
+    const json = JSON.stringify(bundle.files, null, 2);
+    await navigator.clipboard?.writeText(json);
+    setIoStatus(`copied ${json.length} bytes / ${Object.keys(bundle.files).length} files`);
+  };
+  const copySourceJson = async () => {
+    try {
+      const json = serializeEditorProject(editorState.project);
+      await navigator.clipboard?.writeText(json);
+      setIoStatus(`copied source JSON (${json.length} bytes)`);
+    } catch (error) {
+      setIoStatus(error instanceof Error ? error.message : "source JSON validation error");
+    }
   };
   const importFromClipboard = async () => {
     const text = await navigator.clipboard?.readText();
@@ -268,10 +282,10 @@ export default function EditorPage() {
         { label: "New Project", onClick: () => { replaceProject(createEmptyEditorProject(), "empty"); setIoStatus("new empty project"); } },
         { label: "Load Sample", onClick: () => { replaceProject(initialEditorProject, "sample", "idle_neutral"); setIoStatus("sample loaded"); } },
         { label: "Reset Draft", onClick: () => { window.localStorage.removeItem(EDITOR_DRAFT_KEY); replaceProject(initialEditorProject, "sample", "idle_neutral"); setIoStatus("draft reset"); } },
-        { label: "Save", onClick: () => { saveDraft(editorState.project); setProjectOrigin("draft"); setIoStatus("draft saved"); } },
+        { label: "Save Draft", onClick: () => { saveDraft(editorState.project); setProjectOrigin("draft"); setIoStatus("draft saved"); } },
         { label: "Load", onClick: () => { const draft = loadDraft(); if (draft) { replaceProject(draft, "draft", Object.keys(draft.poses)[0] ?? ""); setIoStatus("draft loaded"); } else { setIoStatus("no draft found"); } } },
-        { label: "Copy JSON", onClick: () => navigator.clipboard?.writeText(serializeEditorProject(editorState.project)) },
-        { label: "Export Bundle", onClick: exportBundle },
+        { label: "Copy Source JSON", onClick: () => void copySourceJson() },
+        { label: "Export Bundle", onClick: () => void exportBundle() },
         { label: "Import Clipboard", onClick: () => void importFromClipboard() }
       ]
     }
