@@ -344,6 +344,7 @@ export default function EditorPage() {
   const selectedPoint = selectedPointIndex === null ? undefined : selectedPart?.points[selectedPointIndex];
   const selectedCommand = selectedPointIndex === null ? undefined : selectedPart?.pathCommands?.[selectedPointIndex];
   const selectedPathClosed = selectedPart?.pathCommands?.at(-1)?.type === "Z";
+  const svgPartCount = Object.values(editorState.project.parts).filter((part) => part.type === "svg").length;
   const poseIds = Object.keys(editorState.project.poses);
   const selectedPose = editorState.project.poses[selectedPoseId] ?? (poseIds[0] ? editorState.project.poses[poseIds[0]] : undefined);
   const selectedPoseIndex = Math.max(0, poseIds.indexOf(selectedPose?.id ?? ""));
@@ -858,6 +859,36 @@ export default function EditorPage() {
       setIoStatus("vectorized SVG part; importer merged SVG paths");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown vectorize error";
+      setVectorizeSummary(message);
+      setIoStatus(message);
+    }
+  };
+  const vectorizeAllSvgParts = async () => {
+    const svgParts = Object.values(editorState.project.parts).filter((part) => part.type === "svg");
+    if (!svgParts.length) {
+      setVectorizeSummary("0 SVG parts remaining");
+      setIoStatus("all parts are already path-ready");
+      return;
+    }
+    try {
+      const importedParts = await Promise.all(
+        svgParts.map(async (part) => {
+          const imported = part.assetPath ? await inspectSvgVector(part.assetPath) : { pathCount: 0 };
+          const vectorPart = await vectorizeSvgPart(part);
+          return { imported, vectorPart };
+        })
+      );
+      runCommand(createGroupedCommand(
+        "Vectorize all SVG parts",
+        importedParts.map(({ vectorPart }) => createSetPartPathCommand(vectorPart.id, vectorPart.points, vectorPart.pathCommands, vectorPart.svgViewBox))
+      ));
+      const commandCount = importedParts.reduce((count, { vectorPart }) => count + (vectorPart.pathCommands?.length ?? 0), 0);
+      const multiPathCount = importedParts.filter(({ imported }) => imported.pathCount > 1).length;
+      setSelectedPartId(importedParts[0]?.vectorPart.id ?? selectedPartId);
+      setVectorizeSummary(`${importedParts.length} SVG parts vectorized / ${commandCount} commands / ${multiPathCount} multi-path assets merged`);
+      setIoStatus(`vectorized ${importedParts.length} SVG parts; importer supports SVG path geometry`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown vectorize all error";
       setVectorizeSummary(message);
       setIoStatus(message);
     }
@@ -1774,6 +1805,7 @@ export default function EditorPage() {
                   <p className="truncate text-xs text-muted-foreground">{selectedPart?.id ?? "No part selected"}</p>
                   <ReadOnlyField label="Type" value={selectedPart?.type ?? "none"} />
                   <ReadOnlyField label="Asset" value={selectedPart?.assetPath?.split("/").pop() ?? "none"} />
+                  <ReadOnlyField label="SVG remaining" value={String(svgPartCount)} />
                   <ReadOnlyField label="Pivot" value={selectedPart?.pivot.join(", ") ?? "none"} />
                   <ReadOnlyField label="Points" value={String(selectedPart?.points.length ?? 0)} />
                   <ReadOnlyField label="Commands" value={String(selectedPart?.pathCommands?.length ?? 0)} />
@@ -1815,6 +1847,9 @@ export default function EditorPage() {
                   <div className="grid grid-cols-2 gap-1">
                     <Button size="sm" type="button" variant="outline" onClick={() => void vectorizeSelectedPart()} disabled={selectedPart?.type !== "svg"}>
                       Vectorize
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => void vectorizeAllSvgParts()} disabled={!svgPartCount}>
+                      Vectorize All SVG
                     </Button>
                     <Button size="sm" type="button" variant="outline" onClick={() => { if (selectedPart) { runCommand(createMirrorPathCommand(selectedPart.id)); setMirrorSummary(`mirrored ${selectedPart.points.length} points`); } }} disabled={!selectedPart?.points.length}>
                       Mirror
