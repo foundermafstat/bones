@@ -20,6 +20,7 @@ import {
   createBindPartToBoneCommand,
   createDeleteBoneCommand,
   createEditPathPointCommand,
+  createConvertLineToCubicCommand,
   createGroupedCommand,
   createMirrorBoneBranchCommand,
   createMirrorBoneTransformCommand,
@@ -31,8 +32,10 @@ import {
   createRenameBoneCommand,
   createReverseClipCommand,
   createRotateBoneCommand,
+  createReversePartPathCommand,
   createSetBlendTreeCommand,
   createSetInitialStateCommand,
+  createSetPathClosedCommand,
   createSetCurvePreviewCommand,
   createSetKeyframeAtTimeCommand,
   createSetStateMachineParameterCommand,
@@ -42,6 +45,8 @@ import {
   createRetimeClipCommand,
   createSetTimelineSelectionCommand,
   createSetParentCommand,
+  createSimplifyPartPathCommand,
+  createSmoothPartPathCommand,
   createRenameStateMachineStateCommand,
   createStateMachineStateCommand,
   createTransitionCommand,
@@ -54,6 +59,7 @@ import {
   rollbackProjectTransaction,
   undo
 } from "../app/editorState.ts";
+import { vectorizeSvgPart } from "../app/editorVectorImport.ts";
 
 function freshContainer(project = structuredClone(initialEditorProject)) {
   return { project, history: { past: [], future: [] } };
@@ -207,6 +213,62 @@ test("path point command restores deleted points exactly", () => {
     [10, 0],
     [10, 10]
   ]);
+});
+
+test("shape path commands close reverse smooth simplify and convert lines to cubic", () => {
+  const project = structuredClone(initialEditorProject);
+  project.parts.bodyShape = {
+    ...project.parts.bodyShape,
+    type: "path",
+    points: [
+      [0, 0],
+      [10, 0],
+      [10, 10],
+      [0, 10]
+    ],
+    pathCommands: [
+      { type: "M", x: 0, y: 0 },
+      { type: "L", x: 10, y: 0 },
+      { type: "L", x: 10, y: 10 },
+      { type: "L", x: 0, y: 10 }
+    ]
+  };
+
+  const closed = executeCommand(freshContainer(project), createSetPathClosedCommand("bodyShape", true));
+  assert.equal(closed.project.parts.bodyShape.pathCommands.at(-1).type, "Z");
+
+  const cubic = executeCommand(closed, createConvertLineToCubicCommand("bodyShape", 1));
+  assert.equal(cubic.project.parts.bodyShape.pathCommands[1].type, "C");
+
+  const reversed = executeCommand(cubic, createReversePartPathCommand("bodyShape"));
+  assert.equal(reversed.project.parts.bodyShape.pathCommands[0].type, "M");
+
+  const smoothed = executeCommand(reversed, createSmoothPartPathCommand("bodyShape", 0.18));
+  assert.ok(smoothed.project.parts.bodyShape.pathCommands.length >= 4);
+
+  const simplified = executeCommand(smoothed, createSimplifyPartPathCommand("bodyShape", 0.05));
+  assert.ok(simplified.project.parts.bodyShape.points.length >= 3);
+
+  const undone = undo(simplified);
+  assert.deepEqual(undone.project.parts.bodyShape, smoothed.project.parts.bodyShape);
+});
+
+test("vectorize SVG part merges multiple path elements", async () => {
+  const svg = `<svg viewBox="0 0 20 10"><path d="M 0 0 L 4 0 L 4 4 Z" /><path d="M 10 0 L 14 0 L 14 4 Z" /></svg>`;
+  const part = {
+    id: "multiSvg",
+    boneId: "body",
+    type: "svg",
+    pivot: [0, 0],
+    points: [],
+    preset: undefined,
+    assetPath: "/multi.svg"
+  };
+  const vectorized = await vectorizeSvgPart(part, async () => svg);
+
+  assert.equal(vectorized.type, "path");
+  assert.equal(vectorized.pathCommands.filter((command) => command.type === "M").length, 2);
+  assert.deepEqual(vectorized.svgViewBox, [0, 0, 20, 10]);
 });
 
 test("rename bone keeps metadata and bound parts connected", () => {

@@ -18,18 +18,25 @@ export async function vectorizeSvgPart(part: ShapePart, loadText: (assetPath: st
   }
 
   const imported = importSvgPaths(await loadText(part.assetPath));
-  const path = imported.paths[0];
-  if (!path) {
+  if (!imported.paths.length) {
     throw new Error(`SVG asset '${part.assetPath}' does not contain an editable path.`);
   }
 
-  const pathCommands = path.commands.map(toSchemaPathCommand);
+  const pathCommands = imported.paths.flatMap((path) => path.commands.map(toSchemaPathCommand));
   return {
     ...part,
     type: "path",
     points: pathToPoints(pathCommands),
     pathCommands,
     ...(imported.viewBox ? { svgViewBox: imported.viewBox } : {})
+  };
+}
+
+export async function inspectSvgVector(assetPath: string, loadText: (assetPath: string) => Promise<string> = defaultLoadText): Promise<{ readonly pathCount: number; readonly viewBox?: readonly [number, number, number, number] }> {
+  const imported = importSvgPaths(await loadText(assetPath));
+  return {
+    pathCount: imported.paths.length,
+    ...(imported.viewBox ? { viewBox: imported.viewBox } : {})
   };
 }
 

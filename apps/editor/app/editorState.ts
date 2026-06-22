@@ -1,4 +1,13 @@
 import type { JsonValue, PathCommand } from "@bones/schema";
+import {
+  closePath as closeVectorPath,
+  convertLineToSmoothCubic,
+  openPath as openVectorPath,
+  reversePath as reverseVectorPath,
+  simplifyPath as simplifyVectorPath,
+  smoothPath as smoothVectorPath,
+  type PathCommand as VectorPathCommand
+} from "@bones/vector-core";
 
 export interface BoneTransform {
   readonly x: number;
@@ -817,9 +826,59 @@ export function createSetPartPathCommand(
   };
 }
 
+export function createSetPathClosedCommand(partId: string, closed: boolean): EditorCommand {
+  return createUpdatePartPathCommand(partId, closed ? "Close path" : "Open path", (commands) => (closed ? closeVectorPath(commands) : openVectorPath(commands)));
+}
+
+export function createReversePartPathCommand(partId: string): EditorCommand {
+  return createUpdatePartPathCommand(partId, "Reverse path", reverseVectorPath);
+}
+
+export function createSimplifyPartPathCommand(partId: string, epsilon = 0.01): EditorCommand {
+  return createUpdatePartPathCommand(partId, "Simplify path", (commands) => simplifyVectorPath(commands, epsilon));
+}
+
+export function createSmoothPartPathCommand(partId: string, factor = 0.2): EditorCommand {
+  return createUpdatePartPathCommand(partId, "Smooth path", (commands) => smoothVectorPath(commands, factor));
+}
+
+export function createConvertLineToCubicCommand(partId: string, commandIndex: number): EditorCommand {
+  return createUpdatePartPathCommand(partId, "Convert line to cubic", (commands) => convertLineToSmoothCubic(commands, commandIndex));
+}
+
 function withPointPath(part: ShapePart, points: readonly (readonly [number, number])[]): ShapePart {
   const { pathCommands: _pathCommands, ...pointPart } = part;
   return { ...pointPart, type: "path", points };
+}
+
+function createUpdatePartPathCommand(partId: string, label: string, updater: (commands: readonly VectorPathCommand[]) => readonly VectorPathCommand[]): EditorCommand {
+  let previous: ShapePart | undefined;
+  return {
+    id: `${label.toLowerCase().replaceAll(" ", "-")}:${partId}`,
+    label,
+    do: (state) => {
+      const part = state.parts[partId];
+      if (!part) {
+        return state;
+      }
+      previous = part;
+      const vectorCommands = toVectorPathCommands(part.pathCommands ?? pointsToSchemaPath(part.points)).filter((command) => command.cmd !== "Z" || part.points.length > 0);
+      const pathCommands = updater(vectorCommands).map(toSchemaPathCommand);
+      return {
+        ...markDirty(state, partId, "parts"),
+        parts: {
+          ...state.parts,
+          [partId]: {
+            ...part,
+            type: "path",
+            points: pathCommandsToPoints(pathCommands),
+            pathCommands
+          }
+        }
+      };
+    },
+    undo: (state) => (previous ? { ...markDirty(state, partId, "parts"), parts: { ...state.parts, [partId]: previous } } : state)
+  };
 }
 
 export function createSetPartPivotCommand(partId: string, pivot: readonly [number, number]): EditorCommand {
@@ -1917,6 +1976,42 @@ function mapClipKeys(clip: AnimationClip, mapper: (key: Keyframe, trackId: strin
     ...clip,
     tracks: Object.fromEntries(Object.entries(clip.tracks).map(([trackId, keys]) => [trackId, keys.map((key) => mapper(key, trackId)).sort((a, b) => a.time - b.time)]))
   };
+}
+
+function pointsToSchemaPath(points: readonly (readonly [number, number])[]): readonly PathCommand[] {
+  return points.map(([x, y], index) => ({ type: index === 0 ? "M" : "L", x, y }));
+}
+
+function pathCommandsToPoints(commands: readonly PathCommand[]): readonly (readonly [number, number])[] {
+  return commands.flatMap((command) => ("x" in command && "y" in command ? [[command.x, command.y] as const] : []));
+}
+
+function toVectorPathCommands(commands: readonly PathCommand[]): readonly VectorPathCommand[] {
+  return commands.map((command) => {
+    if (command.type === "M" || command.type === "L") {
+      return { cmd: command.type, x: command.x, y: command.y };
+    }
+    if (command.type === "Q") {
+      return { cmd: "Q", cpx: command.cx, cpy: command.cy, x: command.x, y: command.y };
+    }
+    if (command.type === "C") {
+      return { cmd: "C", cp1x: command.c1x, cp1y: command.c1y, cp2x: command.c2x, cp2y: command.c2y, x: command.x, y: command.y };
+    }
+    return { cmd: "Z" };
+  });
+}
+
+function toSchemaPathCommand(command: VectorPathCommand): PathCommand {
+  if (command.cmd === "M" || command.cmd === "L") {
+    return { type: command.cmd, x: command.x, y: command.y };
+  }
+  if (command.cmd === "Q") {
+    return { type: "Q", cx: command.cpx, cy: command.cpy, x: command.x, y: command.y };
+  }
+  if (command.cmd === "C") {
+    return { type: "C", c1x: command.cp1x, c1y: command.cp1y, c2x: command.cp2x, c2y: command.cp2y, x: command.x, y: command.y };
+  }
+  return { type: "Z" };
 }
 
 function retimeClip(clip: AnimationClip, duration: number): AnimationClip {

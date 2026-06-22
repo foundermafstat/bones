@@ -42,9 +42,14 @@ import {
   createBindPartToBoneCommand,
   createEditPathPointCommand,
   createMirrorPathCommand,
+  createConvertLineToCubicCommand,
+  createReversePartPathCommand,
+  createSetPathClosedCommand,
   createSetPartDrawOrderCommand,
   createSetPartPathCommand,
   createSetPartPivotCommand,
+  createSimplifyPartPathCommand,
+  createSmoothPartPathCommand,
   createAddAnimationTrackCommand,
   createApplyPoseCommand,
   createCopyPoseCommand,
@@ -100,7 +105,7 @@ import {
 } from "./editorState";
 import { createProjectExportBundle, EDITOR_DRAFT_KEY, loadDraft, parseImportedProject, saveDraft, serializeEditorProject, type ProjectExportBundle, type ProjectImportResult } from "./projectIo";
 import { PixiPreview } from "./PixiPreview";
-import { vectorizeSvgPart } from "./editorVectorImport";
+import { inspectSvgVector, vectorizeSvgPart } from "./editorVectorImport";
 import { parseLdtkLevel } from "@bones/ldtk-adapter";
 import { createInitialControllerState, toAnimationParameters, updatePlatformerController } from "@bones/platformer-preview";
 import type { QualityPresetName, RuntimeProfilerStats } from "@bones/runtime-pixi";
@@ -642,11 +647,12 @@ export default function EditorPage() {
       return;
     }
     try {
+      const imported = selectedPart.assetPath ? await inspectSvgVector(selectedPart.assetPath) : { pathCount: 0 };
       const vectorPart = await vectorizeSvgPart(selectedPart);
       runCommand(createSetPartPathCommand(vectorPart.id, vectorPart.points, vectorPart.pathCommands, vectorPart.svgViewBox));
       const viewBox = vectorPart.svgViewBox ? vectorPart.svgViewBox.join(", ") : "none";
-      setVectorizeSummary(`${vectorPart.pathCommands?.length ?? 0} commands / ${vectorPart.points.length} points / viewBox ${viewBox}`);
-      setIoStatus("vectorized SVG part; importer uses the first SVG path only");
+      setVectorizeSummary(`${imported.pathCount} paths / ${vectorPart.pathCommands?.length ?? 0} commands / ${vectorPart.points.length} points / viewBox ${viewBox}`);
+      setIoStatus("vectorized SVG part; importer merged SVG paths");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown vectorize error";
       setVectorizeSummary(message);
@@ -1417,7 +1423,7 @@ export default function EditorPage() {
                   <ReadOnlyField label="Command" value={selectedCommand?.type ?? "none"} />
                   {vectorizeSummary ? <p className="text-xs text-muted-foreground">{vectorizeSummary}</p> : null}
                   {mirrorSummary ? <p className="text-xs text-muted-foreground">{mirrorSummary}</p> : null}
-                  {selectedPart?.type === "path" ? <p className="text-xs text-amber-600">SVG importer uses the first path only; groups and masks are ignored.</p> : null}
+                  {selectedPart?.type === "path" ? <p className="text-xs text-muted-foreground">Path editor supports merged SVG paths, winding, smoothing, simplification, and cubic conversion.</p> : null}
                   <div className="grid grid-cols-2 gap-1">
                     <Input className="h-7 text-xs" type="number" value={selectedPoint?.[0] ?? 0} onChange={(event) => selectedPart && selectedPointIndex !== null && runCommand(createEditPathPointCommand(selectedPart.id, selectedPointIndex, [Number(event.target.value), selectedPoint?.[1] ?? 0]))} aria-label="Selected point x" disabled={!selectedPoint} />
                     <Input className="h-7 text-xs" type="number" value={selectedPoint?.[1] ?? 0} onChange={(event) => selectedPart && selectedPointIndex !== null && runCommand(createEditPathPointCommand(selectedPart.id, selectedPointIndex, [selectedPoint?.[0] ?? 0, Number(event.target.value)]))} aria-label="Selected point y" disabled={!selectedPoint} />
@@ -1458,6 +1464,21 @@ export default function EditorPage() {
                     </Button>
                     <Button size="sm" type="button" variant="outline" onClick={() => selectedPart && runCommand(createSetPartDrawOrderCommand(selectedPart.id, (selectedPart.zIndex ?? 0) + 1))} disabled={!selectedPart}>
                       Layer +
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => selectedPart && runCommand(createSetPathClosedCommand(selectedPart.id, !selectedPathClosed))} disabled={!selectedPart?.points.length}>
+                      {selectedPathClosed ? "Open" : "Close"}
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => selectedPart && runCommand(createReversePartPathCommand(selectedPart.id))} disabled={!selectedPart?.points.length}>
+                      Reverse
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => selectedPart && runCommand(createSmoothPartPathCommand(selectedPart.id, 0.18))} disabled={!selectedPart?.points.length}>
+                      Smooth
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => selectedPart && runCommand(createSimplifyPartPathCommand(selectedPart.id, 0.05))} disabled={!selectedPart?.points.length}>
+                      Simplify
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => selectedPart && selectedPointIndex !== null && runCommand(createConvertLineToCubicCommand(selectedPart.id, selectedPointIndex))} disabled={!selectedPart?.points.length || selectedPointIndex === null || selectedCommand?.type !== "L"}>
+                      Line {"->"} Cubic
                     </Button>
                   </div>
                 </CardContent>
