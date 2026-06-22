@@ -20,7 +20,8 @@ assert.ok(compiled.lookups?.animations.walk !== undefined);
 assert.ok(compiled.lookups?.animations.jump !== undefined);
 assert.ok(compiled.lookups?.animations.fall !== undefined);
 assert.ok(compiled.lookups?.animations.land !== undefined);
-assert.equal(compiled.rig.parts.some((part) => part.type === "mesh"), true);
+assert.equal(compiled.rig.parts.some((part) => part.type === "svg"), false);
+assert.equal(compiled.rig.parts.length > 0, true);
 assert.equal(level.colliders.length, 4);
 assert.equal(level.spawnPoints[0]?.id, "player");
 
