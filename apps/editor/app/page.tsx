@@ -261,6 +261,37 @@ function createEmptyRuntimeParityReport(errors: readonly string[]): RuntimeParit
   };
 }
 
+function getExportArtifactGroup(fileName: string): "source" | "split source" | "compiled" | "compressed" | "manifest" {
+  if (fileName.endsWith(".gz")) {
+    return "compressed";
+  }
+  if (fileName.includes("release-manifest")) {
+    return "manifest";
+  }
+  if (fileName.includes("compiled")) {
+    return "compiled";
+  }
+  if (fileName === "hero.source.rig.json") {
+    return "source";
+  }
+  return "split source";
+}
+
+function getReachableStateIds(initialStateId: string, transitions: readonly EditorTransition[]): Set<string> {
+  const reachable = new Set<string>([initialStateId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const transition of transitions) {
+      if (reachable.has(transition.fromStateId) && !reachable.has(transition.toStateId)) {
+        reachable.add(transition.toStateId);
+        changed = true;
+      }
+    }
+  }
+  return reachable;
+}
+
 export default function EditorPage() {
   const [mode, setMode] = useState<EditorMode>("Rig");
   const [leftPanelWidth, setLeftPanelWidth] = useState(220);
@@ -424,6 +455,31 @@ export default function EditorPage() {
     return { nodes, transitions };
   }, [editorState.project.stateMachine.nodePositions, editorState.project.stateMachine.states, editorState.project.stateMachine.transitions, smDraftNodePositions]);
   const exportFileEntries = useMemo(() => Object.entries(lastExportBundle?.files ?? {}), [lastExportBundle]);
+  const exportArtifactRows = useMemo(
+    () => exportFileEntries.map(([fileName, contents]) => ({ fileName, contents, group: getExportArtifactGroup(fileName) })),
+    [exportFileEntries]
+  );
+  const exportReadinessWarnings = useMemo(() => {
+    const warnings: string[] = [];
+    const svgParts = Object.values(editorState.project.parts).filter((part) => part.type === "svg").map((part) => part.id);
+    if (svgParts.length) {
+      warnings.push(`Remaining editor SVG parts: ${svgParts.length}; production export auto-vectorizes them before compile.`);
+    }
+    const draftTracks = Object.values(editorState.project.animations).flatMap((clip) => Object.entries(clip.tracks).filter(([, keys]) => keys.length === 0).map(([trackId]) => `${clip.id}.${trackId}`));
+    if (draftTracks.length) {
+      warnings.push(`Empty draft tracks stay editor-only until keyed: ${draftTracks.join(", ")}.`);
+    }
+    const reachableStates = getReachableStateIds(editorState.project.stateMachine.initialStateId, editorState.project.stateMachine.transitions);
+    const unreachableStates = editorState.project.stateMachine.states.map((state) => state.id).filter((stateId) => !reachableStates.has(stateId));
+    if (unreachableStates.length) {
+      warnings.push(`Unreachable state machine states: ${unreachableStates.join(", ")}.`);
+    }
+    if (svgParts.length) {
+      warnings.push("Unsupported SVG features require manual review: importer compiles path data, complex masks/filters may need cleanup.");
+    }
+    return warnings;
+  }, [editorState.project.animations, editorState.project.parts, editorState.project.stateMachine.initialStateId, editorState.project.stateMachine.states, editorState.project.stateMachine.transitions]);
+  const exportBlockerCount = lastExportBundle?.validation.errors.length ?? 0;
   const profilerBudget = useMemo(
     () => (profilerStats ? evaluateRuntimeBudget(profilerStats, runtimePerformanceBudgets[previewQuality].hero1) : null),
     [previewQuality, profilerStats]
@@ -893,6 +949,20 @@ export default function EditorPage() {
     link.click();
     URL.revokeObjectURL(url);
     setIoStatus(`downloaded ${fileName}`);
+  };
+  const downloadExportBundle = () => {
+    if (!lastExportBundle?.validation.ok) {
+      setIoStatus("run Export Bundle first");
+      return;
+    }
+    const contents = JSON.stringify(lastExportBundle.files, null, 2);
+    const url = URL.createObjectURL(new Blob([contents], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "hero.export-bundle.json";
+    link.click();
+    URL.revokeObjectURL(url);
+    setIoStatus(`downloaded export bundle (${Object.keys(lastExportBundle.files).length} files)`);
   };
   const copySourceJson = async () => {
     try {
@@ -1874,6 +1944,15 @@ export default function EditorPage() {
                     <Button size="sm" type="button" variant="outline" onClick={() => void copyExportFile("hero.compiled.json")} disabled={!lastExportBundle?.files["hero.compiled.json"]}>
                       Copy Compiled
                     </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => void copyExportFile("hero.release-manifest.json")} disabled={!lastExportBundle?.files["hero.release-manifest.json"]}>
+                      Copy Manifest
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => void copyExportFile("hero.compiled.json")} disabled={!lastExportBundle?.files["hero.compiled.json"]}>
+                      Copy Runtime JSON
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={downloadExportBundle} disabled={!lastExportBundle?.validation.ok}>
+                      Download All
+                    </Button>
                     <Button size="sm" type="button" variant="outline" onClick={() => void runRuntimeParityCheck()}>
                       Runtime Parity
                     </Button>
@@ -1890,11 +1969,19 @@ export default function EditorPage() {
                   {lastExportBundle?.summary ? (
                     <div className="grid gap-1 rounded-md bg-muted px-2 py-1 text-xs">
                       <span>Profile: {lastExportBundle.summary.profile}</span>
+                      <span>Schema: {lastExportBundle.manifest?.migration.sourceSchemaVersion ?? "n/a"} / Compiler: {lastExportBundle.manifest?.migration.compiledFormatVersion ?? "n/a"}</span>
                       <span>Counts: {lastExportBundle.summary.bones} bones / {lastExportBundle.summary.parts} parts / {lastExportBundle.summary.animations} clips / {lastExportBundle.summary.states} states</span>
                       <span>Size: {lastExportBundle.summary.totalBytes}b{lastExportBundle.summary.compressedBytes ? ` / gzip ${lastExportBundle.summary.compressedBytes}b` : ""}</span>
+                      <span className="truncate" title={lastExportBundle.summary.sourceHash}>Source SHA-256: {lastExportBundle.summary.sourceHash.slice(0, 16)}...</span>
                       <span className="truncate" title={lastExportBundle.summary.compiledHash}>Compiled SHA-256: {lastExportBundle.summary.compiledHash.slice(0, 16)}...</span>
                     </div>
                   ) : null}
+                  <div className="grid gap-1 rounded-md border px-2 py-1 text-xs">
+                    <span className={exportBlockerCount ? "text-destructive" : "text-emerald-700"}>{exportBlockerCount} blockers</span>
+                    {exportReadinessWarnings.length ? exportReadinessWarnings.map((warning) => (
+                      <span className="text-amber-600" key={warning}>{warning}</span>
+                    )) : <span className="text-emerald-700">0 release checklist warnings</span>}
+                  </div>
                   {lastExportBundle?.validation.errors.map((error) => (
                     <p className="text-xs text-destructive" key={error}>{error}</p>
                   ))}
@@ -1908,9 +1995,9 @@ export default function EditorPage() {
                     <p className="text-xs text-amber-600" key={warning}>{warning}</p>
                   ))}
                   <div className="grid gap-1">
-                    {exportFileEntries.map(([fileName, contents]) => (
+                    {exportArtifactRows.map(({ fileName, contents, group }) => (
                       <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1 rounded-md bg-muted px-2 py-1" key={fileName}>
-                        <span className="truncate text-xs" title={fileName}>File: {fileName}</span>
+                        <span className="truncate text-xs" title={fileName}>{group}: {fileName}</span>
                         <span className="text-xs text-muted-foreground">{contents.length}b</span>
                         <Button size="sm" type="button" variant="outline" onClick={() => downloadExportFile(fileName)}>
                           Download
