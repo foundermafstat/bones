@@ -939,6 +939,46 @@ export function createAddKeyframeCommand(clipId: string, trackId: string, keyfra
   };
 }
 
+export function createSetKeyframeAtTimeCommand(clipId: string, trackId: string, time: number, value: number, interpolation: Keyframe["interpolation"] = "linear"): EditorCommand {
+  let previous: readonly Keyframe[] | undefined;
+  let hadTrack = false;
+  const frameEpsilon = 0.000001;
+
+  return {
+    id: `set-key-at-time:${clipId}:${trackId}:${time}`,
+    label: "Set keyframe at time",
+    do: (state) => {
+      const clip = state.animations[clipId];
+      if (!clip) {
+        return state;
+      }
+      hadTrack = Object.prototype.hasOwnProperty.call(clip.tracks, trackId);
+      previous = clip.tracks[trackId];
+      const snappedTime = snapKeyframe(state, { id: "snap", time, value, interpolation }).time;
+
+      return updateClipTrack(state, clipId, trackId, (keys) => {
+        const existing = keys.find((key) => Math.abs(key.time - snappedTime) <= frameEpsilon);
+        if (existing) {
+          return keys.map((key) => (key.id === existing.id ? snapKeyframe(state, { ...key, time: snappedTime, value }) : key)).sort((a, b) => a.time - b.time);
+        }
+        const idTime = snappedTime.toFixed(3).replace(/[^a-zA-Z0-9_-]/g, "_");
+        return [...keys, { id: `${trackId}-${idTime}`, time: snappedTime, value, interpolation }].sort((a, b) => a.time - b.time);
+      });
+    },
+    undo: (state) => {
+      const clip = state.animations[clipId];
+      if (!clip) {
+        return state;
+      }
+      if (hadTrack) {
+        return updateClipTrack(state, clipId, trackId, () => previous ?? []);
+      }
+      const { [trackId]: _removed, ...tracks } = clip.tracks;
+      return { ...markDirty(state, clipId, "animations"), animations: { ...state.animations, [clipId]: { ...clip, tracks } } };
+    }
+  };
+}
+
 export function createAddAnimationTrackCommand(clipId: string, trackId: string): EditorCommand {
   let previous: readonly Keyframe[] | undefined;
   return {

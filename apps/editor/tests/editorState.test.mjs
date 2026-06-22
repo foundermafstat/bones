@@ -27,6 +27,7 @@ import {
   createSetBlendTreeCommand,
   createSetInitialStateCommand,
   createSetCurvePreviewCommand,
+  createSetKeyframeAtTimeCommand,
   createSetStateMachineParameterCommand,
   createSetStateMachinePreviewCommand,
   createSetTransitionConditionsCommand,
@@ -248,6 +249,19 @@ test("timeline can create clip, track, and authored keyframes", () => {
   assert.equal(key2.project.animations.testWalk.duration, 1);
   assert.equal(key2.project.animations.testWalk.loop, true);
   assert.deepEqual(key2.project.animations.testWalk.tracks["body.scaleY"].map((key) => key.value), [1, 1.1, 1]);
+});
+
+test("timeline can set a keyed value at the current time without duplicates", () => {
+  const created = executeCommand(freshContainer(), createSetKeyframeAtTimeCommand("idle", "body.x", 0.25, 12));
+  assert.equal(created.project.animations.idle.tracks["body.x"].length, 1);
+  assert.equal(created.project.animations.idle.tracks["body.x"][0].value, 12);
+
+  const updated = executeCommand(created, createSetKeyframeAtTimeCommand("idle", "body.x", 0.25, 18));
+  assert.equal(updated.project.animations.idle.tracks["body.x"].length, 1);
+  assert.equal(updated.project.animations.idle.tracks["body.x"][0].value, 18);
+
+  const undone = undo(updated);
+  assert.equal(undone.project.animations.idle.tracks["body.x"][0].value, 12);
 });
 
 test("timeline retime, reverse, normalize loop, events, and markers are undoable", () => {

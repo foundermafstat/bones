@@ -69,11 +69,13 @@ import {
   createReverseClipCommand,
   createRetimeClipCommand,
   createSetTimelineSelectionCommand,
+  createGroupedCommand,
   createSetBlendTreeCommand,
   createSetInitialStateCommand,
   createSetStateMachineParameterCommand,
   createSetStateMachinePreviewCommand,
   createSetTransitionConditionsCommand,
+  createSetKeyframeAtTimeCommand,
   createRenameStateMachineStateCommand,
   createStateMachineStateCommand,
   createTransitionCommand,
@@ -224,6 +226,7 @@ export default function EditorPage() {
   const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
   const [dragPoint, setDragPoint] = useState<{ readonly index: number; readonly point: readonly [number, number] } | null>(null);
   const [dragBone, setDragBone] = useState<{ readonly boneId: string; readonly point: readonly [number, number] } | null>(null);
+  const [dragTimelineKey, setDragTimelineKey] = useState<{ readonly clipId: string; readonly trackId: string; readonly keyframeId: string; readonly time: number } | null>(null);
   const [selectedPoseId, setSelectedPoseId] = useState("idle_neutral");
   const [selectedPartId, setSelectedPartId] = useState("bodyShape");
   const [newPartId, setNewPartId] = useState("testSvgShape");
@@ -306,7 +309,8 @@ export default function EditorPage() {
   const selectedCurve = selectedTimelineKey?.curve ?? [0, 0, 1, 1] as const;
   const curvePath = `M 12 88 C ${12 + selectedCurve[0] * 96} ${88 - selectedCurve[1] * 72}, ${12 + selectedCurve[2] * 96} ${88 - selectedCurve[3] * 72}, 108 16`;
   const selectedKeyCurvePreset = selectedTimelineKey?.curvePreset ?? (selectedTimelineKey?.interpolation === "bezier" ? "bezier" : selectedTimelineKey?.interpolation ?? "linear");
-  const visibleTimelineTracks = sampleProject.tracks.slice(editorState.project.timeline.virtualWindow.startRow, editorState.project.timeline.virtualWindow.startRow + editorState.project.timeline.virtualWindow.rowCount);
+  const timelineTracks = Array.from(new Set([...(activeClip ? Object.keys(activeClip.tracks) : []), ...sampleProject.tracks]));
+  const visibleTimelineTracks = timelineTracks.slice(editorState.project.timeline.virtualWindow.startRow, editorState.project.timeline.virtualWindow.startRow + editorState.project.timeline.virtualWindow.rowCount);
   const stateIds = editorState.project.stateMachine.states.map((state) => state.id);
   const parameterIds = Object.keys(editorState.project.stateMachine.parameters);
   const smTransitionId = `${smFromStateId}-${smToStateId}`;
@@ -329,6 +333,86 @@ export default function EditorPage() {
   const runCommand = (command: Parameters<typeof executeCommand>[1]) => {
     setLastCommand(command.label);
     setEditorState((state) => executeCommand(state, command));
+  };
+  const timelineTimeFromLane = (lane: HTMLElement, clientX: number, duration: number) => {
+    const rect = lane.getBoundingClientRect();
+    const ratio = clampPanelSize((clientX - rect.left) / Math.max(1, rect.width), 0, 1);
+    return Number((ratio * Math.max(0, duration)).toFixed(3));
+  };
+  const startTimelineKeyDrag = (event: ReactMouseEvent<HTMLButtonElement>, clipId: string, trackId: string, keyframeId: string, time: number, duration: number) => {
+    const lane = event.currentTarget.parentElement;
+    if (!lane) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    setDragTimelineKey({ clipId, trackId, keyframeId, time });
+    setTimelineCurrentTime(time);
+    runCommand(createSetTimelineSelectionCommand(clipId, [keyframeId]));
+
+    const onMove = (moveEvent: MouseEvent) => {
+      const nextTime = timelineTimeFromLane(lane, moveEvent.clientX, duration);
+      setTimelineCurrentTime(nextTime);
+      setDragTimelineKey((current) => current?.clipId === clipId && current.trackId === trackId && current.keyframeId === keyframeId ? { ...current, time: nextTime } : current);
+    };
+    const onEnd = (upEvent: MouseEvent) => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onEnd);
+      const nextTime = timelineTimeFromLane(lane, upEvent.clientX, duration);
+      setTimelineCurrentTime(nextTime);
+      runCommand(createMoveKeyframeCommand(clipId, trackId, keyframeId, nextTime));
+      setDragTimelineKey(null);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onEnd);
+  };
+  const commitBoneDrag = (boneId: string, point: readonly [number, number]) => {
+    const parentId = editorState.project.parents[boneId];
+    const parentPoint = parentId ? rigPoints[parentId] : [0, 0];
+    const current = editorState.project.bones[boneId] ?? selectedTransform;
+    const nextTransform = {
+      ...current,
+      x: point[0] - (parentPoint?.[0] ?? 0),
+      y: point[1] - (parentPoint?.[1] ?? 0)
+    };
+    const keyTime = activeClip ? clampPanelSize(timelineCurrentTime, 0, activeClip.duration) : timelineCurrentTime;
+    const commands = [createSetBoneTransformCommand(boneId, nextTransform)];
+    if (activeClip) {
+      commands.push(
+        createSetKeyframeAtTimeCommand(activeClip.id, `${boneId}.x`, keyTime, nextTransform.x),
+        createSetKeyframeAtTimeCommand(activeClip.id, `${boneId}.y`, keyTime, nextTransform.y)
+      );
+      setTimelineCurrentTime(keyTime);
+    }
+    setTimelineTargetId(boneId);
+    setTimelineProperty("x");
+    runCommand(createGroupedCommand(activeClip ? "Move bone at time" : "Move bone", commands));
+  };
+  const startBoneDrag = (event: ReactMouseEvent<SVGCircleElement>, boneId: string, point: readonly [number, number]) => {
+    if (editorState.project.boneMetadata[boneId]?.locked) {
+      return;
+    }
+    const svg = event.currentTarget.ownerSVGElement;
+    if (!svg) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    setEditorState((state) => ({ ...state, project: { ...state.project, selectedBoneId: boneId } }));
+    setDragBone({ boneId, point });
+
+    const onMove = (moveEvent: MouseEvent) => {
+      setDragBone({ boneId, point: svgPointFromClient(svg, moveEvent.clientX, moveEvent.clientY, rigViewBox) });
+    };
+    const onEnd = (upEvent: MouseEvent) => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onEnd);
+      const nextPoint = svgPointFromClient(svg, upEvent.clientX, upEvent.clientY, rigViewBox);
+      commitBoneDrag(boneId, nextPoint);
+      setDragBone(null);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onEnd);
   };
   const startPanelResize = (panel: "left" | "right" | "timeline", event: ReactPointerEvent<HTMLElement> | ReactMouseEvent<HTMLElement>) => {
     event.preventDefault();
@@ -369,6 +453,7 @@ export default function EditorPage() {
     setSelectedPointIndex(null);
     setDragPoint(null);
     setDragBone(null);
+    setDragTimelineKey(null);
   };
   const exportBundle = async () => {
     const bundle = createProjectExportBundle(editorState.project);
@@ -790,26 +875,6 @@ export default function EditorPage() {
                 aria-label="Rig bone editor"
                 className="absolute inset-0 z-10 size-full touch-none"
                 viewBox={`${rigViewBox.x} ${rigViewBox.y} ${rigViewBox.width} ${rigViewBox.height}`}
-                onPointerMove={(event) => {
-                  if (dragBone) {
-                    setDragBone({ boneId: dragBone.boneId, point: svgPointFromEvent(event, rigViewBox) });
-                  }
-                }}
-                onPointerUp={() => {
-                  if (dragBone) {
-                    const parentId = editorState.project.parents[dragBone.boneId];
-                    const parentPoint = parentId ? rigPoints[parentId] : [0, 0];
-                    const current = editorState.project.bones[dragBone.boneId] ?? selectedTransform;
-                    runCommand(
-                      createSetBoneTransformCommand(dragBone.boneId, {
-                        ...current,
-                        x: dragBone.point[0] - (parentPoint?.[0] ?? 0),
-                        y: dragBone.point[1] - (parentPoint?.[1] ?? 0)
-                      })
-                    );
-                    setDragBone(null);
-                  }
-                }}
               >
                 {editorState.project.hierarchy.map((boneId) => {
                   const parentId = editorState.project.parents[boneId];
@@ -836,14 +901,7 @@ export default function EditorPage() {
                       stroke="#1b4dcc"
                       strokeWidth={1.5}
                       vectorEffect="non-scaling-stroke"
-                      onPointerDown={(event) => {
-                        event.preventDefault();
-                        event.currentTarget.setPointerCapture(event.pointerId);
-                        setEditorState((state) => ({ ...state, project: { ...state.project, selectedBoneId: boneId } }));
-                        if (!editorState.project.boneMetadata[boneId]?.locked) {
-                          setDragBone({ boneId, point });
-                        }
-                      }}
+                      onMouseDown={(event) => startBoneDrag(event, boneId, point)}
                     />
                   );
                 })}
@@ -1729,7 +1787,7 @@ export default function EditorPage() {
               </Button>
               <Input className="h-7 w-16 text-xs" type="number" step="0.1" value={timelineCurrentTime} onChange={(event) => setTimelineCurrentTime(Number(event.target.value))} aria-label="Timeline current time" />
               <Input className="h-7 w-16 text-xs" type="number" step="0.1" value={timelineKeyValue} onChange={(event) => setTimelineKeyValue(Number(event.target.value))} aria-label="Timeline key value" />
-              <Button size="sm" type="button" variant="outline" disabled={!activeClip} onClick={() => activeClip && runCommand(createAddKeyframeCommand(activeClip.id, timelineTrackId, { id: `${timelineTrackId}-${timelineCurrentTime}`, time: timelineCurrentTime, value: timelineKeyValue, interpolation: "linear" }))}>
+              <Button size="sm" type="button" variant="outline" disabled={!activeClip} onClick={() => activeClip && runCommand(createSetKeyframeAtTimeCommand(activeClip.id, timelineTrackId, timelineCurrentTime, timelineKeyValue))}>
                 Add Key At Time
               </Button>
               <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createAnimationClipCommand(`clip_${clipIds.length + 1}`, `Clip ${clipIds.length + 1}`, 1, true))}>
@@ -1770,32 +1828,47 @@ export default function EditorPage() {
               <Input className="h-7 w-20 text-xs" type="number" step="0.01" value={selectedTimelineKey.value} onChange={(event) => activeClip && runCommand(createUpdateKeyframeCommand(activeClip.id, selectedTimelineTrackId, selectedTimelineKey.id, { value: Number(event.target.value) }))} aria-label="Selected key value" />
             </div>
           ) : null}
-          {activeClip ? visibleTimelineTracks.map((track, index) => (
-            <div className="relative grid min-h-[17px] grid-cols-[140px_1fr] items-center rounded-md bg-muted" key={track}>
-              <span className="truncate pl-2 text-xs text-muted-foreground">{track}</span>
-              {(activeClip.tracks[track] ?? []).map((keyframe) => (
-                <Tooltip key={keyframe.id}>
-                  <TooltipTrigger asChild>
-                    <button
-                      className="absolute top-[5px] size-[7px] rounded-full bg-primary"
-                      style={{ left: `${(keyframe.time / activeClip.duration) * 100}%` }}
-                      type="button"
-                      aria-label={`Key ${keyframe.id}`}
-                      onClick={() => runCommand(createSetTimelineSelectionCommand(activeClip.id, [keyframe.id]))}
-                    />
-                  </TooltipTrigger>
-                  <TooltipContent>{keyframe.id}</TooltipContent>
-                </Tooltip>
-              ))}
-              {activeClip.markers.map((marker) => (
-                <span className="absolute top-0 h-[17px] w-px bg-amber-500" key={marker.id} style={{ left: `${(marker.time / activeClip.duration) * 100}%` }} title={marker.label} />
-              ))}
-              {activeClip.events.map((event) => (
-                <span className="absolute top-[2px] size-[5px] rotate-45 bg-emerald-500" key={event.id} style={{ left: `${(event.time / activeClip.duration) * 100}%` }} title={event.type} />
-              ))}
-              <span className="absolute top-[5px] size-[7px] rounded-full bg-primary" style={{ left: `${52 + index * 5}%` }} />
-            </div>
-          )) : <p className="text-xs text-muted-foreground">No animation clip selected.</p>}
+          {activeClip ? visibleTimelineTracks.map((track) => {
+            const trackKeys = activeClip.tracks[track] ?? [];
+            const duration = Math.max(0.001, activeClip.duration);
+            const playheadTime = clampPanelSize(timelineCurrentTime, 0, activeClip.duration);
+
+            return (
+              <div className="grid min-h-6 grid-cols-[140px_minmax(420px,1fr)] items-center rounded-md bg-muted" key={track}>
+                <span className="truncate pl-2 text-xs text-muted-foreground">{track}</span>
+                <div className="relative h-full min-h-6 overflow-hidden rounded-r-md" aria-label={`Timeline track ${track}`}>
+                  <span className="absolute bottom-0 top-0 z-10 w-px bg-primary/50" style={{ left: `${(playheadTime / duration) * 100}%` }} />
+                  {trackKeys.map((keyframe) => {
+                    const dragging = dragTimelineKey?.clipId === activeClip.id && dragTimelineKey.trackId === track && dragTimelineKey.keyframeId === keyframe.id;
+                    const displayedTime = dragging ? dragTimelineKey.time : keyframe.time;
+                    const selected = selectedKeyId === keyframe.id;
+
+                    return (
+                      <Tooltip key={keyframe.id}>
+                        <TooltipTrigger asChild>
+                          <button
+                            className={`absolute top-1/2 z-20 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-background bg-primary touch-none ${selected ? "ring-2 ring-primary/30" : ""}`}
+                            style={{ left: `${(clampPanelSize(displayedTime, 0, activeClip.duration) / duration) * 100}%` }}
+                            type="button"
+                            aria-label={`Key ${keyframe.id} at ${displayedTime.toFixed(3)}`}
+                            onMouseDown={(event) => startTimelineKeyDrag(event, activeClip.id, track, keyframe.id, keyframe.time, activeClip.duration)}
+                            onClick={() => runCommand(createSetTimelineSelectionCommand(activeClip.id, [keyframe.id]))}
+                          />
+                        </TooltipTrigger>
+                        <TooltipContent className="pointer-events-none">{keyframe.id}</TooltipContent>
+                      </Tooltip>
+                    );
+                  })}
+                  {activeClip.markers.map((marker) => (
+                    <span className="absolute top-0 z-10 h-full w-px bg-amber-500" key={marker.id} style={{ left: `${(marker.time / duration) * 100}%` }} title={marker.label} />
+                  ))}
+                  {activeClip.events.map((timelineEvent) => (
+                    <span className="absolute top-1/2 z-10 size-2 -translate-x-1/2 -translate-y-1/2 rotate-45 bg-emerald-500" key={timelineEvent.id} style={{ left: `${(timelineEvent.time / duration) * 100}%` }} title={timelineEvent.type} />
+                  ))}
+                </div>
+              </div>
+            );
+          }) : <p className="text-xs text-muted-foreground">No animation clip selected.</p>}
         </CardContent>
       </Card>
     </main>
@@ -1851,8 +1924,12 @@ function getRigWorldPoints(project: EditorProjectState): Readonly<Record<string,
 }
 
 function svgPointFromEvent(event: ReactPointerEvent<SVGSVGElement> | ReactMouseEvent<SVGSVGElement>, viewBox: ShapeViewBox): readonly [number, number] {
-  const rect = event.currentTarget.getBoundingClientRect();
-  const x = viewBox.x + ((event.clientX - rect.left) / Math.max(1, rect.width)) * viewBox.width;
-  const y = viewBox.y + ((event.clientY - rect.top) / Math.max(1, rect.height)) * viewBox.height;
+  return svgPointFromClient(event.currentTarget, event.clientX, event.clientY, viewBox);
+}
+
+function svgPointFromClient(svg: SVGSVGElement, clientX: number, clientY: number, viewBox: ShapeViewBox): readonly [number, number] {
+  const rect = svg.getBoundingClientRect();
+  const x = viewBox.x + ((clientX - rect.left) / Math.max(1, rect.width)) * viewBox.width;
+  const y = viewBox.y + ((clientY - rect.top) / Math.max(1, rect.height)) * viewBox.height;
   return [Number(x.toFixed(2)), Number(y.toFixed(2))];
 }
