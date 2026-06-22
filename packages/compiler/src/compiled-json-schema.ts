@@ -26,6 +26,7 @@ export const compiledRigProjectJsonSchema = {
     "rig",
     "animations",
     "stateMachines",
+    "proceduralLayers",
     "lookups"
   ],
   properties: {
@@ -37,6 +38,8 @@ export const compiledRigProjectJsonSchema = {
     rig: { $ref: "#/$defs/rig" },
     animations: { type: "array", items: { $ref: "#/$defs/animationClip" } },
     stateMachines: { type: "array", items: { $ref: "#/$defs/stateMachine" } },
+    proceduralLayers: { type: "array", items: { $ref: "#/$defs/proceduralLayer" } },
+    constraints: { $ref: "#/$defs/constraintConfig" },
     lookups: {
       type: "object",
       additionalProperties: false,
@@ -311,6 +314,91 @@ export const compiledRigProjectJsonSchema = {
         parameter: numericId,
         operator: { enum: ["==", "!=", ">", ">=", "<", "<="] },
         value: { type: ["string", "number", "boolean"] }
+      }
+    },
+    proceduralLayer: {
+      oneOf: [
+        {
+          type: "object",
+          additionalProperties: false,
+          required: ["type", "enabled", "frequency", "amplitude", "affectedBones"],
+          properties: {
+            type: { const: "breathing" },
+            enabled: { type: "boolean" },
+            frequency: { type: "number" },
+            amplitude: { type: "number" },
+            affectedBones: {
+              type: "object",
+              additionalProperties: {
+                type: "object",
+                additionalProperties: { type: "number" }
+              }
+            }
+          }
+        },
+        {
+          type: "object",
+          additionalProperties: false,
+          required: ["type", "targetKind", "target", "stiffness", "damping", "velocityInfluence", "maxOffset"],
+          properties: {
+            type: { const: "secondaryMotion" },
+            targetKind: { const: "bone" },
+            target: numericId,
+            stiffness: { type: "number" },
+            damping: { type: "number" },
+            velocityInfluence: { type: "number" },
+            gravityInfluence: { type: "number" },
+            windInfluence: { type: "number" },
+            maxOffset: { type: "number" }
+          }
+        },
+        {
+          type: "object",
+          additionalProperties: false,
+          required: ["type", "rules"],
+          properties: {
+            type: { const: "squashStretch" },
+            rules: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: false,
+                required: ["condition", "targetBone", "scaleX", "scaleY", "duration"],
+                properties: {
+                  condition: { type: "string" },
+                  targetBone: numericId,
+                  scaleX: { type: "number" },
+                  scaleY: { type: "number" },
+                  duration: { type: "number", minimum: 0 }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    constraintConfig: {
+      type: "object",
+      additionalProperties: false,
+      required: ["feet"],
+      properties: {
+        feet: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["footBone", "raycastOffsetX", "raycastHeight", "maxCorrection", "blend"],
+            properties: {
+              footBone: numericId,
+              shinBone: numericId,
+              thighBone: numericId,
+              raycastOffsetX: { type: "number" },
+              raycastHeight: { type: "number" },
+              maxCorrection: { type: "number" },
+              blend: { type: "number" }
+            }
+          }
+        }
       }
     }
   }

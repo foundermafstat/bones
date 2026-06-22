@@ -101,6 +101,11 @@ const sourceProject = {
       ],
       editor: { collapsed: true }
     }
+  ],
+  proceduralPresets: [
+    { id: "breathing", type: "breathing", enabled: true, frequency: 1, amplitude: 0.5, affectedBones: { body: { y: -1, scaleY: 0.02 } } },
+    { id: "secondary", type: "secondaryMotion", enabled: true, target: "body", stiffness: 0.2, damping: 0.7, velocityInfluence: 0.4, maxOffset: 6 },
+    { id: "squash", type: "squashStretch", enabled: true, targetBone: "body", landingImpactScale: 0.2, rules: [{ condition: "landHeavy", scaleX: 1.1, scaleY: 0.9, duration: 0.12 }] }
   ]
 };
 
@@ -131,6 +136,9 @@ test("compiles source project into deterministic compiled JSON v1", () => {
   assert.deepEqual(first.stateMachines[0].transitions[0].interruptWindow, [0.02, 0.08]);
   assert.equal(first.stateMachines[0].transitions[0].exitTime, 0.1);
   assert.equal(first.stateMachines[0].transitions[0].minStateTime, 0.05);
+  assert.deepEqual(first.proceduralLayers[0].affectedBones[1], { "transform.y": -1, "transform.scaleY": 0.02 });
+  assert.equal(first.proceduralLayers[1].target, 1);
+  assert.equal(first.proceduralLayers[2].rules[0].targetBone, 1);
   assert.equal(JSON.stringify(first).includes("editor"), false);
 });
 
@@ -166,6 +174,13 @@ test("invalid source project fails with clear validation error", () => {
   assert.throws(
     () => compileRig({ ...sourceProject, runtimeTarget: "dom" }),
     (error) => error instanceof CompileError && /\$\.runtimeTarget/.test(error.message)
+  );
+});
+
+test("missing procedural bone refs fail compile validation", () => {
+  assert.throws(
+    () => compileRig({ ...sourceProject, proceduralPresets: [{ id: "bad", type: "secondaryMotion", enabled: true, target: "missing", stiffness: 0.2, damping: 0.7, velocityInfluence: 0.4 }] }),
+    /Compiled bone lookup is missing 'missing'/
   );
 });
 

@@ -31,6 +31,8 @@ export interface CompiledRigProjectV1 {
   readonly rig: CompiledRigV1;
   readonly animations: readonly CompiledAnimationClipV1[];
   readonly stateMachines: readonly CompiledStateMachineV1[];
+  readonly proceduralLayers: readonly CompiledProceduralLayerV1[];
+  readonly constraints?: CompiledConstraintConfigV1;
   readonly lookups: CompiledLookupTablesV1;
 }
 
@@ -152,6 +154,48 @@ export interface CompiledParameterV1 {
   readonly id: NumericId;
   readonly type: AnimationParameterType;
   readonly defaultValue: string | number | boolean;
+}
+
+export type CompiledProceduralLayerV1 =
+  | {
+      readonly type: "breathing";
+      readonly enabled: boolean;
+      readonly frequency: number;
+      readonly amplitude: number;
+      readonly affectedBones: Readonly<Record<number, Partial<Record<AnimationTrackProperty, number>>>>;
+    }
+  | {
+      readonly type: "secondaryMotion";
+      readonly targetKind: "bone";
+      readonly target: NumericId;
+      readonly stiffness: number;
+      readonly damping: number;
+      readonly velocityInfluence: number;
+      readonly gravityInfluence?: number;
+      readonly windInfluence?: number;
+      readonly maxOffset: number;
+    }
+  | {
+      readonly type: "squashStretch";
+      readonly rules: readonly {
+        readonly condition: string;
+        readonly targetBone: NumericId;
+        readonly scaleX: number;
+        readonly scaleY: number;
+        readonly duration: number;
+      }[];
+    };
+
+export interface CompiledConstraintConfigV1 {
+  readonly feet: readonly {
+    readonly footBone: NumericId;
+    readonly shinBone?: NumericId;
+    readonly thighBone?: NumericId;
+    readonly raycastOffsetX: number;
+    readonly raycastHeight: number;
+    readonly maxCorrection: number;
+    readonly blend: number;
+  }[];
 }
 
 export interface CompiledConditionV1 {

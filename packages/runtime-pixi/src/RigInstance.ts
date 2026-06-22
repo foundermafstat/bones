@@ -100,8 +100,11 @@ export class RigInstance {
 
     this.mixer = new AnimationMixer(this.compiled.animations ?? []);
     this.stateMachine = this.createStateMachine(options);
-    this.procedural = options.proceduralLayers?.length ? new ProceduralLayerStack(options.proceduralLayers) : undefined;
-    this.constraints = options.constraints ? new ConstraintSolver(options.constraints.config, options.constraints.world) : undefined;
+    const proceduralLayers = options.proceduralLayers === false ? [] : options.proceduralLayers ?? this.compiled.proceduralLayers ?? [];
+    this.procedural = proceduralLayers.length ? new ProceduralLayerStack(proceduralLayers) : undefined;
+    const constraintConfig = options.constraints?.config ?? this.compiled.constraints;
+    const constraintWorld = options.constraints?.world ?? options.constraintWorld;
+    this.constraints = constraintConfig && constraintWorld ? new ConstraintSolver(constraintConfig, constraintWorld) : undefined;
     this.startDefaultAnimation();
 
     this.buildHierarchy();

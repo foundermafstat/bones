@@ -24,6 +24,8 @@ export interface RuntimeCompiledRig {
   readonly rig: RuntimeCompiledRigData;
   readonly animations?: readonly RuntimeAnimationClip[];
   readonly stateMachines?: readonly RuntimeStateMachine[];
+  readonly proceduralLayers?: readonly ProceduralLayerConfig[];
+  readonly constraints?: ConstraintSolverConfig;
   readonly lookups?: RuntimeLookupTables;
 }
 
@@ -82,7 +84,8 @@ export interface RuntimeCompiledPart {
 export interface RigInstanceOptions {
   readonly quality?: "low" | "medium" | "high";
   readonly stateMachine?: NumericId | false;
-  readonly proceduralLayers?: readonly ProceduralLayerConfig[];
+  readonly proceduralLayers?: readonly ProceduralLayerConfig[] | false;
+  readonly constraintWorld?: RaycastWorld;
   readonly constraints?: {
     readonly config: ConstraintSolverConfig;
     readonly world: RaycastWorld;

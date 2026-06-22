@@ -7,10 +7,12 @@ import {
   type AnimationEvent,
   type AnimationStateMachine,
   type AnimationTransition,
+  type AnimationTrackProperty,
   type AnimationTrack,
   type JsonValue,
   type Keyframe,
   type PartDefinition,
+  type ProceduralAnimationPreset,
   type RigDefinition,
   type RigProject,
   type Transform2D
@@ -24,6 +26,7 @@ import {
   type CompiledKeyframeV1,
   type CompiledLookupTablesV1,
   type CompiledPartV1,
+  type CompiledProceduralLayerV1,
   type CompiledRigProjectV1,
   type CompiledStateMachineV1,
   type CompiledStateV1,
@@ -107,6 +110,8 @@ export function compileRig(projectInput: unknown, options: CompileOptions = {}):
     },
     animations: normalized.animations.map((clip) => compileAnimationClip(clip, lookups, defaultFrameRate)),
     stateMachines: normalized.stateMachines.map((machine) => compileStateMachine(machine, lookups)),
+    proceduralLayers: compileProceduralLayers(normalized.proceduralPresets, lookups),
+    ...(compileConstraints(normalized.proceduralPresets, lookups) ? { constraints: compileConstraints(normalized.proceduralPresets, lookups)! } : {}),
     lookups
   };
 }
@@ -161,6 +166,82 @@ function compileAnimationClip(
       ...(event.payload ? { payload: event.payload as unknown as JsonValue } : {})
     }))
   };
+}
+
+function compileProceduralLayers(presets: readonly ProceduralAnimationPreset[], lookups: CompiledLookupTablesV1): readonly CompiledProceduralLayerV1[] {
+  const layers: CompiledProceduralLayerV1[] = [];
+  for (const preset of presets) {
+    if (preset.type === "breathing") {
+      layers.push({
+        type: "breathing" as const,
+        enabled: preset.enabled,
+        frequency: preset.frequency,
+        amplitude: preset.amplitude,
+        affectedBones: Object.fromEntries(
+          Object.entries(preset.affectedBones).map(([boneId, transform]) => [lookupRequired(lookups.bones, boneId, "bone"), transformToTrackProperties(transform)])
+        )
+      });
+      continue;
+    }
+    if (preset.type === "secondaryMotion") {
+      layers.push({
+        type: "secondaryMotion" as const,
+        targetKind: "bone" as const,
+        target: lookupRequired(lookups.bones, preset.target, "bone"),
+        stiffness: preset.stiffness,
+        damping: preset.damping,
+        velocityInfluence: preset.velocityInfluence,
+        ...(preset.gravityInfluence !== undefined ? { gravityInfluence: preset.gravityInfluence } : {}),
+        ...(preset.windInfluence !== undefined ? { windInfluence: preset.windInfluence } : {}),
+        maxOffset: preset.maxOffset ?? 0
+      });
+      continue;
+    }
+    if (preset.type === "squashStretch") {
+      layers.push({
+        type: "squashStretch" as const,
+        rules: (preset.rules ?? []).map((rule) => ({
+          condition: rule.condition,
+          targetBone: lookupRequired(lookups.bones, preset.targetBone, "bone"),
+          scaleX: rule.scaleX,
+          scaleY: rule.scaleY,
+          duration: rule.duration
+        }))
+      });
+    }
+  }
+  return layers;
+}
+
+function compileConstraints(presets: readonly ProceduralAnimationPreset[], lookups: CompiledLookupTablesV1): CompiledRigProjectV1["constraints"] | undefined {
+  const feet = presets.flatMap((preset) =>
+    preset.type === "footIK" && preset.enabled
+      ? preset.feet.map((foot) => ({
+          footBone: lookupRequired(lookups.bones, foot.footBone, "bone"),
+          ...(foot.shinBone ? { shinBone: lookupRequired(lookups.bones, foot.shinBone, "bone") } : {}),
+          ...(foot.thighBone ? { thighBone: lookupRequired(lookups.bones, foot.thighBone, "bone") } : {}),
+          raycastOffsetX: foot.raycastOffsetX ?? 0,
+          raycastHeight: foot.raycastHeight ?? 20,
+          maxCorrection: preset.maxCorrection,
+          blend: preset.blend
+        }))
+      : []
+  );
+  return feet.length ? { feet } : undefined;
+}
+
+function transformToTrackProperties(transform: Partial<Transform2D>): Partial<Record<AnimationTrackProperty, number>> {
+  return Object.fromEntries(
+    Object.entries(transform).flatMap(([key, value]) => {
+      if (typeof value !== "number") {
+        return [];
+      }
+      if (key === "x" || key === "y" || key === "rotation" || key === "scaleX" || key === "scaleY" || key === "skewX" || key === "skewY") {
+        return [[`transform.${key}`, value]];
+      }
+      return [];
+    })
+  ) as Partial<Record<AnimationTrackProperty, number>>;
 }
 
 function compileTrack(
@@ -276,6 +357,7 @@ interface NormalizedCompileInput {
   readonly parts: readonly PartDefinition[];
   readonly animations: readonly AnimationClip[];
   readonly stateMachines: readonly AnimationStateMachine[];
+  readonly proceduralPresets: readonly ProceduralAnimationPreset[];
 }
 
 function normalizeForCompile(project: RigProject, rig: RigDefinition): NormalizedCompileInput {
@@ -283,7 +365,8 @@ function normalizeForCompile(project: RigProject, rig: RigDefinition): Normalize
     bones: sortBonesTopologically(rig),
     parts: sortParts(rig.parts ?? []),
     animations: sortById(project.animations ?? []),
-    stateMachines: sortById(project.stateMachines ?? [])
+    stateMachines: sortById(project.stateMachines ?? []),
+    proceduralPresets: sortById(project.proceduralPresets ?? [])
   };
 }
 

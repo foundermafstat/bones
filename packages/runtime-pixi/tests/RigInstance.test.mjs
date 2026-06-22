@@ -220,6 +220,27 @@ test("update applies procedural and constraint samples after base animation", ()
   assert.equal(state.constraintValues, 2);
 });
 
+test("update applies compiled procedural layers by default", () => {
+  const instance = new RigInstance({
+    ...compiledFixture,
+    proceduralLayers: [
+      {
+        type: "breathing",
+        enabled: true,
+        frequency: 1,
+        amplitude: 1,
+        affectedBones: { 1: { "transform.y": -2 } }
+      }
+    ]
+  });
+  const body = instance.getBoneContainer(1);
+
+  const state = instance.update(0.25, {});
+
+  assert.equal(state.proceduralValues, 1);
+  assert.equal(body.position.y, -22);
+});
+
 test("constraints derive bone world params, rotate to surface normal, gate jump, and lock feet", () => {
   let hit = true;
   const world = {
