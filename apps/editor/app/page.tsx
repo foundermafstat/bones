@@ -139,6 +139,9 @@ export default function EditorPage() {
   const [newPartBoneId, setNewPartBoneId] = useState("head");
   const [newPartDrawOrder, setNewPartDrawOrder] = useState(9);
   const [vectorizeSummary, setVectorizeSummary] = useState("");
+  const [newBoneId, setNewBoneId] = useState("armTest");
+  const [newBoneParentId, setNewBoneParentId] = useState("body");
+  const [renameBoneId, setRenameBoneId] = useState("body");
   const [ioStatus, setIoStatus] = useState("ready");
   const [projectOrigin, setProjectOrigin] = useState<ProjectOrigin>("sample");
   const [lastExportBundle, setLastExportBundle] = useState<ProjectExportBundle | null>(null);
@@ -154,6 +157,9 @@ export default function EditorPage() {
   const rigViewBox = useMemo(() => getShapeViewBox(Object.values(displayedRigPoints)), [displayedRigPoints]);
   const partRows = useMemo(() => Object.values(editorState.project.parts).sort((left, right) => (left.zIndex ?? 0) - (right.zIndex ?? 0)), [editorState.project.parts]);
   const selectedPart = editorState.project.parts[selectedPartId] ?? partRows.find((part) => part.boneId === selectedBone) ?? partRows[0];
+  const childBoneCount = editorState.project.hierarchy.filter((boneId) => editorState.project.parents[boneId] === selectedBone).length;
+  const boundPartCount = partRows.filter((part) => part.boneId === selectedBone).length;
+  const boundTrackCount = Object.values(editorState.project.animations).reduce((count, clip) => count + Object.keys(clip.tracks).filter((trackId) => trackId.startsWith(`${selectedBone}.`)).length, 0);
   const shapePoints = dragPoint
     ? selectedPart?.points.map((point, index) => (index === dragPoint.index ? dragPoint.point : point)) ?? []
     : selectedPart?.points ?? [];
@@ -184,6 +190,10 @@ export default function EditorPage() {
     return { state, params: toAnimationParameters(state) };
   }, [previewLevel]);
   const runCommand = (command: Parameters<typeof executeCommand>[1]) => setEditorState((state) => executeCommand(state, command));
+  useEffect(() => {
+    setRenameBoneId(selectedBone);
+    setNewBoneParentId(selectedBone);
+  }, [selectedBone]);
   const replaceProject = (project: EditorProjectState, origin: ProjectOrigin, poseId = "") => {
     setEditorState({ project, history: { past: [], future: [] } });
     setProjectOrigin(origin);
@@ -292,6 +302,9 @@ export default function EditorPage() {
     runCommand(createAddSvgPartCommand({ id, boneId: newPartBoneId, type: "svg", pivot: [0, 0], points: [], preset: undefined, assetPath, zIndex: newPartDrawOrder }));
     setSelectedPartId(id);
     setIoStatus(`added SVG part ${id}`);
+  };
+  const updateSelectedTransform = (next: Partial<typeof selectedTransform>) => {
+    runCommand(createSetBoneTransformCommand(selectedBone, { ...selectedTransform, ...next }));
   };
   const toolbarGroups: { label: string; actions: ToolbarAction[] }[] = [
     {
@@ -642,6 +655,96 @@ export default function EditorPage() {
                   {inspectorRows.map(([label, value]) => (
                     <ReadOnlyField key={label} label={label} value={value} />
                   ))}
+                  <div className="grid gap-1">
+                    <Label className="text-xs text-muted-foreground">Rename Bone</Label>
+                    <div className="grid grid-cols-[1fr_auto] gap-1">
+                      <Input className="h-7 text-xs" value={renameBoneId} onChange={(event) => setRenameBoneId(event.target.value)} aria-label="Rename bone id" disabled={selectedBone === "root"} />
+                      <Button
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                        aria-label="Apply bone rename"
+                        disabled={selectedBone === "root" || !renameBoneId.trim() || renameBoneId === selectedBone}
+                        onClick={() => {
+                          runCommand(createRenameBoneCommand(selectedBone, renameBoneId.trim()));
+                          setIoStatus(`renamed ${selectedBone} to ${renameBoneId.trim()}`);
+                        }}
+                      >
+                        Rename
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1">
+                    <Input className="h-7 text-xs" type="number" value={selectedTransform.x} onChange={(event) => updateSelectedTransform({ x: Number(event.target.value) })} aria-label="Bone local x" />
+                    <Input className="h-7 text-xs" type="number" value={selectedTransform.y} onChange={(event) => updateSelectedTransform({ y: Number(event.target.value) })} aria-label="Bone local y" />
+                    <Input className="h-7 text-xs" type="number" step="0.01" value={selectedTransform.rotation} onChange={(event) => updateSelectedTransform({ rotation: Number(event.target.value) })} aria-label="Bone rotation" />
+                    <Input className="h-7 text-xs" type="number" step="0.01" value={selectedTransform.scaleX} onChange={(event) => updateSelectedTransform({ scaleX: Number(event.target.value) })} aria-label="Bone scale x" />
+                    <Input className="h-7 text-xs" type="number" step="0.01" value={selectedTransform.scaleY} onChange={(event) => updateSelectedTransform({ scaleY: Number(event.target.value) })} aria-label="Bone scale y" />
+                  </div>
+                  <Select value={editorState.project.parents[selectedBone] ?? "none"} onValueChange={(parentId) => runCommand(createSetParentCommand(selectedBone, parentId === "none" ? null : parentId))} disabled={selectedBone === "root"}>
+                    <SelectTrigger className="h-7 w-full" aria-label="Bone parent">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value="none">none</SelectItem>
+                        {editorState.project.hierarchy.filter((boneId) => boneId !== selectedBone).map((boneId) => (
+                          <SelectItem key={boneId} value={boneId}>
+                            {boneId}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                  <div className="grid grid-cols-2 gap-1">
+                    <Input className="h-7 text-xs" value={selectedBoneMetadata.mirrorGroup ?? ""} onChange={(event) => runCommand(createSetBoneMetadataCommand(selectedBone, { mirrorGroup: event.target.value || undefined }))} aria-label="Bone mirror group" />
+                    <Input className="h-7 text-xs" value={(selectedBoneMetadata.tags ?? []).join(", ")} onChange={(event) => runCommand(createSetBoneMetadataCommand(selectedBone, { tags: event.target.value.split(",").map((tag) => tag.trim()).filter(Boolean) }))} aria-label="Bone tags" />
+                  </div>
+                  <Select value={String(selectedBoneMetadata.facing ?? 1)} onValueChange={(value) => runCommand(createSetBoneMetadataCommand(selectedBone, { facing: value === "-1" ? -1 : 1 }))}>
+                    <SelectTrigger className="h-7 w-full" aria-label="Bone facing">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value="1">facing 1</SelectItem>
+                        <SelectItem value="-1">facing -1</SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                  <div className="grid gap-1">
+                    <Label className="text-xs text-muted-foreground">Add Bone</Label>
+                    <div className="grid grid-cols-[1fr_1fr_auto] gap-1">
+                      <Input className="h-7 text-xs" value={newBoneId} onChange={(event) => setNewBoneId(event.target.value)} aria-label="New bone id" />
+                      <Select value={newBoneParentId} onValueChange={setNewBoneParentId}>
+                        <SelectTrigger className="h-7 w-full" aria-label="New bone parent">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            {editorState.project.hierarchy.map((boneId) => (
+                              <SelectItem key={boneId} value={boneId}>
+                                {boneId}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                        aria-label="Add bone"
+                        disabled={!newBoneId.trim() || Boolean(editorState.project.bones[newBoneId.trim()])}
+                        onClick={() => {
+                          runCommand(createAddBoneCommand(newBoneParentId, newBoneId.trim()));
+                          setIoStatus(`added bone ${newBoneId.trim()}`);
+                        }}
+                      >
+                        Add
+                      </Button>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Delete impact: {childBoneCount} children / {boundPartCount} parts / {boundTrackCount} tracks</p>
                   <div className="grid grid-cols-2 gap-1">
                     <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetParentCommand(selectedBone, "root"))} disabled={selectedBone === "root"}>
                       Parent Root

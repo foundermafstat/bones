@@ -1432,14 +1432,24 @@ function renameBone(state: EditorProjectState, boneId: string, nextId: string): 
   const { [boneId]: _removedBone, ...bones } = state.bones;
   const { [boneId]: parent, ...parents } = state.parents;
   const { [boneId]: metadata, ...boneMetadata } = state.boneMetadata;
+  const dirtyState = renameDirtyRefs(markDirty(state, nextId, "bones"), boneId, nextId);
   return {
-    ...markDirty(state, nextId, "bones"),
+    ...dirtyState,
     selectedBoneId: state.selectedBoneId === boneId ? nextId : state.selectedBoneId,
     hierarchy: state.hierarchy.map((item) => (item === boneId ? nextId : item)),
     parents: Object.fromEntries(Object.entries({ ...parents, [nextId]: parent ?? null }).map(([child, value]) => [child, value === boneId ? nextId : value])),
     bones: { ...bones, [nextId]: current },
     boneMetadata: metadata ? { ...boneMetadata, [nextId]: metadata } : boneMetadata,
     parts: Object.fromEntries(Object.entries(state.parts).map(([partId, part]) => [partId, part.boneId === boneId ? { ...part, boneId: nextId } : part])),
+    animations: Object.fromEntries(
+      Object.entries(state.animations).map(([clipId, clip]) => [
+        clipId,
+        {
+          ...clip,
+          tracks: Object.fromEntries(Object.entries(clip.tracks).map(([trackId, keys]) => [trackId.startsWith(`${boneId}.`) ? `${nextId}${trackId.slice(boneId.length)}` : trackId, keys]))
+        }
+      ])
+    ),
     poses: Object.fromEntries(
       Object.entries(state.poses).map(([poseId, pose]) => [
         poseId,
@@ -1448,7 +1458,41 @@ function renameBone(state: EditorProjectState, boneId: string, nextId: string): 
           boneTransforms: Object.fromEntries(Object.entries(pose.boneTransforms).map(([poseBoneId, transform]) => [poseBoneId === boneId ? nextId : poseBoneId, transform]))
         }
       ])
-    )
+    ),
+    procedural: renameProceduralBoneRefs(state.procedural, boneId, nextId)
+  };
+}
+
+function renameDirtyRefs(state: EditorProjectState, boneId: string, nextId: string): EditorProjectState {
+  const renameIds = (ids: readonly string[]) => Array.from(new Set(ids.map((id) => (id === boneId ? nextId : id))));
+  return {
+    ...state,
+    dirtyParts: renameIds(state.dirtyParts),
+    dirtyScopes: Object.fromEntries(Object.entries(state.dirtyScopes).map(([scope, ids]) => [scope, renameIds(ids)])) as DirtyScopes
+  };
+}
+
+function renameProceduralBoneRefs(procedural: ProceduralPresetState, boneId: string, nextId: string): ProceduralPresetState {
+  const rename = (value: string) => (value === boneId ? nextId : value);
+  return {
+    ...procedural,
+    breathing: {
+      ...procedural.breathing,
+      affectedBones: procedural.breathing.affectedBones.map(rename),
+      affectedBoneTransforms: Object.fromEntries(Object.entries(procedural.breathing.affectedBoneTransforms).map(([id, transform]) => [rename(id), transform]))
+    },
+    secondaryMotion: { ...procedural.secondaryMotion, target: rename(procedural.secondaryMotion.target) },
+    squashStretch: { ...procedural.squashStretch, targetBone: rename(procedural.squashStretch.targetBone) },
+    footIk: {
+      ...procedural.footIk,
+      feet: procedural.footIk.feet.map(rename),
+      footChains: procedural.footIk.footChains.map((chain) => ({
+        ...chain,
+        footBone: rename(chain.footBone),
+        ...(chain.shinBone ? { shinBone: rename(chain.shinBone) } : {}),
+        ...(chain.thighBone ? { thighBone: rename(chain.thighBone) } : {})
+      }))
+    }
   };
 }
 

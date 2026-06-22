@@ -132,11 +132,17 @@ test("rename bone keeps metadata and bound parts connected", () => {
   assert.deepEqual(container.project.boneMetadata.torso, { locked: true, mirrorGroup: "center" });
   assert.equal(container.project.parts.bodyShape.boneId, "torso");
   assert.equal(container.project.parents.head, "torso");
+  assert.equal(container.project.animations.idle.tracks["body.scaleY"], undefined);
+  assert.ok(container.project.animations.idle.tracks["torso.scaleY"]);
+  assert.equal(container.project.procedural.squashStretch.targetBone, "torso");
+  assert.equal(container.project.dirtyParts.includes("body"), false);
+  assert.equal(container.project.dirtyScopes.bones.includes("body"), false);
 
   const undone = undo(container);
   assert.ok(undone.project.bones.body);
   assert.equal(undone.project.parts.bodyShape.boneId, "body");
   assert.equal(undone.project.parents.head, "body");
+  assert.ok(undone.project.animations.idle.tracks["body.scaleY"]);
 });
 
 test("rename bone updates pose transform keys", () => {
