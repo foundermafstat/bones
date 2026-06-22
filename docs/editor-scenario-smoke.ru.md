@@ -106,12 +106,12 @@ URL: `http://localhost:3000/`
     - Проверить `Import Preview` summary.
     - Нажать `Confirm Import`.
     - Нажать `Export Bundle`.
-    - Проверить, что bundle содержит 5 файлов и `hero.compiled.json` парсится.
+   - Проверить, что bundle содержит 7 файлов и `hero.compiled.json` парсится.
 
 ## Pass Criteria
 
 - Все шаги выполнены без app console errors.
-- `Export Bundle` возвращает 5 файлов.
+- `Export Bundle` возвращает 7 файлов.
 - `hero.compiled.json` парсится как JSON.
 - `hero.source.rig.json`, `hero.rig.json` и `hero.compiled.json` не содержат parts с `type: "svg"` после production export.
 - Runtime preview остается видимым после import/export.
