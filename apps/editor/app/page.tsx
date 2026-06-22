@@ -123,7 +123,7 @@ import { inspectSvgVector, vectorizeSvgPart } from "./editorVectorImport";
 import { parseLdtkLevel } from "@bones/ldtk-adapter";
 import { createInitialControllerState, toAnimationParameters, updatePlatformerController } from "@bones/platformer-preview";
 import type { JsonValue } from "@bones/schema";
-import type { QualityPresetName, RuntimeProfilerStats } from "@bones/runtime-pixi";
+import { evaluateRuntimeBudget, runtimePerformanceBudgets, type QualityPresetName, type RuntimeProfilerStats } from "@bones/runtime-pixi";
 
 const modes = ["Rig", "Shape", "Pose", "Timeline", "Curve", "State Machine", "Procedural", "Preview"] as const;
 const stateMachineViewBox = { x: 0, y: 0, width: 640, height: 360 } as const;
@@ -397,6 +397,10 @@ export default function EditorPage() {
     return { nodes, transitions };
   }, [editorState.project.stateMachine.nodePositions, editorState.project.stateMachine.states, editorState.project.stateMachine.transitions, smDraftNodePositions]);
   const exportFileEntries = useMemo(() => Object.entries(lastExportBundle?.files ?? {}), [lastExportBundle]);
+  const profilerBudget = useMemo(
+    () => (profilerStats ? evaluateRuntimeBudget(profilerStats, runtimePerformanceBudgets[previewQuality].hero1) : null),
+    [previewQuality, profilerStats]
+  );
   const previewLevel = useMemo(() => parseLdtkLevel(sampleLdtkLevel), []);
   const platformerDebug = useMemo(() => {
     const state =
@@ -2308,6 +2312,7 @@ export default function EditorPage() {
                   <p className="text-xs text-muted-foreground">Preview quality: {previewQuality}</p>
                   <p className="text-xs text-muted-foreground">Update {(profilerStats?.avgUpdateMs ?? 0).toFixed(2)}ms / Render {(profilerStats?.avgRenderMs ?? 0).toFixed(2)}ms</p>
                   <p className="text-xs text-muted-foreground">Max {(profilerStats?.maxUpdateMs ?? 0).toFixed(2)}ms / frames {profilerStats?.frames ?? 0}</p>
+                  <p className={profilerBudget?.ok === false ? "text-xs text-amber-600" : "text-xs text-muted-foreground"}>Budget {profilerBudget ? (profilerBudget.ok ? "ok" : profilerBudget.issues.join(", ")) : "waiting"}</p>
                   <p className="text-xs text-muted-foreground">Platformer {platformerDebug.state.animationState} / {platformerDebug.state.debug.activeColliders.length} colliders</p>
                   <p className="text-xs text-muted-foreground">Camera {platformerDebug.state.cameraX.toFixed(0)}, {platformerDebug.state.cameraY.toFixed(0)} / abs {platformerDebug.params.absSpeed}</p>
                 </CardContent>

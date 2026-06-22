@@ -14,6 +14,7 @@
     "lint": "pnpm -r --if-present lint",
     "rc:smoke": "pnpm --filter @bones/compiler build && pnpm --filter @bones/ldtk-adapter build && pnpm --filter @bones/platformer-preview build && pnpm --filter @bones/runtime-pixi build && node scripts/rc-smoke.mjs && pnpm exec tsc -p examples/pixi-platformer/tsconfig.json --noEmit",
     "export:sample": "pnpm --filter @bones/compiler build && pnpm --filter @bones/runtime-pixi build && node scripts/export-sample.mjs",
+    "perf:runtime": "pnpm --filter @bones/compiler build && pnpm --filter @bones/runtime-pixi build && node scripts/runtime-bench.mjs",
     "dev": "pnpm --filter @bones/runtime-pixi build && pnpm dev:editor",
     "dev:editor": "pnpm --filter @bones/editor dev"
   },

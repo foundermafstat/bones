@@ -13,6 +13,17 @@ export interface RuntimeProfilerStats {
   readonly allocations: number;
 }
 
+export interface RuntimePerformanceBudget {
+  readonly maxAvgUpdateMs: number;
+  readonly maxUpdateMs: number;
+  readonly maxAllocations?: number;
+}
+
+export interface RuntimePerformanceBudgetResult {
+  readonly ok: boolean;
+  readonly issues: readonly string[];
+}
+
 type MutableRuntimeProfilerStats = {
   -readonly [K in keyof RuntimeProfilerStats]: RuntimeProfilerStats[K];
 };
@@ -34,6 +45,38 @@ export const qualityPresets: Readonly<Record<QualityPresetName, QualityPreset>> 
   medium: { name: "medium", antialias: false, contextAlpha: true, resolution: 1.5, clothFps: 45, maxDynamicMeshes: 4, enableSecondaryMotion: true },
   high: { name: "high", antialias: true, contextAlpha: true, resolution: 2, clothFps: 60, maxDynamicMeshes: 12, enableSecondaryMotion: true }
 };
+
+export const runtimePerformanceBudgets: Readonly<Record<QualityPresetName, Readonly<Record<"hero1" | "hero10" | "hero50", RuntimePerformanceBudget>>>> = {
+  low: {
+    hero1: { maxAvgUpdateMs: 1, maxUpdateMs: 4, maxAllocations: 0 },
+    hero10: { maxAvgUpdateMs: 6, maxUpdateMs: 60, maxAllocations: 0 },
+    hero50: { maxAvgUpdateMs: 28, maxUpdateMs: 80, maxAllocations: 0 }
+  },
+  medium: {
+    hero1: { maxAvgUpdateMs: 1.5, maxUpdateMs: 5, maxAllocations: 0 },
+    hero10: { maxAvgUpdateMs: 8, maxUpdateMs: 24, maxAllocations: 0 },
+    hero50: { maxAvgUpdateMs: 36, maxUpdateMs: 100, maxAllocations: 0 }
+  },
+  high: {
+    hero1: { maxAvgUpdateMs: 2, maxUpdateMs: 7, maxAllocations: 0 },
+    hero10: { maxAvgUpdateMs: 10, maxUpdateMs: 30, maxAllocations: 0 },
+    hero50: { maxAvgUpdateMs: 48, maxUpdateMs: 130, maxAllocations: 0 }
+  }
+};
+
+export function evaluateRuntimeBudget(stats: RuntimeProfilerStats, budget: RuntimePerformanceBudget): RuntimePerformanceBudgetResult {
+  const issues: string[] = [];
+  if (stats.avgUpdateMs > budget.maxAvgUpdateMs) {
+    issues.push(`avg update ${stats.avgUpdateMs.toFixed(3)}ms exceeds ${budget.maxAvgUpdateMs}ms`);
+  }
+  if (stats.maxUpdateMs > budget.maxUpdateMs) {
+    issues.push(`max update ${stats.maxUpdateMs.toFixed(3)}ms exceeds ${budget.maxUpdateMs}ms`);
+  }
+  if (budget.maxAllocations !== undefined && stats.allocations > budget.maxAllocations) {
+    issues.push(`allocations ${stats.allocations} exceeds ${budget.maxAllocations}`);
+  }
+  return { ok: issues.length === 0, issues };
+}
 
 export class RuntimeProfiler {
   private frames = 0;
