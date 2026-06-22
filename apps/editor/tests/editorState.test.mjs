@@ -5,8 +5,10 @@ import {
   createAddBoneCommand,
   createAddSvgPartCommand,
   createApplyPoseCommand,
+  createAddKeyframeCommand,
   createAddTimelineEventCommand,
   createAddTimelineMarkerCommand,
+  createAddAnimationTrackCommand,
   createAnimationClipCommand,
   createApplyCurvePresetCommand,
   createCopyPoseCommand,
@@ -229,6 +231,18 @@ test("timeline creates clips and copies selected keys with snapping", () => {
   const pasted = executeCommand(copied, createPasteKeysCommand("idle", 0.1));
   assert.equal(pasted.project.timeline.selectedKeyIds.length, 1);
   assert.ok(pasted.project.animations.idle.tracks["body.scaleY"].some((key) => key.id.startsWith("idle-body-1_paste")));
+});
+
+test("timeline can create clip, track, and authored keyframes", () => {
+  const created = executeCommand(freshContainer(), createAnimationClipCommand("testWalk", "testWalk", 1, true));
+  const withTrack = executeCommand(created, createAddAnimationTrackCommand("testWalk", "body.scaleY"));
+  const key0 = executeCommand(withTrack, createAddKeyframeCommand("testWalk", "body.scaleY", { id: "testWalk-0", time: 0, value: 1, interpolation: "linear" }));
+  const key1 = executeCommand(key0, createAddKeyframeCommand("testWalk", "body.scaleY", { id: "testWalk-05", time: 0.5, value: 1.1, interpolation: "linear" }));
+  const key2 = executeCommand(key1, createAddKeyframeCommand("testWalk", "body.scaleY", { id: "testWalk-1", time: 1, value: 1, interpolation: "linear" }));
+
+  assert.equal(key2.project.animations.testWalk.duration, 1);
+  assert.equal(key2.project.animations.testWalk.loop, true);
+  assert.deepEqual(key2.project.animations.testWalk.tracks["body.scaleY"].map((key) => key.value), [1, 1.1, 1]);
 });
 
 test("timeline retime, reverse, normalize loop, events, and markers are undoable", () => {

@@ -43,6 +43,7 @@ import {
   createSetPartDrawOrderCommand,
   createSetPartPathCommand,
   createSetPartPivotCommand,
+  createAddAnimationTrackCommand,
   createApplyPoseCommand,
   createCopyPoseCommand,
   createDuplicatePoseCommand,
@@ -76,6 +77,7 @@ import {
   createTransitionCommand,
   createUpdateTransitionCommand,
   createUpdateProceduralCommand,
+  createUpdateKeyframeCommand,
   createEmptyEditorProject,
   executeCommand,
   initialEditorProject,
@@ -145,6 +147,14 @@ export default function EditorPage() {
   const [newPointX, setNewPointX] = useState(12);
   const [newPointY, setNewPointY] = useState(4);
   const [mirrorSummary, setMirrorSummary] = useState("");
+  const [newClipId, setNewClipId] = useState("testWalk");
+  const [newClipDuration, setNewClipDuration] = useState(1);
+  const [newClipLoop, setNewClipLoop] = useState(true);
+  const [timelineTargetId, setTimelineTargetId] = useState("body");
+  const [timelineProperty, setTimelineProperty] = useState("scaleY");
+  const [timelineCurrentTime, setTimelineCurrentTime] = useState(0);
+  const [timelineKeyValue, setTimelineKeyValue] = useState(1);
+  const [timelineAuthorClipId, setTimelineAuthorClipId] = useState("idle");
   const [ioStatus, setIoStatus] = useState("ready");
   const [projectOrigin, setProjectOrigin] = useState<ProjectOrigin>("sample");
   const [lastExportBundle, setLastExportBundle] = useState<ProjectExportBundle | null>(null);
@@ -174,9 +184,13 @@ export default function EditorPage() {
   const selectedPose = editorState.project.poses[selectedPoseId] ?? (poseIds[0] ? editorState.project.poses[poseIds[0]] : undefined);
   const selectedPoseTagText = selectedPose?.tags.join(", ") ?? "";
   const clipIds = Object.keys(editorState.project.animations);
-  const activeClip = editorState.project.animations[editorState.project.timeline.selectedClipId] ?? (clipIds[0] ? editorState.project.animations[clipIds[0]] : undefined);
+  const authorClip = editorState.project.animations[timelineAuthorClipId] ?? editorState.project.animations[editorState.project.timeline.selectedClipId];
+  const activeClip = authorClip ?? (clipIds[0] ? editorState.project.animations[clipIds[0]] : undefined);
   const activeTrack = activeClip?.tracks["body.scaleY"] ?? [];
   const selectedKeyId = editorState.project.timeline.selectedKeyIds[0] ?? activeTrack[0]?.id ?? "";
+  const timelineTrackId = `${timelineTargetId}.${timelineProperty}`;
+  const selectedTimelineTrackId = activeClip ? Object.entries(activeClip.tracks).find(([, keys]) => keys.some((key) => key.id === selectedKeyId))?.[0] ?? timelineTrackId : timelineTrackId;
+  const selectedTimelineKey = activeClip ? activeClip.tracks[selectedTimelineTrackId]?.find((key) => key.id === selectedKeyId) : undefined;
   const visibleTimelineTracks = sampleProject.tracks.slice(editorState.project.timeline.virtualWindow.startRow, editorState.project.timeline.virtualWindow.startRow + editorState.project.timeline.virtualWindow.rowCount);
   const exportFileEntries = useMemo(() => Object.entries(lastExportBundle?.files ?? {}), [lastExportBundle]);
   const previewLevel = useMemo(
@@ -1122,7 +1136,28 @@ export default function EditorPage() {
         <CardHeader className="flex flex-row items-center justify-between px-2.5 py-0">
           <div className="flex min-w-0 items-center gap-2">
             <CardTitle className="text-sm">Timeline</CardTitle>
-            <Select value={activeClip?.id ?? ""} onValueChange={(clipId) => runCommand(createSetTimelineSelectionCommand(clipId, []))} disabled={!activeClip}>
+            <Input className="h-7 w-24 text-xs" value={newClipId} onChange={(event) => setNewClipId(event.target.value)} aria-label="New clip id" />
+            <Input className="h-7 w-16 text-xs" type="number" step="0.1" value={newClipDuration} onChange={(event) => setNewClipDuration(Number(event.target.value))} aria-label="New clip duration" />
+            <Button size="sm" type="button" variant={newClipLoop ? "default" : "outline"} onClick={() => setNewClipLoop((value) => !value)}>
+              Loop
+            </Button>
+            <Button
+              size="sm"
+              type="button"
+              variant="outline"
+              disabled={!newClipId.trim()}
+              onClick={() => {
+                const clipId = newClipId.trim();
+                setTimelineAuthorClipId(clipId);
+                runCommand(createAnimationClipCommand(clipId, clipId, newClipDuration, newClipLoop));
+              }}
+            >
+              Create Clip
+            </Button>
+            <Select value={activeClip?.id ?? ""} onValueChange={(clipId) => {
+              setTimelineAuthorClipId(clipId);
+              runCommand(createSetTimelineSelectionCommand(clipId, []));
+            }} disabled={!activeClip}>
               <SelectTrigger className="h-7 w-28" aria-label="Timeline clip">
                 <SelectValue />
               </SelectTrigger>
@@ -1137,6 +1172,38 @@ export default function EditorPage() {
               </SelectContent>
             </Select>
             <div className="flex items-center gap-1">
+              <Select value={timelineTargetId} onValueChange={setTimelineTargetId}>
+                <SelectTrigger className="h-7 w-28" aria-label="Timeline target bone">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {editorState.project.hierarchy.map((boneId) => (
+                      <SelectItem key={boneId} value={boneId}>{boneId}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <Select value={timelineProperty} onValueChange={setTimelineProperty}>
+                <SelectTrigger className="h-7 w-24" aria-label="Timeline property">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {["x", "y", "rotation", "scaleX", "scaleY"].map((property) => (
+                      <SelectItem key={property} value={property}>{property}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <Button size="sm" type="button" variant="outline" disabled={!activeClip} onClick={() => activeClip && runCommand(createAddAnimationTrackCommand(activeClip.id, timelineTrackId))}>
+                Add Track
+              </Button>
+              <Input className="h-7 w-16 text-xs" type="number" step="0.1" value={timelineCurrentTime} onChange={(event) => setTimelineCurrentTime(Number(event.target.value))} aria-label="Timeline current time" />
+              <Input className="h-7 w-16 text-xs" type="number" step="0.1" value={timelineKeyValue} onChange={(event) => setTimelineKeyValue(Number(event.target.value))} aria-label="Timeline key value" />
+              <Button size="sm" type="button" variant="outline" disabled={!activeClip} onClick={() => activeClip && runCommand(createAddKeyframeCommand(activeClip.id, timelineTrackId, { id: `${timelineTrackId}-${timelineCurrentTime}`, time: timelineCurrentTime, value: timelineKeyValue, interpolation: "linear" }))}>
+                Add Key At Time
+              </Button>
               <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createAnimationClipCommand(`clip_${clipIds.length + 1}`, `Clip ${clipIds.length + 1}`, 1, true))}>
                 Clip +
               </Button>
@@ -1161,11 +1228,19 @@ export default function EditorPage() {
               <Button size="sm" type="button" variant="outline" disabled={!activeClip || !editorState.project.timeline.keyClipboard.length} onClick={() => activeClip && runCommand(createPasteKeysCommand(activeClip.id, activeClip.duration * 0.5))}>
                 Paste Keys
               </Button>
+              <Badge variant={editorState.project.timeline.autoKey ? "default" : "outline"}>Auto-key {editorState.project.timeline.autoKey ? "on" : "off"}</Badge>
             </div>
           </div>
           <Badge variant="outline">00:00 / 01:12</Badge>
         </CardHeader>
         <CardContent className="mt-1 grid gap-1 px-2.5">
+          {selectedTimelineKey ? (
+            <div className="mb-1 flex items-center gap-1">
+              <span className="text-xs text-muted-foreground">{selectedTimelineTrackId}</span>
+              <Input className="h-7 w-20 text-xs" type="number" step="0.01" value={selectedTimelineKey.time} onChange={(event) => activeClip && runCommand(createUpdateKeyframeCommand(activeClip.id, selectedTimelineTrackId, selectedTimelineKey.id, { time: Number(event.target.value) }))} aria-label="Selected key time" />
+              <Input className="h-7 w-20 text-xs" type="number" step="0.01" value={selectedTimelineKey.value} onChange={(event) => activeClip && runCommand(createUpdateKeyframeCommand(activeClip.id, selectedTimelineTrackId, selectedTimelineKey.id, { value: Number(event.target.value) }))} aria-label="Selected key value" />
+            </div>
+          ) : null}
           {activeClip ? visibleTimelineTracks.map((track, index) => (
             <div className="relative grid min-h-[17px] grid-cols-[140px_1fr] items-center rounded-md bg-muted" key={track}>
               <span className="truncate pl-2 text-xs text-muted-foreground">{track}</span>

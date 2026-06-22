@@ -939,6 +939,30 @@ export function createAddKeyframeCommand(clipId: string, trackId: string, keyfra
   };
 }
 
+export function createAddAnimationTrackCommand(clipId: string, trackId: string): EditorCommand {
+  let previous: readonly Keyframe[] | undefined;
+  return {
+    id: `add-track:${clipId}:${trackId}`,
+    label: "Add animation track",
+    do(state) {
+      const clip = state.animations[clipId];
+      previous = clip?.tracks[trackId];
+      return clip && !clip.tracks[trackId] ? { ...markDirty(state, clipId, "animations"), animations: { ...state.animations, [clipId]: { ...clip, tracks: { ...clip.tracks, [trackId]: [] } } } } : state;
+    },
+    undo(state) {
+      const clip = state.animations[clipId];
+      if (!clip) {
+        return state;
+      }
+      if (previous) {
+        return { ...markDirty(state, clipId, "animations"), animations: { ...state.animations, [clipId]: { ...clip, tracks: { ...clip.tracks, [trackId]: previous } } } };
+      }
+      const { [trackId]: _removed, ...tracks } = clip.tracks;
+      return { ...markDirty(state, clipId, "animations"), animations: { ...state.animations, [clipId]: { ...clip, tracks } } };
+    }
+  };
+}
+
 export function createDeleteKeyframeCommand(clipId: string, trackId: string, keyframeId: string): EditorCommand {
   let removed: Keyframe | undefined;
   return {
@@ -972,6 +996,27 @@ export function createMoveKeyframeCommand(clipId: string, trackId: string, keyfr
     label: "Move keyframe",
     do: (state) => move(state, nextTime),
     undo: (state) => move(state, previousTime)
+  };
+}
+
+export function createUpdateKeyframeCommand(clipId: string, trackId: string, keyframeId: string, next: Partial<Pick<Keyframe, "time" | "value">>): EditorCommand {
+  let previous: Keyframe | undefined;
+  return {
+    id: `update-key:${clipId}:${trackId}:${keyframeId}`,
+    label: "Update keyframe",
+    do: (state) =>
+      updateClipTrack(state, clipId, trackId, (keys) =>
+        keys
+          .map((key) => {
+            if (key.id !== keyframeId) {
+              return key;
+            }
+            previous = previous ?? key;
+            return snapKeyframe(state, { ...key, ...next });
+          })
+          .sort((a, b) => a.time - b.time)
+      ),
+    undo: (state) => (previous ? updateClipTrack(state, clipId, trackId, (keys) => keys.map((key) => (key.id === keyframeId ? previous! : key)).sort((a, b) => a.time - b.time)) : state)
   };
 }
 
