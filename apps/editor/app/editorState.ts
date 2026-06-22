@@ -1574,6 +1574,34 @@ export function createApplyCurvePresetCommand(clipId: string, trackId: string, k
   return createChangeCurveCommand(clipId, trackId, keyframeId, curve.interpolation, curve.curve, preset);
 }
 
+export function createApplyCurvePresetToSelectionCommand(preset: CurvePreset): EditorCommand {
+  let previous: AnimationClip | undefined;
+  return {
+    id: `curve-selection:${preset}`,
+    label: "Apply curve preset to selection",
+    do: (state) => {
+      const clip = state.animations[state.timeline.selectedClipId];
+      if (!clip || !state.timeline.selectedKeyIds.length) {
+        return state;
+      }
+      previous = clip;
+      const selected = new Set(state.timeline.selectedKeyIds);
+      const next = curvePresetToKeyframe(preset);
+      return {
+        ...markDirty(state, clip.id, "animations"),
+        animations: {
+          ...state.animations,
+          [clip.id]: {
+            ...clip,
+            tracks: mapClipKeys(clip, (key) => (selected.has(key.id) ? { ...key, interpolation: next.interpolation, curve: next.curve, curvePreset: preset } : key)).tracks
+          }
+        }
+      };
+    },
+    undo: (state) => (previous ? { ...markDirty(state, previous.id, "animations"), animations: { ...state.animations, [previous.id]: previous } } : state)
+  };
+}
+
 export function createEditBezierHandlesCommand(clipId: string, trackId: string, keyframeId: string, curve: readonly [number, number, number, number]): EditorCommand {
   return createChangeCurveCommand(clipId, trackId, keyframeId, "bezier", curve, "custom");
 }

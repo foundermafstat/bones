@@ -16,6 +16,7 @@ import {
   createAddAnimationTrackCommand,
   createAnimationClipCommand,
   createApplyCurvePresetCommand,
+  createApplyCurvePresetToSelectionCommand,
   createChangeCurveCommand,
   createCopyPoseCommand,
   createCopySelectedKeysCommand,
@@ -524,6 +525,19 @@ test("curve presets, tangents, and preview state are undoable", () => {
 
   const undone = undo(preview);
   assert.deepEqual(undone.project.timeline.curvePreview, tangent.project.timeline.curvePreview);
+});
+
+test("curve preset can be applied to selected keys as a batch", () => {
+  const selected = executeCommand(freshContainer(), createSetTimelineSelectionCommand("jump", ["jump-body-y-0", "jump-body-y-1"]));
+  const batch = executeCommand(selected, createApplyCurvePresetToSelectionCommand("overshoot"));
+
+  const keys = batch.project.animations.jump.tracks["body.y"];
+  assert.equal(keys.find((key) => key.id === "jump-body-y-0")?.curvePreset, "overshoot");
+  assert.equal(keys.find((key) => key.id === "jump-body-y-1")?.curvePreset, "overshoot");
+  assert.deepEqual(keys.find((key) => key.id === "jump-body-y-0")?.curve, [0.2, 1.35, 0.35, 1]);
+
+  const undone = undo(batch);
+  assert.equal(undone.project.animations.jump.tracks["body.y"].find((key) => key.id === "jump-body-y-0")?.curvePreset, undefined);
 });
 
 test("state machine graph commands edit states, transitions, parameters, blend tree, and preview", () => {

@@ -67,6 +67,7 @@ import {
   createMoveKeyframeCommand,
   createChangeCurveCommand,
   createApplyCurvePresetCommand,
+  createApplyCurvePresetToSelectionCommand,
   createEditBezierHandlesCommand,
   createSetCurvePreviewCommand,
   createSetKeyframeTangentsCommand,
@@ -329,6 +330,13 @@ export default function EditorPage() {
   const selectedCurve = selectedTimelineKey?.curve ?? [0, 0, 1, 1] as const;
   const curvePath = `M 12 88 C ${12 + selectedCurve[0] * 96} ${88 - selectedCurve[1] * 72}, ${12 + selectedCurve[2] * 96} ${88 - selectedCurve[3] * 72}, 108 16`;
   const selectedKeyCurvePreset = selectedTimelineKey?.curvePreset ?? (selectedTimelineKey?.interpolation === "bezier" ? "bezier" : selectedTimelineKey?.interpolation ?? "linear");
+  const curveSamples = useMemo(
+    () => Array.from({ length: 7 }, (_, index) => {
+      const t = index / 6;
+      return { frame: Math.round(t * 60), value: sampleCubicBezierY(t, selectedCurve) };
+    }),
+    [selectedCurve]
+  );
   const timelineTracks = Array.from(new Set([...(activeClip ? Object.keys(activeClip.tracks) : []), ...sampleProject.tracks]));
   const visibleTimelineTracks = timelineTracks.slice(editorState.project.timeline.virtualWindow.startRow, editorState.project.timeline.virtualWindow.startRow + editorState.project.timeline.virtualWindow.rowCount);
   const stateIds = editorState.project.stateMachine.states.map((state) => state.id);
@@ -1674,6 +1682,9 @@ export default function EditorPage() {
                       </SelectContent>
                     </Select>
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    60fps ticks: {curveSamples.map((sample) => `${sample.frame}f:${sample.value.toFixed(2)}`).join(" / ")}
+                  </p>
                   <div className="grid grid-cols-4 gap-1">
                     {selectedCurve.map((value, index) => (
                       <Input
@@ -1715,6 +1726,9 @@ export default function EditorPage() {
                     />
                   </div>
                   <div className="flex items-center gap-1">
+                    <Button size="sm" type="button" variant="outline" disabled={!editorState.project.timeline.selectedKeyIds.length} onClick={() => runCommand(createApplyCurvePresetToSelectionCommand(selectedKeyCurvePreset as CurvePreset))}>
+                      Batch Preset
+                    </Button>
                     <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetCurvePreviewCommand("jump", "land", Math.min(1, editorState.project.timeline.curvePreview.weight + 0.1)))}>
                       A/B +
                     </Button>
@@ -2200,6 +2214,11 @@ function getShapeViewBox(points: readonly (readonly [number, number])[]): ShapeV
     width: width + padding * 2,
     height: height + padding * 2
   };
+}
+
+function sampleCubicBezierY(t: number, curve: readonly [number, number, number, number]): number {
+  const u = 1 - t;
+  return u * u * u * 0 + 3 * u * u * t * curve[1] + 3 * u * t * t * curve[3] + t * t * t;
 }
 
 function getRigWorldPoints(project: EditorProjectState): Readonly<Record<string, readonly [number, number]>> {
