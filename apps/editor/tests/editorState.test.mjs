@@ -71,6 +71,7 @@ import {
   rollbackProjectTransaction,
   undo
 } from "../app/editorState.ts";
+import { serializeEditorProject } from "../app/projectIo.ts";
 import { vectorizeSvgPart } from "../app/editorVectorImport.ts";
 
 function freshContainer(project = structuredClone(initialEditorProject)) {
@@ -437,6 +438,18 @@ test("timeline can create clip, track, and authored keyframes", () => {
   assert.equal(key2.project.animations.testWalk.duration, 1);
   assert.equal(key2.project.animations.testWalk.loop, true);
   assert.deepEqual(key2.project.animations.testWalk.tracks["body.scaleY"].map((key) => key.value), [1, 1.1, 1]);
+});
+
+test("timeline empty draft tracks do not break source serialization", () => {
+  const created = executeCommand(freshContainer(), createAnimationClipCommand("draftWalk", "draftWalk", 1, true));
+  const withEmptyTrack = executeCommand(created, createAddAnimationTrackCommand("draftWalk", "body.scaleY"));
+  const serialized = serializeEditorProject(withEmptyTrack.project);
+  const source = JSON.parse(serialized);
+  const draftWalk = source.animations.find((clip) => clip.id === "draftWalk");
+
+  assert.ok(draftWalk);
+  assert.deepEqual(draftWalk.tracks, []);
+  assert.equal(withEmptyTrack.project.animations.draftWalk.tracks["body.scaleY"].length, 0);
 });
 
 test("timeline can set a keyed value at the current time without duplicates", () => {

@@ -361,6 +361,7 @@ export default function EditorPage() {
     [selectedCurve]
   );
   const timelineTracks = Array.from(new Set([...(activeClip ? Object.keys(activeClip.tracks) : []), ...sampleProject.tracks]));
+  const emptyTimelineTracks = activeClip ? Object.entries(activeClip.tracks).filter(([, keys]) => keys.length === 0).map(([trackId]) => trackId) : [];
   const visibleTimelineTracks = timelineTracks.slice(editorState.project.timeline.virtualWindow.startRow, editorState.project.timeline.virtualWindow.startRow + editorState.project.timeline.virtualWindow.rowCount);
   const stateIds = editorState.project.stateMachine.states.map((state) => state.id);
   const parameterIds = Object.keys(editorState.project.stateMachine.parameters);
@@ -2335,6 +2336,11 @@ export default function EditorPage() {
           <div className="min-w-0 overflow-x-auto pb-1">
             <div className="flex w-max min-w-full items-center gap-2">
             <CardTitle className="text-sm">Timeline</CardTitle>
+            {emptyTimelineTracks.length > 0 ? (
+              <Badge variant="outline" className="shrink-0 border-amber-300 bg-amber-50 text-amber-700" title={`${emptyTimelineTracks.join(", ")} will stay editor-only until a keyframe is added`}>
+                {emptyTimelineTracks.length} draft track
+              </Badge>
+            ) : null}
             <Input className="h-7 w-24 text-xs" value={newClipId} onChange={(event) => setNewClipId(event.target.value)} aria-label="New clip id" />
             <Input className="h-7 w-16 text-xs" type="number" step="0.1" value={newClipDuration} onChange={(event) => setNewClipDuration(Number(event.target.value))} aria-label="New clip duration" />
             <Button size="sm" type="button" variant={newClipLoop ? "default" : "outline"} onClick={() => setNewClipLoop((value) => !value)}>

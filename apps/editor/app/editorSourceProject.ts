@@ -271,7 +271,9 @@ function toSourceAnimationClip(clip: AnimationClip): SourceAnimationClip {
     duration: clip.duration,
     frameRate: clip.frameRate,
     loop: clip.loop,
-    tracks: Object.entries(clip.tracks).map(([trackId, keyframes]) => toSourceTrack(trackId, keyframes)),
+    tracks: Object.entries(clip.tracks)
+      .filter(([, keyframes]) => keyframes.length > 0)
+      .map(([trackId, keyframes]) => toSourceTrack(trackId, keyframes)),
     events: clip.events.map(({ id: _id, ...event }) => event),
     markers: clip.markers,
     tags: clip.tags
