@@ -83,7 +83,7 @@ import {
   type EditorProjectState,
   type EditorStateContainer
 } from "./editorState";
-import { createProjectExportBundle, EDITOR_DRAFT_KEY, loadDraft, parseImportedProject, saveDraft, serializeEditorProject } from "./projectIo";
+import { createProjectExportBundle, EDITOR_DRAFT_KEY, loadDraft, parseImportedProject, saveDraft, serializeEditorProject, type ProjectExportBundle } from "./projectIo";
 import { PixiPreview } from "./PixiPreview";
 import { vectorizeSvgPart } from "./editorVectorImport";
 import { createInitialControllerState, toAnimationParameters, updatePlatformerController } from "@bones/platformer-preview";
@@ -133,6 +133,7 @@ export default function EditorPage() {
   const [selectedPoseId, setSelectedPoseId] = useState("idle_neutral");
   const [ioStatus, setIoStatus] = useState("ready");
   const [projectOrigin, setProjectOrigin] = useState<ProjectOrigin>("sample");
+  const [lastExportBundle, setLastExportBundle] = useState<ProjectExportBundle | null>(null);
   const [editorState, setEditorState] = useState<EditorStateContainer>({
     project: initialEditorProject,
     history: { past: [], future: [] }
@@ -156,6 +157,7 @@ export default function EditorPage() {
   const activeTrack = activeClip?.tracks["body.scaleY"] ?? [];
   const selectedKeyId = editorState.project.timeline.selectedKeyIds[0] ?? activeTrack[0]?.id ?? "";
   const visibleTimelineTracks = sampleProject.tracks.slice(editorState.project.timeline.virtualWindow.startRow, editorState.project.timeline.virtualWindow.startRow + editorState.project.timeline.virtualWindow.rowCount);
+  const exportFileEntries = useMemo(() => Object.entries(lastExportBundle?.files ?? {}), [lastExportBundle]);
   const previewLevel = useMemo(
     () => ({
       colliders: [
@@ -183,6 +185,7 @@ export default function EditorPage() {
   };
   const exportBundle = async () => {
     const bundle = createProjectExportBundle(editorState.project);
+    setLastExportBundle(bundle);
     if (!bundle.validation.ok) {
       setIoStatus(bundle.validation.errors.join("; "));
       return;
@@ -190,6 +193,38 @@ export default function EditorPage() {
     const json = JSON.stringify(bundle.files, null, 2);
     await navigator.clipboard?.writeText(json);
     setIoStatus(`copied ${json.length} bytes / ${Object.keys(bundle.files).length} files`);
+  };
+  const copyExportFiles = async () => {
+    if (!lastExportBundle?.validation.ok) {
+      setIoStatus("run Export Bundle first");
+      return;
+    }
+    const json = JSON.stringify(lastExportBundle.files, null, 2);
+    await navigator.clipboard?.writeText(json);
+    setIoStatus(`copied ${json.length} bytes / ${Object.keys(lastExportBundle.files).length} files`);
+  };
+  const copyExportFile = async (fileName: string) => {
+    const contents = lastExportBundle?.files[fileName];
+    if (!contents) {
+      setIoStatus(`missing ${fileName}`);
+      return;
+    }
+    await navigator.clipboard?.writeText(contents);
+    setIoStatus(`copied ${fileName} (${contents.length} bytes)`);
+  };
+  const downloadExportFile = (fileName: string) => {
+    const contents = lastExportBundle?.files[fileName];
+    if (!contents) {
+      setIoStatus(`missing ${fileName}`);
+      return;
+    }
+    const url = URL.createObjectURL(new Blob([contents], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+    setIoStatus(`downloaded ${fileName}`);
   };
   const copySourceJson = async () => {
     try {
@@ -367,7 +402,7 @@ export default function EditorPage() {
                 </SelectGroup>
               </SelectContent>
             </Select>
-            <Button size="sm" variant="outline" type="button" onClick={exportBundle}>
+            <Button size="sm" variant="outline" type="button" onClick={() => void exportBundle()}>
               Export
             </Button>
           </div>
@@ -599,6 +634,47 @@ export default function EditorPage() {
                     <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetBoneMetadataCommand(selectedBone, { facing: selectedBoneMetadata.facing === -1 ? 1 : -1 }))}>
                       Facing
                     </Button>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card size="sm">
+                <CardHeader>
+                  <CardTitle>Export Bundle</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-2">
+                  <div className="grid grid-cols-2 gap-1">
+                    <Button size="sm" type="button" variant="outline" onClick={() => void exportBundle()}>
+                      Build
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => void copyExportFiles()} disabled={!lastExportBundle?.validation.ok}>
+                      Copy All
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => void copyExportFile("hero.source.rig.json")} disabled={!lastExportBundle?.files["hero.source.rig.json"]}>
+                      Copy Source
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => void copyExportFile("hero.compiled.json")} disabled={!lastExportBundle?.files["hero.compiled.json"]}>
+                      Copy Compiled
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {lastExportBundle ? (lastExportBundle.validation.ok ? `${exportFileEntries.length} files ready` : "validation failed") : "not built"}
+                  </p>
+                  {lastExportBundle?.validation.errors.map((error) => (
+                    <p className="text-xs text-destructive" key={error}>{error}</p>
+                  ))}
+                  {lastExportBundle?.validation.warnings.map((warning) => (
+                    <p className="text-xs text-amber-600" key={warning}>{warning}</p>
+                  ))}
+                  <div className="grid gap-1">
+                    {exportFileEntries.map(([fileName, contents]) => (
+                      <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1 rounded-md bg-muted px-2 py-1" key={fileName}>
+                        <span className="truncate text-xs" title={fileName}>File: {fileName}</span>
+                        <span className="text-xs text-muted-foreground">{contents.length}b</span>
+                        <Button size="sm" type="button" variant="outline" onClick={() => downloadExportFile(fileName)}>
+                          Download
+                        </Button>
+                      </div>
+                    ))}
                   </div>
                 </CardContent>
               </Card>

@@ -14,7 +14,7 @@ export interface SerializedEditorProject {
 
 export interface ProjectExportBundle {
   readonly files: Readonly<Record<string, string>>;
-  readonly validation: { readonly ok: boolean; readonly errors: readonly string[] };
+  readonly validation: { readonly ok: boolean; readonly errors: readonly string[]; readonly warnings: readonly string[] };
 }
 
 export interface ProjectImportResult {
@@ -49,6 +49,7 @@ export function createProjectExportBundle(project: EditorProjectState): ProjectE
   try {
     const source = toSourceProject(project);
     const compiled = compileRig(source);
+    const svgParts = source.rigs.flatMap((rig) => (rig.parts ?? []).filter((part) => part.type === "svg").map((part) => part.id));
     return {
       files: {
         "hero.source.rig.json": JSON.stringify(source, null, 2),
@@ -57,12 +58,16 @@ export function createProjectExportBundle(project: EditorProjectState): ProjectE
         "hero.state-machine.json": JSON.stringify({ schemaVersion: source.schemaVersion, stateMachines: source.stateMachines, proceduralPresets: source.proceduralPresets }, null, 2),
         "hero.compiled.json": JSON.stringify(compiled, null, 2)
       },
-      validation: { ok: true, errors: [] }
+      validation: {
+        ok: true,
+        errors: [],
+        warnings: svgParts.length ? [`Production export still contains SVG parts: ${svgParts.join(", ")}`] : []
+      }
     };
   } catch (error) {
     return {
       files: {},
-      validation: { ok: false, errors: [error instanceof Error ? error.message : "Unknown export error"] }
+      validation: { ok: false, errors: [error instanceof Error ? error.message : "Unknown export error"], warnings: [] }
     };
   }
 }
