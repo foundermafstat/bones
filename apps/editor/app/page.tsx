@@ -818,7 +818,7 @@ export default function EditorPage() {
             </div>
           </CardHeader>
           <CardContent className="relative min-h-0 flex-1 overflow-hidden bg-[linear-gradient(var(--border)_1px,transparent_1px),linear-gradient(90deg,var(--border)_1px,transparent_1px)] bg-[size:24px_24px] p-0" aria-label="PixiJS canvas viewport">
-            <PixiPreview clipId={previewClipId} playing={previewPlaying} project={editorState.project} quality={previewQuality} showSkeleton={mode !== "Preview"} onProfilerStats={setProfilerStats} />
+            <PixiPreview clipId={previewClipId} playing={previewPlaying} project={editorState.project} quality={previewQuality} showSkeleton={mode !== "Preview" && mode !== "Rig"} onProfilerStats={setProfilerStats} />
             {mode === "Preview" ? (
               <div className="absolute inset-0 z-20 pointer-events-none">
                 <div className="pointer-events-auto absolute left-3 top-3 grid w-[min(560px,calc(100%-24px))] gap-2 rounded-md border bg-card/95 p-3 shadow-sm" aria-label="Gameplay preview overlay">
