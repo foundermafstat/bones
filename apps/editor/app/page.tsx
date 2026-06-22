@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type MouseEvent, type PointerEvent } from "react";
+import { useEffect, useMemo, useState, type MouseEvent, type PointerEvent, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -70,11 +70,14 @@ import {
   createRetimeClipCommand,
   createSetTimelineSelectionCommand,
   createSetBlendTreeCommand,
+  createSetInitialStateCommand,
   createSetStateMachineParameterCommand,
   createSetStateMachinePreviewCommand,
   createSetTransitionConditionsCommand,
+  createRenameStateMachineStateCommand,
   createStateMachineStateCommand,
   createTransitionCommand,
+  createUpdateStateMachineStateCommand,
   createUpdateTransitionCommand,
   createUpdateProceduralCommand,
   createUpdateKeyframeCommand,
@@ -86,6 +89,8 @@ import {
   undo,
   type CurvePreset,
   type EditorProjectState,
+  type EditorTransition,
+  type EditorTransitionCondition,
   type EditorStateContainer,
   type Keyframe
 } from "./editorState";
@@ -123,10 +128,42 @@ type ToolbarAction = {
 
 function ReadOnlyField({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid grid-cols-[72px_minmax(0,1fr)] items-center gap-2">
+    <div className="grid gap-1">
       <Label className="truncate text-xs text-muted-foreground">{label}</Label>
       <Input className="h-7 text-xs" readOnly value={value} />
     </div>
+  );
+}
+
+function parseStateMachineValue(value: string): number | boolean | string {
+  if (value === "true") {
+    return true;
+  }
+  if (value === "false") {
+    return false;
+  }
+  const number = Number(value);
+  return Number.isFinite(number) && value.trim() !== "" ? number : value;
+}
+
+function InspectorSection({ children, title }: { children: ReactNode; title: string }) {
+  const [collapsed, setCollapsed] = useState(false);
+
+  return (
+    <Card size="sm">
+      <CardHeader className="p-0">
+        <button
+          className={`flex w-full items-center justify-between gap-2 text-left ${collapsed ? "min-h-7 px-2.5 py-1" : "px-3 py-2"}`}
+          type="button"
+          aria-expanded={!collapsed}
+          onClick={() => setCollapsed((value) => !value)}
+        >
+          <CardTitle className={collapsed ? "text-xs" : undefined}>{title}</CardTitle>
+          <span className={collapsed ? "text-[11px] leading-none text-muted-foreground" : "text-xs text-muted-foreground"} aria-hidden="true">{collapsed ? "+" : "-"}</span>
+        </button>
+      </CardHeader>
+      {collapsed ? null : children}
+    </Card>
   );
 }
 
@@ -160,6 +197,20 @@ export default function EditorPage() {
   const [timelineCurrentTime, setTimelineCurrentTime] = useState(0);
   const [timelineKeyValue, setTimelineKeyValue] = useState(1);
   const [timelineAuthorClipId, setTimelineAuthorClipId] = useState("idle");
+  const [smStateId, setSmStateId] = useState("airborne");
+  const [smStateClipId, setSmStateClipId] = useState("jump");
+  const [smRenameStateId, setSmRenameStateId] = useState("jumpStart");
+  const [smFromStateId, setSmFromStateId] = useState("idle");
+  const [smToStateId, setSmToStateId] = useState("jump");
+  const [smDuration, setSmDuration] = useState(0.12);
+  const [smEasing, setSmEasing] = useState("anticipation");
+  const [smPriority, setSmPriority] = useState(10);
+  const [smCanInterrupt, setSmCanInterrupt] = useState(true);
+  const [smSyncMode, setSmSyncMode] = useState("none");
+  const [smConditionParameter, setSmConditionParameter] = useState("jumpPressed");
+  const [smConditionOp, setSmConditionOp] = useState("==");
+  const [smConditionValue, setSmConditionValue] = useState("true");
+  const [smSelectedTransitionId, setSmSelectedTransitionId] = useState("any-jump");
   const [ioStatus, setIoStatus] = useState("ready");
   const [projectOrigin, setProjectOrigin] = useState<ProjectOrigin>("sample");
   const [lastExportBundle, setLastExportBundle] = useState<ProjectExportBundle | null>(null);
@@ -200,6 +251,10 @@ export default function EditorPage() {
   const curvePath = `M 12 88 C ${12 + selectedCurve[0] * 96} ${88 - selectedCurve[1] * 72}, ${12 + selectedCurve[2] * 96} ${88 - selectedCurve[3] * 72}, 108 16`;
   const selectedKeyCurvePreset = selectedTimelineKey?.curvePreset ?? (selectedTimelineKey?.interpolation === "bezier" ? "bezier" : selectedTimelineKey?.interpolation ?? "linear");
   const visibleTimelineTracks = sampleProject.tracks.slice(editorState.project.timeline.virtualWindow.startRow, editorState.project.timeline.virtualWindow.startRow + editorState.project.timeline.virtualWindow.rowCount);
+  const stateIds = editorState.project.stateMachine.states.map((state) => state.id);
+  const parameterIds = Object.keys(editorState.project.stateMachine.parameters);
+  const smTransitionId = `${smFromStateId}-${smToStateId}`;
+  const selectedTransition = editorState.project.stateMachine.transitions.find((transition) => transition.id === smSelectedTransitionId) ?? editorState.project.stateMachine.transitions[0];
   const exportFileEntries = useMemo(() => Object.entries(lastExportBundle?.files ?? {}), [lastExportBundle]);
   const previewLevel = useMemo(
     () => ({
@@ -674,11 +729,8 @@ export default function EditorPage() {
             <Badge variant={editorState.project.dirty ? "destructive" : "outline"}>{editorState.project.dirty ? "Dirty" : "Clean"}</Badge>
           </div>
           <ScrollArea className="mt-2 min-h-0">
-            <div className="grid grid-cols-2 gap-2 pr-2 max-[1180px]:grid-cols-1">
-              <Card size="sm">
-                <CardHeader>
-                  <CardTitle>Transform</CardTitle>
-                </CardHeader>
+            <div className="grid grid-cols-1 gap-2 pr-2">
+              <InspectorSection title="Transform">
                 <CardContent className="flex flex-col gap-2">
                   {inspectorRows.map(([label, value]) => (
                     <ReadOnlyField key={label} label={label} value={value} />
@@ -797,11 +849,8 @@ export default function EditorPage() {
                     </Button>
                   </div>
                 </CardContent>
-              </Card>
-              <Card size="sm">
-                <CardHeader>
-                  <CardTitle>Export Bundle</CardTitle>
-                </CardHeader>
+              </InspectorSection>
+              <InspectorSection title="Export Bundle">
                 <CardContent className="grid gap-2">
                   <div className="grid grid-cols-2 gap-1">
                     <Button size="sm" type="button" variant="outline" onClick={() => void exportBundle()}>
@@ -838,11 +887,8 @@ export default function EditorPage() {
                     ))}
                   </div>
                 </CardContent>
-              </Card>
-              <Card size="sm">
-                <CardHeader>
-                  <CardTitle>Shape</CardTitle>
-                </CardHeader>
+              </InspectorSection>
+              <InspectorSection title="Shape">
                 <CardContent className="flex flex-col gap-2">
                   <p className="truncate text-xs text-muted-foreground">{selectedPart?.id ?? "No part selected"}</p>
                   <ReadOnlyField label="Type" value={selectedPart?.type ?? "none"} />
@@ -900,11 +946,8 @@ export default function EditorPage() {
                     </Button>
                   </div>
                 </CardContent>
-              </Card>
-              <Card size="sm">
-                <CardHeader>
-                  <CardTitle>Parts</CardTitle>
-                </CardHeader>
+              </InspectorSection>
+              <InspectorSection title="Parts">
                 <CardContent className="grid gap-2">
                   <div className="grid max-h-36 gap-1 overflow-auto pr-1">
                     {partRows.map((part) => (
@@ -973,20 +1016,14 @@ export default function EditorPage() {
                     </Button>
                   </div>
                 </CardContent>
-              </Card>
-              <Card size="sm">
-                <CardHeader>
-                  <CardTitle>Constraints</CardTitle>
-                </CardHeader>
+              </InspectorSection>
+              <InspectorSection title="Constraints">
                 <CardContent className="grid gap-1">
                   <p className="text-xs text-muted-foreground">{editorState.project.procedural.footIk.footChains.map((chain) => `${chain.thighBone ?? "?"}/${chain.shinBone ?? "?"}/${chain.footBone}`).join(", ")}</p>
                   <p className="text-xs text-muted-foreground">max {editorState.project.procedural.footIk.maxCorrection}px / blend {editorState.project.procedural.footIk.blend}</p>
                 </CardContent>
-              </Card>
-              <Card size="sm">
-                <CardHeader>
-                  <CardTitle>Pose Library</CardTitle>
-                </CardHeader>
+              </InspectorSection>
+              <InspectorSection title="Pose Library">
                 <CardContent className="grid gap-2">
                   <Select value={selectedPose?.id ?? ""} onValueChange={setSelectedPoseId} disabled={!selectedPose}>
                     <SelectTrigger className="h-7 w-full" aria-label="Selected pose">
@@ -1030,11 +1067,8 @@ export default function EditorPage() {
                     </Button>
                   </div>
                 </CardContent>
-              </Card>
-              <Card size="sm">
-                <CardHeader>
-                  <CardTitle>Curve</CardTitle>
-                </CardHeader>
+              </InspectorSection>
+              <InspectorSection title="Curve">
                 <CardContent className="grid gap-2">
                   <p className="line-clamp-2 text-xs text-muted-foreground">{activeTrack.map((key) => `${key.id}: ${key.interpolation}`).join(", ")}</p>
                   <svg viewBox="0 0 120 100" className="h-28 w-full rounded-md border bg-muted" role="img" aria-label="Curve graph">
@@ -1130,48 +1164,178 @@ export default function EditorPage() {
                     </span>
                   </div>
                 </CardContent>
-              </Card>
-              <Card size="sm">
-                <CardHeader>
-                  <CardTitle>State Machine</CardTitle>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-1">
-                  <p className="line-clamp-2 text-xs text-muted-foreground">{editorState.project.stateMachine.transitions.map((transition) => `${transition.fromStateId}->${transition.toStateId}`).join(", ")}</p>
-                  <p className="line-clamp-2 text-xs text-muted-foreground">{Object.keys(editorState.project.stateMachine.parameters).join(", ")}</p>
+              </InspectorSection>
+              <InspectorSection title="State Machine">
+                <CardContent className="flex flex-col gap-2">
                   <div className="grid grid-cols-2 gap-1">
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createStateMachineStateCommand({ id: "run", clipId: "walk", tags: ["locomotion"] }))}>
-                      State +
+                    <Input className="h-7 text-xs" value={smStateId} onChange={(event) => setSmStateId(event.target.value)} aria-label="State id" />
+                    <Select value={smStateClipId} onValueChange={setSmStateClipId}>
+                      <SelectTrigger className="h-7" aria-label="State clip">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {clipIds.map((clipId) => (
+                            <SelectItem key={clipId} value={clipId}>{clipId}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <Button size="sm" type="button" variant="outline" disabled={!smStateId.trim()} onClick={() => runCommand(createStateMachineStateCommand({ id: smStateId.trim(), clipId: smStateClipId }))}>
+                      Create State
                     </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createTransitionCommand({ id: "walk-run", fromStateId: "walk", toStateId: "run", duration: 0.18, easing: "easeOut", priority: 1, canInterrupt: true, syncMode: "phaseMatch", conditions: [{ parameter: "absSpeed", op: ">", value: 120 }] }))}>
-                      Link +
+                    <Button size="sm" type="button" variant="outline" disabled={!smFromStateId} onClick={() => runCommand(createUpdateStateMachineStateCommand(smFromStateId, { clipId: smStateClipId }))}>
+                      Set Clip
                     </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createUpdateTransitionCommand("idle-walk", { easing: "easeInOut", duration: 0.22 }))}>
-                      Ease
+                    <Input className="h-7 text-xs" value={smRenameStateId} onChange={(event) => setSmRenameStateId(event.target.value)} aria-label="Rename state id" />
+                    <Button size="sm" type="button" variant="outline" disabled={!smFromStateId || !smRenameStateId.trim()} onClick={() => runCommand(createRenameStateMachineStateCommand(smFromStateId, smRenameStateId.trim()))}>
+                      Rename State
                     </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetTransitionConditionsCommand("idle-walk", [{ parameter: "absSpeed", op: ">", value: 10 }]))}>
-                      Condition
-                    </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetStateMachineParameterCommand("absSpeed", 96))}>
-                      Param
+                    <Button size="sm" type="button" variant="outline" disabled={!smFromStateId} onClick={() => runCommand(createSetInitialStateCommand(smFromStateId))}>
+                      Set Initial
                     </Button>
                     <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetBlendTreeCommand("locomotion", { type: "1d", parameter: "absSpeed", children: [{ threshold: 0, clipId: "idle" }, { threshold: 80, clipId: "walk" }, { threshold: 150, clipId: "walk" }] }))}>
                       Blend 1D
                     </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetStateMachinePreviewCommand("idle", "walk", Math.min(1, editorState.project.stateMachine.preview.weight + 0.1)))}>
-                      Preview
+                  </div>
+                  <div className="grid grid-cols-2 gap-1">
+                    <Select value={smFromStateId} onValueChange={setSmFromStateId}>
+                      <SelectTrigger className="h-7" aria-label="Transition from state">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {stateIds.map((stateId) => (
+                            <SelectItem key={stateId} value={stateId}>{stateId}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <Select value={smToStateId} onValueChange={setSmToStateId}>
+                      <SelectTrigger className="h-7" aria-label="Transition to state">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {stateIds.map((stateId) => (
+                            <SelectItem key={stateId} value={stateId}>{stateId}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <Input className="h-7 text-xs" type="number" step="0.01" value={smDuration} onChange={(event) => setSmDuration(Number(event.target.value))} aria-label="Transition duration" />
+                    <Select value={smEasing} onValueChange={setSmEasing}>
+                      <SelectTrigger className="h-7" aria-label="Transition easing">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {["linear", "easeIn", "easeOut", "easeInOut", "cubicBezier", "spring", "overshoot", "anticipation"].map((easing) => (
+                            <SelectItem key={easing} value={easing}>{easing}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <Input className="h-7 text-xs" type="number" step="1" value={smPriority} onChange={(event) => setSmPriority(Number(event.target.value))} aria-label="Transition priority" />
+                    <Select value={smSyncMode} onValueChange={setSmSyncMode}>
+                      <SelectTrigger className="h-7" aria-label="Transition sync mode">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {["none", "normalizedTime", "phaseMatch"].map((syncMode) => (
+                            <SelectItem key={syncMode} value={syncMode}>{syncMode}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <Button size="sm" type="button" variant={smCanInterrupt ? "default" : "outline"} onClick={() => setSmCanInterrupt((value) => !value)}>
+                      Interrupt
+                    </Button>
+                    <Button
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        const transition = {
+                          id: smTransitionId,
+                          fromStateId: smFromStateId,
+                          toStateId: smToStateId,
+                          duration: smDuration,
+                          easing: smEasing as EditorTransition["easing"],
+                          priority: smPriority,
+                          canInterrupt: smCanInterrupt,
+                          syncMode: smSyncMode as EditorTransition["syncMode"],
+                          conditions: [{ parameter: smConditionParameter, op: smConditionOp as EditorTransitionCondition["op"], value: parseStateMachineValue(smConditionValue) }]
+                        };
+                        setSmSelectedTransitionId(transition.id);
+                        runCommand(createTransitionCommand(transition));
+                      }}
+                    >
+                      Create Transition
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1">
+                    <Select value={smConditionParameter} onValueChange={setSmConditionParameter}>
+                      <SelectTrigger className="h-7" aria-label="Condition parameter">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {parameterIds.map((parameterId) => (
+                            <SelectItem key={parameterId} value={parameterId}>{parameterId}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <Select value={smConditionOp} onValueChange={setSmConditionOp}>
+                      <SelectTrigger className="h-7" aria-label="Condition operator">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {["==", "!=", ">", ">=", "<", "<="].map((operator) => (
+                            <SelectItem key={operator} value={operator}>{operator}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <Input className="h-7 text-xs" value={smConditionValue} onChange={(event) => setSmConditionValue(event.target.value)} aria-label="Condition value" />
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetStateMachineParameterCommand(smConditionParameter, parseStateMachineValue(smConditionValue)))}>
+                      Set Param
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" disabled={!selectedTransition} onClick={() => selectedTransition && runCommand(createSetTransitionConditionsCommand(selectedTransition.id, [{ parameter: smConditionParameter, op: smConditionOp as EditorTransitionCondition["op"], value: parseStateMachineValue(smConditionValue) }]))}>
+                      Set Condition
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" disabled={!selectedTransition} onClick={() => selectedTransition && runCommand(createUpdateTransitionCommand(selectedTransition.id, { duration: smDuration, easing: smEasing as EditorTransition["easing"], priority: smPriority, canInterrupt: smCanInterrupt, syncMode: smSyncMode as EditorTransition["syncMode"] }))}>
+                      Update Transition
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1">
+                    <Select value={selectedTransition?.id ?? ""} onValueChange={setSmSelectedTransitionId}>
+                      <SelectTrigger className="h-7" aria-label="Selected transition">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {editorState.project.stateMachine.transitions.map((transition) => (
+                            <SelectItem key={transition.id} value={transition.id}>{transition.id}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <Button size="sm" type="button" variant="outline" disabled={!selectedTransition} onClick={() => selectedTransition && runCommand(createSetStateMachinePreviewCommand(selectedTransition.fromStateId, selectedTransition.toStateId, 1))}>
+                      Preview Transition
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {editorState.project.stateMachine.preview.fromStateId}
-                    {"->"}
-                    {editorState.project.stateMachine.preview.toStateId} {editorState.project.stateMachine.preview.weight.toFixed(1)}
+                    initial {editorState.project.stateMachine.initialStateId} / active {editorState.project.stateMachine.preview.fromStateId}
+                    {" -> "}
+                    {editorState.project.stateMachine.preview.toStateId} weight {editorState.project.stateMachine.preview.weight.toFixed(1)}
                   </p>
                 </CardContent>
-              </Card>
-              <Card size="sm">
-                <CardHeader>
-                  <CardTitle>Procedural</CardTitle>
-                </CardHeader>
+              </InspectorSection>
+              <InspectorSection title="Procedural">
                 <CardContent className="flex flex-col gap-1">
                   <p className="text-xs text-muted-foreground">Breathing {editorState.project.procedural.breathing.frequency} Hz</p>
                   <p className="text-xs text-muted-foreground">Cloak stiffness {editorState.project.procedural.secondaryMotion.stiffness} / wind {editorState.project.procedural.secondaryMotion.windInfluence}</p>
@@ -1191,11 +1355,8 @@ export default function EditorPage() {
                     </Button>
                   </div>
                 </CardContent>
-              </Card>
-              <Card size="sm">
-                <CardHeader>
-                  <CardTitle>Profiler</CardTitle>
-                </CardHeader>
+              </InspectorSection>
+              <InspectorSection title="Profiler">
                 <CardContent className="flex flex-col gap-1">
                   <p className="text-xs text-muted-foreground">Preview quality: {previewQuality}</p>
                   <p className="text-xs text-muted-foreground">Update {(profilerStats?.avgUpdateMs ?? 0).toFixed(2)}ms / Render {(profilerStats?.avgRenderMs ?? 0).toFixed(2)}ms</p>
@@ -1203,7 +1364,7 @@ export default function EditorPage() {
                   <p className="text-xs text-muted-foreground">Platformer {platformerDebug.state.animationState} / {platformerDebug.state.debug.activeColliders.length} colliders</p>
                   <p className="text-xs text-muted-foreground">Camera {platformerDebug.state.cameraX.toFixed(0)}, {platformerDebug.state.cameraY.toFixed(0)} / abs {platformerDebug.params.absSpeed}</p>
                 </CardContent>
-              </Card>
+              </InspectorSection>
             </div>
           </ScrollArea>
         </aside>

@@ -25,6 +25,7 @@ import {
   createReverseClipCommand,
   createRotateBoneCommand,
   createSetBlendTreeCommand,
+  createSetInitialStateCommand,
   createSetCurvePreviewCommand,
   createSetStateMachineParameterCommand,
   createSetStateMachinePreviewCommand,
@@ -33,7 +34,10 @@ import {
   createRetimeClipCommand,
   createSetTimelineSelectionCommand,
   createSetParentCommand,
+  createRenameStateMachineStateCommand,
   createStateMachineStateCommand,
+  createTransitionCommand,
+  createUpdateStateMachineStateCommand,
   createUpdateTransitionCommand,
   createUpdateProceduralCommand,
   executeCommand,
@@ -297,7 +301,16 @@ test("state machine graph commands edit states, transitions, parameters, blend t
   const withState = executeCommand(freshContainer(), createStateMachineStateCommand({ id: "run", clipId: "walk", tags: ["locomotion"] }));
   assert.ok(withState.project.stateMachine.states.some((state) => state.id === "run"));
 
-  const eased = executeCommand(withState, createUpdateTransitionCommand("idle-walk", { easing: "easeInOut", duration: 0.22 }));
+  const clipped = executeCommand(withState, createUpdateStateMachineStateCommand("run", { clipId: "jump" }));
+  assert.equal(clipped.project.stateMachine.states.find((state) => state.id === "run").clipId, "jump");
+
+  const initial = executeCommand(clipped, createSetInitialStateCommand("run"));
+  assert.equal(initial.project.stateMachine.initialStateId, "run");
+
+  const renamed = executeCommand(initial, createRenameStateMachineStateCommand("run", "sprint"));
+  assert.ok(renamed.project.stateMachine.states.some((state) => state.id === "sprint"));
+
+  const eased = executeCommand(renamed, createUpdateTransitionCommand("idle-walk", { easing: "easeInOut", duration: 0.22 }));
   assert.equal(eased.project.stateMachine.transitions.find((transition) => transition.id === "idle-walk").easing, "easeInOut");
 
   const conditioned = executeCommand(eased, createSetTransitionConditionsCommand("idle-walk", [{ parameter: "absSpeed", op: ">", value: 10 }]));
@@ -314,6 +327,22 @@ test("state machine graph commands edit states, transitions, parameters, blend t
 
   const undone = undo(preview);
   assert.deepEqual(undone.project.stateMachine.preview, blend.project.stateMachine.preview);
+});
+
+test("state machine transition can be authored with conditions and timing", () => {
+  const transition = {
+    id: "idle-jump",
+    fromStateId: "idle",
+    toStateId: "jump",
+    duration: 0.12,
+    easing: "anticipation",
+    priority: 10,
+    canInterrupt: true,
+    syncMode: "none",
+    conditions: [{ parameter: "jumpPressed", op: "==", value: true }]
+  };
+  const authored = executeCommand(freshContainer(), createTransitionCommand(transition));
+  assert.deepEqual(authored.project.stateMachine.transitions.find((item) => item.id === "idle-jump"), transition);
 });
 
 test("procedural command edits inputs, secondary motion, squash rules, and foot ik", () => {

@@ -1305,6 +1305,67 @@ export function createStateMachineStateCommand(stateNode: EditorStateNode): Edit
   };
 }
 
+export function createUpdateStateMachineStateCommand(stateId: string, patch: Partial<Omit<EditorStateNode, "id">>): EditorCommand {
+  let previous: EditorStateNode | undefined;
+  return {
+    id: `state-update:${stateId}`,
+    label: "Update state",
+    do: (state) => {
+      previous = state.stateMachine.states.find((item) => item.id === stateId);
+      return {
+        ...markDirty(state, stateId, "stateMachine"),
+        stateMachine: { ...state.stateMachine, states: state.stateMachine.states.map((item) => (item.id === stateId ? { ...item, ...patch } : item)) }
+      };
+    },
+    undo: (state) => (previous ? { ...markDirty(state, stateId, "stateMachine"), stateMachine: { ...state.stateMachine, states: state.stateMachine.states.map((item) => (item.id === stateId ? previous! : item)) } } : state)
+  };
+}
+
+export function createRenameStateMachineStateCommand(stateId: string, nextId: string): EditorCommand {
+  const rename = (state: EditorProjectState, from: string, to: string) => {
+    if (from === to || state.stateMachine.states.some((item) => item.id === to)) {
+      return state;
+    }
+    return {
+      ...markDirty(state, to, "stateMachine"),
+      stateMachine: {
+        ...state.stateMachine,
+        initialStateId: state.stateMachine.initialStateId === from ? to : state.stateMachine.initialStateId,
+        states: state.stateMachine.states.map((item) => (item.id === from ? { ...item, id: to } : item)),
+        transitions: state.stateMachine.transitions.map((transition) => ({
+          ...transition,
+          fromStateId: transition.fromStateId === from ? to : transition.fromStateId,
+          toStateId: transition.toStateId === from ? to : transition.toStateId
+        })),
+        preview: {
+          fromStateId: state.stateMachine.preview.fromStateId === from ? to : state.stateMachine.preview.fromStateId,
+          toStateId: state.stateMachine.preview.toStateId === from ? to : state.stateMachine.preview.toStateId,
+          weight: state.stateMachine.preview.weight
+        }
+      }
+    };
+  };
+  return {
+    id: `state-rename:${stateId}:${nextId}`,
+    label: "Rename state",
+    do: (state) => rename(state, stateId, nextId),
+    undo: (state) => rename(state, nextId, stateId)
+  };
+}
+
+export function createSetInitialStateCommand(stateId: string): EditorCommand {
+  let previous: string | undefined;
+  return {
+    id: `state-initial:${stateId}`,
+    label: "Set initial state",
+    do: (state) => {
+      previous = state.stateMachine.initialStateId;
+      return { ...markDirty(state, stateId, "stateMachine"), stateMachine: { ...state.stateMachine, initialStateId: stateId } };
+    },
+    undo: (state) => (previous ? { ...markDirty(state, previous, "stateMachine"), stateMachine: { ...state.stateMachine, initialStateId: previous } } : state)
+  };
+}
+
 export function createUpdateTransitionCommand(transitionId: string, patch: Partial<EditorTransition>): EditorCommand {
   let previous: EditorTransition | undefined;
   return {
