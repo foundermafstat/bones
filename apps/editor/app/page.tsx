@@ -140,7 +140,17 @@ const previewClips = [
   { id: 4, name: "Land" }
 ] as const;
 
-const previewScenarios = ["idle", "walk", "jump", "fall", "land"] as const;
+const previewScenarios = ["idle", "walk", "run", "jump", "fall", "land", "wallSlide", "movingPlatform"] as const;
+const previewScenarioClipIds: Record<(typeof previewScenarios)[number], number> = {
+  idle: 0,
+  walk: 1,
+  run: 1,
+  jump: 2,
+  fall: 3,
+  land: 4,
+  wallSlide: 3,
+  movingPlatform: 1
+};
 
 const modeSurfaceDescriptions: Record<string, string> = {
   Rig: "Skeleton hierarchy and transforms",
@@ -243,6 +253,7 @@ export default function EditorPage() {
   const [previewPlaying, setPreviewPlaying] = useState(true);
   const [previewClipId, setPreviewClipId] = useState(0);
   const [previewScenario, setPreviewScenario] = useState<(typeof previewScenarios)[number]>("idle");
+  const [previewRecords, setPreviewRecords] = useState<readonly { readonly scenario: string; readonly state: string; readonly params: Readonly<Record<string, unknown>> }[]>([]);
   const [previewQuality, setPreviewQuality] = useState<QualityPresetName>("medium");
   const [profilerStats, setProfilerStats] = useState<RuntimeProfilerStats | null>(null);
   const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
@@ -389,15 +400,26 @@ export default function EditorPage() {
     const state =
       previewScenario === "walk"
         ? updatePlatformerController(createInitialControllerState(0, 0), { moveX: 1, jumpPressed: false }, 0.2, previewLevel)
+        : previewScenario === "run"
+          ? updatePlatformerController(createInitialControllerState(0, 0), { moveX: 1.8, jumpPressed: false }, 0.35, previewLevel)
         : previewScenario === "jump"
           ? updatePlatformerController(createInitialControllerState(0, 0), { moveX: 0, jumpPressed: true }, 0.016, previewLevel)
           : previewScenario === "fall"
             ? updatePlatformerController({ ...createInitialControllerState(0, -48), grounded: false, wasGrounded: false, velocityY: 96 }, { moveX: 0, jumpPressed: false }, 0.016, previewLevel)
             : previewScenario === "land"
               ? updatePlatformerController({ ...createInitialControllerState(0, 10), grounded: false, wasGrounded: false, velocityY: 180 }, { moveX: 0, jumpPressed: false }, 0.05, previewLevel)
+              : previewScenario === "wallSlide"
+                ? updatePlatformerController({ ...createInitialControllerState(-96, -32), grounded: false, wallContact: "left", velocityY: 46 }, { moveX: -1, jumpPressed: false }, 0.12, previewLevel)
+                : previewScenario === "movingPlatform"
+                  ? updatePlatformerController({ ...createInitialControllerState(36, 0), velocityX: 32, grounded: true }, { moveX: 0.5, jumpPressed: false }, 0.25, previewLevel)
               : updatePlatformerController(createInitialControllerState(0, 0), { moveX: 0, jumpPressed: false }, 0.016, previewLevel);
     return { state, params: toAnimationParameters(state) };
   }, [previewLevel, previewScenario]);
+  const previewStateMachineSimulation = useMemo(
+    () => evaluateStateMachinePreview({ ...editorState.project.stateMachine, parameters: { ...editorState.project.stateMachine.parameters, ...platformerDebug.params } }),
+    [editorState.project.stateMachine, platformerDebug.params]
+  );
+  const previewEvents = activeClip?.events ?? [];
   const runCommand = (command: Parameters<typeof executeCommand>[1]) => {
     setLastCommand(command.label);
     setEditorState((state) => executeCommand(state, command));
@@ -1030,22 +1052,55 @@ export default function EditorPage() {
                         variant={previewScenario === scenario ? "default" : "outline"}
                         onClick={() => {
                           setPreviewScenario(scenario);
-                          setPreviewClipId(index);
+                          setPreviewClipId(previewScenarioClipIds[scenario]);
                         }}
                       >
                         {scenario}
                       </Button>
                     ))}
+                    <Button
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        setPreviewRecords((records) => [
+                          ...records,
+                          { scenario: previewScenario, state: platformerDebug.state.animationState, params: { ...platformerDebug.params } }
+                        ])
+                      }
+                    >
+                      Record
+                    </Button>
+                    <Button
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                      disabled={!previewRecords.length}
+                      onClick={() => {
+                        const record = previewRecords[0];
+                        if (!record || !previewScenarios.includes(record.scenario as (typeof previewScenarios)[number])) {
+                          return;
+                        }
+                        setPreviewScenario(record.scenario as (typeof previewScenarios)[number]);
+                        setPreviewClipId(previewScenarioClipIds[record.scenario as (typeof previewScenarios)[number]]);
+                        setPreviewRecords((records) => [...records.slice(1), record]);
+                      }}
+                    >
+                      Replay
+                    </Button>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div>
                       <p className="font-medium">State {platformerDebug.state.animationState}</p>
-                      <p className="text-muted-foreground">Clip {previewClips[previewClipId]?.name ?? "Unknown"} / transition {editorState.project.stateMachine.preview.weight.toFixed(2)}</p>
+                      <p className="text-muted-foreground">Clip {previewClips[previewClipId]?.name ?? "Unknown"} / transition {previewStateMachineSimulation.transitionId ?? "none"} {previewStateMachineSimulation.transitionWeight.toFixed(2)}</p>
                       <p className="text-muted-foreground">Params absSpeed {platformerDebug.params.absSpeed} velocityY {platformerDebug.params.velocityY}</p>
                       <p className="text-muted-foreground">grounded {String(platformerDebug.params.grounded)} landing {platformerDebug.params.landingImpact}</p>
+                      <p className="text-muted-foreground">active {previewStateMachineSimulation.previousStateId} -&gt; {previewStateMachineSimulation.activeStateId}</p>
                     </div>
                     <div>
                       <p className="font-medium">Events</p>
+                      <p className="text-muted-foreground">{previewEvents.map((event) => `${event.type}@${event.time.toFixed(2)}`).join(", ") || "none"}</p>
+                      <p className="text-muted-foreground">records {previewRecords.length}</p>
                       <p className="text-muted-foreground">colliders {platformerDebug.state.debug.activeColliders.length} / death {String(platformerDebug.state.debug.touchedDeathZone)}</p>
                       <p className="text-muted-foreground">camera {platformerDebug.state.cameraX.toFixed(0)}, {platformerDebug.state.cameraY.toFixed(0)}</p>
                       <p className="text-muted-foreground">room {previewLevel.id}</p>
