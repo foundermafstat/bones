@@ -142,6 +142,9 @@ export default function EditorPage() {
   const [newBoneId, setNewBoneId] = useState("armTest");
   const [newBoneParentId, setNewBoneParentId] = useState("body");
   const [renameBoneId, setRenameBoneId] = useState("body");
+  const [newPointX, setNewPointX] = useState(12);
+  const [newPointY, setNewPointY] = useState(4);
+  const [mirrorSummary, setMirrorSummary] = useState("");
   const [ioStatus, setIoStatus] = useState("ready");
   const [projectOrigin, setProjectOrigin] = useState<ProjectOrigin>("sample");
   const [lastExportBundle, setLastExportBundle] = useState<ProjectExportBundle | null>(null);
@@ -164,6 +167,9 @@ export default function EditorPage() {
     ? selectedPart?.points.map((point, index) => (index === dragPoint.index ? dragPoint.point : point)) ?? []
     : selectedPart?.points ?? [];
   const shapeViewBox = useMemo(() => getShapeViewBox(shapePoints), [shapePoints]);
+  const selectedPoint = selectedPointIndex === null ? undefined : selectedPart?.points[selectedPointIndex];
+  const selectedCommand = selectedPointIndex === null ? undefined : selectedPart?.pathCommands?.[selectedPointIndex];
+  const selectedPathClosed = selectedPart?.pathCommands?.at(-1)?.type === "Z";
   const poseIds = Object.keys(editorState.project.poses);
   const selectedPose = editorState.project.poses[selectedPoseId] ?? (poseIds[0] ? editorState.project.poses[poseIds[0]] : undefined);
   const selectedPoseTagText = selectedPose?.tags.join(", ") ?? "";
@@ -329,8 +335,8 @@ export default function EditorPage() {
       actions: [
         { label: "Vectorize", disabled: selectedPart?.type !== "svg", onClick: () => void vectorizeSelectedPart() },
         { label: "Bind", onClick: () => runCommand(createBindProceduralPartCommand(`${selectedBone}Shape`, selectedBone, "tapered-limb")) },
-        { label: "Pen", disabled: !selectedPart, onClick: () => selectedPart && runCommand(createEditPathPointCommand(selectedPart.id, selectedPart.points.length, [12, 4])) },
-        { label: "Mirror", disabled: !selectedPart, onClick: () => selectedPart && runCommand(createMirrorPathCommand(selectedPart.id)) },
+        { label: "Pen", disabled: !selectedPart, onClick: () => selectedPart && runCommand(createEditPathPointCommand(selectedPart.id, selectedPart.points.length, [newPointX, newPointY])) },
+        { label: "Mirror", disabled: !selectedPart, onClick: () => { if (selectedPart) { runCommand(createMirrorPathCommand(selectedPart.id)); setMirrorSummary(`mirrored ${selectedPart.points.length} points`); } } },
         { label: "Pivot", disabled: !selectedPart, onClick: () => selectedPart && runCommand(createSetPartPivotCommand(selectedPart.id, [4, 0])) }
       ]
     },
@@ -823,13 +829,45 @@ export default function EditorPage() {
                   <ReadOnlyField label="Points" value={String(selectedPart?.points.length ?? 0)} />
                   <ReadOnlyField label="Commands" value={String(selectedPart?.pathCommands?.length ?? 0)} />
                   <ReadOnlyField label="ViewBox" value={selectedPart?.svgViewBox?.join(", ") ?? "none"} />
+                  <ReadOnlyField label="Closed" value={selectedPathClosed ? "yes" : "no"} />
+                  <ReadOnlyField label="Point" value={selectedPointIndex === null ? "none" : String(selectedPointIndex)} />
+                  <ReadOnlyField label="Command" value={selectedCommand?.type ?? "none"} />
                   {vectorizeSummary ? <p className="text-xs text-muted-foreground">{vectorizeSummary}</p> : null}
+                  {mirrorSummary ? <p className="text-xs text-muted-foreground">{mirrorSummary}</p> : null}
                   {selectedPart?.type === "path" ? <p className="text-xs text-amber-600">SVG importer uses the first path only; groups and masks are ignored.</p> : null}
+                  <div className="grid grid-cols-2 gap-1">
+                    <Input className="h-7 text-xs" type="number" value={selectedPoint?.[0] ?? 0} onChange={(event) => selectedPart && selectedPointIndex !== null && runCommand(createEditPathPointCommand(selectedPart.id, selectedPointIndex, [Number(event.target.value), selectedPoint?.[1] ?? 0]))} aria-label="Selected point x" disabled={!selectedPoint} />
+                    <Input className="h-7 text-xs" type="number" value={selectedPoint?.[1] ?? 0} onChange={(event) => selectedPart && selectedPointIndex !== null && runCommand(createEditPathPointCommand(selectedPart.id, selectedPointIndex, [selectedPoint?.[0] ?? 0, Number(event.target.value)]))} aria-label="Selected point y" disabled={!selectedPoint} />
+                  </div>
+                  <div className="grid grid-cols-[1fr_1fr_auto] gap-1">
+                    <Input className="h-7 text-xs" type="number" value={newPointX} onChange={(event) => setNewPointX(Number(event.target.value))} aria-label="New point x" />
+                    <Input className="h-7 text-xs" type="number" value={newPointY} onChange={(event) => setNewPointY(Number(event.target.value))} aria-label="New point y" />
+                    <Button size="sm" type="button" variant="outline" disabled={!selectedPart} onClick={() => selectedPart && runCommand(createEditPathPointCommand(selectedPart.id, selectedPart.points.length, [newPointX, newPointY]))}>
+                      Add Point
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-[1fr_1fr_auto] gap-1">
+                    <Input className="h-7 text-xs" type="number" value={selectedPart?.pivot[0] ?? 0} onChange={(event) => selectedPart && runCommand(createSetPartPivotCommand(selectedPart.id, [Number(event.target.value), selectedPart.pivot[1]]))} aria-label="Part pivot x" disabled={!selectedPart} />
+                    <Input className="h-7 text-xs" type="number" value={selectedPart?.pivot[1] ?? 0} onChange={(event) => selectedPart && runCommand(createSetPartPivotCommand(selectedPart.id, [selectedPart.pivot[0], Number(event.target.value)]))} aria-label="Part pivot y" disabled={!selectedPart} />
+                    <Button size="sm" type="button" variant="outline" disabled={!selectedPart || !selectedPoint} onClick={() => selectedPart && selectedPoint && runCommand(createSetPartPivotCommand(selectedPart.id, selectedPoint))}>
+                      Pivot From Point
+                    </Button>
+                  </div>
+                  <Input className="h-7 text-xs" type="number" value={selectedPart?.zIndex ?? 0} onChange={(event) => selectedPart && runCommand(createSetPartDrawOrderCommand(selectedPart.id, Number(event.target.value)))} aria-label="Part draw order" disabled={!selectedPart} />
+                  {selectedPart?.points.length ? (
+                    <div className="grid max-h-28 gap-1 overflow-auto pr-1">
+                      {selectedPart.points.map(([x, y], index) => (
+                        <Button key={`${selectedPart.id}-point-${index}`} size="sm" type="button" variant={index === selectedPointIndex ? "default" : "outline"} onClick={() => setSelectedPointIndex(index)}>
+                          {index}: {x.toFixed(1)}, {y.toFixed(1)}
+                        </Button>
+                      ))}
+                    </div>
+                  ) : null}
                   <div className="grid grid-cols-2 gap-1">
                     <Button size="sm" type="button" variant="outline" onClick={() => void vectorizeSelectedPart()} disabled={selectedPart?.type !== "svg"}>
                       Vectorize
                     </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={() => selectedPart && runCommand(createMirrorPathCommand(selectedPart.id))} disabled={!selectedPart?.points.length}>
+                    <Button size="sm" type="button" variant="outline" onClick={() => { if (selectedPart) { runCommand(createMirrorPathCommand(selectedPart.id)); setMirrorSummary(`mirrored ${selectedPart.points.length} points`); } }} disabled={!selectedPart?.points.length}>
                       Mirror
                     </Button>
                     <Button size="sm" type="button" variant="outline" onClick={() => selectedPart && runCommand(createSetPartPivotCommand(selectedPart.id, [0, 0]))} disabled={!selectedPart}>
