@@ -350,16 +350,19 @@ test("procedural command edits inputs, secondary motion, squash rules, and foot 
     freshContainer(),
     createUpdateProceduralCommand({
       inputs: { ...initialEditorProject.procedural.inputs, velocityX: 120, wind: 0.4 },
+      breathing: { ...initialEditorProject.procedural.breathing, enabled: true, amplitude: 1.5, affectedBones: ["body", "head"] },
       secondaryMotion: { ...initialEditorProject.procedural.secondaryMotion, gravityInfluence: 0.22, windInfluence: 0.18, maxOffset: 18 },
       squashStretch: { ...initialEditorProject.procedural.squashStretch, rules: [...initialEditorProject.procedural.squashStretch.rules, { condition: "damageHit", scaleX: 1.08, scaleY: 0.9, duration: 0.1 }] },
-      footIk: { ...initialEditorProject.procedural.footIk, enabled: true, maxCorrection: 10, blend: 0.85 }
+      footIk: { ...initialEditorProject.procedural.footIk, enabled: true, feet: ["footFront", "footBack"], maxCorrection: 10, blend: 0.85 }
     })
   );
 
   assert.equal(updated.project.procedural.inputs.velocityX, 120);
+  assert.equal(updated.project.procedural.breathing.amplitude, 1.5);
   assert.equal(updated.project.procedural.secondaryMotion.maxOffset, 18);
   assert.ok(updated.project.procedural.squashStretch.rules.some((rule) => rule.condition === "damageHit"));
   assert.equal(updated.project.procedural.footIk.enabled, true);
+  assert.deepEqual(updated.project.procedural.footIk.feet, ["footFront", "footBack"]);
 
   const undone = undo(updated);
   assert.deepEqual(undone.project.procedural, initialEditorProject.procedural);

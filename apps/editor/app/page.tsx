@@ -146,6 +146,10 @@ function parseStateMachineValue(value: string): number | boolean | string {
   return Number.isFinite(number) && value.trim() !== "" ? number : value;
 }
 
+function parseCsvIds(value: string): string[] {
+  return value.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
 function InspectorSection({ children, title }: { children: ReactNode; title: string }) {
   const [collapsed, setCollapsed] = useState(false);
 
@@ -211,6 +215,12 @@ export default function EditorPage() {
   const [smConditionOp, setSmConditionOp] = useState("==");
   const [smConditionValue, setSmConditionValue] = useState("true");
   const [smSelectedTransitionId, setSmSelectedTransitionId] = useState("any-jump");
+  const [proceduralBonesText, setProceduralBonesText] = useState("body, head");
+  const [proceduralFeetText, setProceduralFeetText] = useState("footFront, footBack");
+  const [squashCondition, setSquashCondition] = useState("jumpStart");
+  const [squashScaleX, setSquashScaleX] = useState(0.92);
+  const [squashScaleY, setSquashScaleY] = useState(1.12);
+  const [squashDuration, setSquashDuration] = useState(0.08);
   const [ioStatus, setIoStatus] = useState("ready");
   const [projectOrigin, setProjectOrigin] = useState<ProjectOrigin>("sample");
   const [lastExportBundle, setLastExportBundle] = useState<ProjectExportBundle | null>(null);
@@ -719,6 +729,21 @@ export default function EditorPage() {
                   />
                 ))}
               </svg>
+            ) : null}
+            {mode === "Procedural" ? (
+              <div className="absolute left-3 top-3 z-20 grid w-[min(520px,calc(100%-24px))] grid-cols-2 gap-2" aria-label="Procedural layer panels">
+                {[
+                  ["Breathing", `${editorState.project.procedural.breathing.enabled ? "on" : "off"} / ${editorState.project.procedural.breathing.amplitude.toFixed(2)} amp`],
+                  ["Secondary Motion", `${editorState.project.procedural.secondaryMotion.target} / ${editorState.project.procedural.secondaryMotion.maxOffset}px`],
+                  ["Squash Stretch", `${editorState.project.procedural.squashStretch.targetBone} / ${editorState.project.procedural.squashStretch.rules.length} rules`],
+                  ["Foot IK", `${editorState.project.procedural.footIk.enabled ? "on" : "off"} / ${editorState.project.procedural.footIk.feet.join(", ")}`]
+                ].map(([title, value]) => (
+                  <div className="rounded-md border bg-card/95 p-2 shadow-sm" key={title}>
+                    <p className="text-xs font-medium">{title}</p>
+                    <p className="truncate text-xs text-muted-foreground">{value}</p>
+                  </div>
+                ))}
+              </div>
             ) : null}
           </CardContent>
         </Card>
@@ -1336,23 +1361,86 @@ export default function EditorPage() {
                 </CardContent>
               </InspectorSection>
               <InspectorSection title="Procedural">
-                <CardContent className="flex flex-col gap-1">
-                  <p className="text-xs text-muted-foreground">Breathing {editorState.project.procedural.breathing.frequency} Hz</p>
-                  <p className="text-xs text-muted-foreground">Cloak stiffness {editorState.project.procedural.secondaryMotion.stiffness} / wind {editorState.project.procedural.secondaryMotion.windInfluence}</p>
-                  <p className="text-xs text-muted-foreground">Foot IK {editorState.project.procedural.footIk.enabled ? "on" : "off"}</p>
-                  <div className="grid grid-cols-2 gap-1">
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createUpdateProceduralCommand({ inputs: { ...editorState.project.procedural.inputs, velocityX: 120, velocityY: 18, wind: 0.4 } }))}>
-                      Velocity
+                <CardContent className="flex flex-col gap-2">
+                  <div className="grid gap-1 rounded-md border p-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label className="text-xs">Breathing</Label>
+                      <Button size="sm" type="button" variant={editorState.project.procedural.breathing.enabled ? "default" : "outline"} onClick={() => runCommand(createUpdateProceduralCommand({ breathing: { ...editorState.project.procedural.breathing, enabled: !editorState.project.procedural.breathing.enabled } }))}>
+                        {editorState.project.procedural.breathing.enabled ? "On" : "Off"}
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1">
+                      <Input className="h-7 text-xs" type="number" step="0.1" value={editorState.project.procedural.breathing.frequency} onChange={(event) => runCommand(createUpdateProceduralCommand({ breathing: { ...editorState.project.procedural.breathing, frequency: Number(event.target.value) } }))} aria-label="Breathing frequency" />
+                      <Input className="h-7 text-xs" type="number" step="0.1" value={editorState.project.procedural.breathing.amplitude} onChange={(event) => runCommand(createUpdateProceduralCommand({ breathing: { ...editorState.project.procedural.breathing, enabled: true, amplitude: Number(event.target.value) } }))} aria-label="Breathing amplitude" />
+                    </div>
+                    <Input className="h-7 text-xs" value={proceduralBonesText} onChange={(event) => setProceduralBonesText(event.target.value)} aria-label="Breathing affected bones" />
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createUpdateProceduralCommand({ breathing: { ...editorState.project.procedural.breathing, enabled: true, affectedBones: parseCsvIds(proceduralBonesText) } }))}>
+                      Apply Bones
                     </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createUpdateProceduralCommand({ secondaryMotion: { ...editorState.project.procedural.secondaryMotion, gravityInfluence: 0.22, windInfluence: 0.18, maxOffset: 18 } }))}>
-                      Cloak Lag
+                  </div>
+                  <div className="grid gap-1 rounded-md border p-2">
+                    <Label className="text-xs">Secondary Motion</Label>
+                    <div className="grid grid-cols-2 gap-1">
+                      <Select value={editorState.project.procedural.secondaryMotion.target} onValueChange={(target) => runCommand(createUpdateProceduralCommand({ secondaryMotion: { ...editorState.project.procedural.secondaryMotion, enabled: true, target } }))}>
+                        <SelectTrigger className="h-7" aria-label="Secondary target">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            {editorState.project.hierarchy.map((boneId) => (
+                              <SelectItem key={boneId} value={boneId}>{boneId}</SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                      <Input className="h-7 text-xs" type="number" step="0.01" value={editorState.project.procedural.secondaryMotion.stiffness} onChange={(event) => runCommand(createUpdateProceduralCommand({ secondaryMotion: { ...editorState.project.procedural.secondaryMotion, enabled: true, stiffness: Number(event.target.value) } }))} aria-label="Secondary stiffness" />
+                      <Input className="h-7 text-xs" type="number" step="0.01" value={editorState.project.procedural.secondaryMotion.damping} onChange={(event) => runCommand(createUpdateProceduralCommand({ secondaryMotion: { ...editorState.project.procedural.secondaryMotion, enabled: true, damping: Number(event.target.value) } }))} aria-label="Secondary damping" />
+                      <Input className="h-7 text-xs" type="number" step="0.01" value={editorState.project.procedural.secondaryMotion.velocityInfluence} onChange={(event) => runCommand(createUpdateProceduralCommand({ secondaryMotion: { ...editorState.project.procedural.secondaryMotion, enabled: true, velocityInfluence: Number(event.target.value) } }))} aria-label="Secondary velocity influence" />
+                      <Input className="h-7 text-xs" type="number" step="0.01" value={editorState.project.procedural.secondaryMotion.gravityInfluence} onChange={(event) => runCommand(createUpdateProceduralCommand({ secondaryMotion: { ...editorState.project.procedural.secondaryMotion, enabled: true, gravityInfluence: Number(event.target.value) } }))} aria-label="Secondary gravity influence" />
+                      <Input className="h-7 text-xs" type="number" step="0.01" value={editorState.project.procedural.secondaryMotion.windInfluence} onChange={(event) => runCommand(createUpdateProceduralCommand({ secondaryMotion: { ...editorState.project.procedural.secondaryMotion, enabled: true, windInfluence: Number(event.target.value) } }))} aria-label="Secondary wind influence" />
+                      <Input className="h-7 text-xs" type="number" step="1" value={editorState.project.procedural.secondaryMotion.maxOffset} onChange={(event) => runCommand(createUpdateProceduralCommand({ secondaryMotion: { ...editorState.project.procedural.secondaryMotion, enabled: true, maxOffset: Number(event.target.value) } }))} aria-label="Secondary max offset" />
+                    </div>
+                  </div>
+                  <div className="grid gap-1 rounded-md border p-2">
+                    <Label className="text-xs">Squash / Stretch</Label>
+                    <div className="grid grid-cols-2 gap-1">
+                      <Select value={editorState.project.procedural.squashStretch.targetBone} onValueChange={(targetBone) => runCommand(createUpdateProceduralCommand({ squashStretch: { ...editorState.project.procedural.squashStretch, enabled: true, targetBone } }))}>
+                        <SelectTrigger className="h-7" aria-label="Squash target bone">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            {editorState.project.hierarchy.map((boneId) => (
+                              <SelectItem key={boneId} value={boneId}>{boneId}</SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                      <Input className="h-7 text-xs" value={squashCondition} onChange={(event) => setSquashCondition(event.target.value)} aria-label="Squash condition" />
+                      <Input className="h-7 text-xs" type="number" step="0.01" value={squashScaleX} onChange={(event) => setSquashScaleX(Number(event.target.value))} aria-label="Squash scale x" />
+                      <Input className="h-7 text-xs" type="number" step="0.01" value={squashScaleY} onChange={(event) => setSquashScaleY(Number(event.target.value))} aria-label="Squash scale y" />
+                      <Input className="h-7 text-xs" type="number" step="0.01" value={squashDuration} onChange={(event) => setSquashDuration(Number(event.target.value))} aria-label="Squash duration" />
+                      <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createUpdateProceduralCommand({ squashStretch: { ...editorState.project.procedural.squashStretch, enabled: true, rules: [...editorState.project.procedural.squashStretch.rules.filter((rule) => rule.condition !== squashCondition), { condition: squashCondition, scaleX: squashScaleX, scaleY: squashScaleY, duration: squashDuration }] } }))}>
+                        Set Rule
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="grid gap-1 rounded-md border p-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label className="text-xs">Foot IK</Label>
+                      <Button size="sm" type="button" variant={editorState.project.procedural.footIk.enabled ? "default" : "outline"} onClick={() => runCommand(createUpdateProceduralCommand({ footIk: { ...editorState.project.procedural.footIk, enabled: !editorState.project.procedural.footIk.enabled } }))}>
+                        {editorState.project.procedural.footIk.enabled ? "On" : "Off"}
+                      </Button>
+                    </div>
+                    <Input className="h-7 text-xs" value={proceduralFeetText} onChange={(event) => setProceduralFeetText(event.target.value)} aria-label="Foot IK feet" />
+                    <div className="grid grid-cols-2 gap-1">
+                      <Input className="h-7 text-xs" type="number" step="1" value={editorState.project.procedural.footIk.maxCorrection} onChange={(event) => runCommand(createUpdateProceduralCommand({ footIk: { ...editorState.project.procedural.footIk, enabled: true, maxCorrection: Number(event.target.value) } }))} aria-label="Foot IK max correction" />
+                      <Input className="h-7 text-xs" type="number" step="0.01" value={editorState.project.procedural.footIk.blend} onChange={(event) => runCommand(createUpdateProceduralCommand({ footIk: { ...editorState.project.procedural.footIk, enabled: true, blend: Number(event.target.value) } }))} aria-label="Foot IK blend" />
+                    </div>
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createUpdateProceduralCommand({ footIk: { ...editorState.project.procedural.footIk, enabled: true, feet: parseCsvIds(proceduralFeetText) } }))}>
+                      Apply Feet
                     </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createUpdateProceduralCommand({ squashStretch: { ...editorState.project.procedural.squashStretch, rules: [...editorState.project.procedural.squashStretch.rules, { condition: "damageHit", scaleX: 1.08, scaleY: 0.9, duration: 0.1 }] } }))}>
-                      Squash Rule
-                    </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createUpdateProceduralCommand({ footIk: { ...editorState.project.procedural.footIk, enabled: true, maxCorrection: 10, blend: 0.85 } }))}>
-                      IK Tune
-                    </Button>
+                    <p className="text-xs text-muted-foreground">{editorState.project.procedural.footIk.footChains.map((chain) => `${chain.thighBone}/${chain.shinBone}/${chain.footBone}`).join(", ")}</p>
                   </div>
                 </CardContent>
               </InspectorSection>
