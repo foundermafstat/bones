@@ -315,6 +315,28 @@ export default function EditorPage() {
   const parameterIds = Object.keys(editorState.project.stateMachine.parameters);
   const smTransitionId = `${smFromStateId}-${smToStateId}`;
   const selectedTransition = editorState.project.stateMachine.transitions.find((transition) => transition.id === smSelectedTransitionId) ?? editorState.project.stateMachine.transitions[0];
+  const stateMachineGraph = useMemo(() => {
+    const states = editorState.project.stateMachine.states;
+    const centerX = 320;
+    const centerY = 180;
+    const radiusX = 220;
+    const radiusY = 112;
+    const nodes = states.map((state, index) => {
+      const angle = states.length > 1 ? (Math.PI * 2 * index) / states.length - Math.PI / 2 : -Math.PI / 2;
+      return {
+        state,
+        x: centerX + Math.cos(angle) * radiusX,
+        y: centerY + Math.sin(angle) * radiusY
+      };
+    });
+    const byId = new Map(nodes.map((node) => [node.state.id, node]));
+    const transitions = editorState.project.stateMachine.transitions.flatMap((transition) => {
+      const from = byId.get(transition.fromStateId);
+      const to = byId.get(transition.toStateId);
+      return from && to ? [{ transition, from, to }] : [];
+    });
+    return { nodes, transitions };
+  }, [editorState.project.stateMachine.states, editorState.project.stateMachine.transitions]);
   const exportFileEntries = useMemo(() => Object.entries(lastExportBundle?.files ?? {}), [lastExportBundle]);
   const previewLevel = useMemo(() => parseLdtkLevel(sampleLdtkLevel), []);
   const platformerDebug = useMemo(() => {
@@ -981,6 +1003,115 @@ export default function EditorPage() {
                   />
                 ))}
               </svg>
+            ) : null}
+            {mode === "State Machine" ? (
+              <div className="absolute inset-0 z-20 grid place-items-center bg-background/70 p-4" aria-label="State machine graph editor">
+                <div className="grid w-[min(760px,calc(100%-24px))] gap-2 rounded-md border bg-card/95 p-3 shadow-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium">State Machine Graph</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {editorState.project.stateMachine.preview.fromStateId}
+                        {" -> "}
+                        {editorState.project.stateMachine.preview.toStateId} / weight {editorState.project.stateMachine.preview.weight.toFixed(2)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {[0, 0.5, 1].map((weight) => (
+                        <Button
+                          key={weight}
+                          size="sm"
+                          type="button"
+                          variant={Math.abs(editorState.project.stateMachine.preview.weight - weight) < 0.01 ? "default" : "outline"}
+                          onClick={() => runCommand(createSetStateMachinePreviewCommand(editorState.project.stateMachine.preview.fromStateId, editorState.project.stateMachine.preview.toStateId, weight))}
+                        >
+                          {weight.toFixed(1)}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                  <svg className="h-[min(360px,calc(100dvh-360px))] min-h-60 w-full rounded-md border bg-background" viewBox="0 0 640 360" role="img" aria-label="State machine states and transitions">
+                    <defs>
+                      <marker id="state-machine-arrow" markerHeight="8" markerWidth="8" orient="auto" refX="7" refY="4">
+                        <path d="M 0 0 L 8 4 L 0 8 Z" fill="#4f8cff" />
+                      </marker>
+                    </defs>
+                    {stateMachineGraph.transitions.map(({ transition, from, to }) => {
+                      const selected = transition.id === selectedTransition?.id;
+                      const activePreview = editorState.project.stateMachine.preview.fromStateId === transition.fromStateId && editorState.project.stateMachine.preview.toStateId === transition.toStateId;
+                      const dx = to.x - from.x;
+                      const dy = to.y - from.y;
+                      const length = Math.max(1, Math.hypot(dx, dy));
+                      const startX = from.x + (dx / length) * 46;
+                      const startY = from.y + (dy / length) * 28;
+                      const endX = to.x - (dx / length) * 52;
+                      const endY = to.y - (dy / length) * 32;
+                      const midX = (startX + endX) / 2;
+                      const midY = (startY + endY) / 2;
+                      return (
+                        <g
+                          key={transition.id}
+                          className="cursor-pointer"
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => {
+                            setSmSelectedTransitionId(transition.id);
+                            setSmFromStateId(transition.fromStateId);
+                            setSmToStateId(transition.toStateId);
+                            setSmDuration(transition.duration);
+                            setSmEasing(transition.easing);
+                            setSmPriority(transition.priority);
+                            setSmCanInterrupt(transition.canInterrupt);
+                            setSmSyncMode(transition.syncMode);
+                            runCommand(createSetStateMachinePreviewCommand(transition.fromStateId, transition.toStateId, 0.5));
+                          }}
+                        >
+                          <line
+                            markerEnd="url(#state-machine-arrow)"
+                            stroke={selected || activePreview ? "#4f8cff" : "#94a3b8"}
+                            strokeDasharray={activePreview ? "0" : "5 5"}
+                            strokeWidth={selected ? 4 : 2}
+                            x1={startX}
+                            x2={endX}
+                            y1={startY}
+                            y2={endY}
+                          />
+                          <rect fill="var(--card)" height="18" rx="4" stroke={selected ? "#4f8cff" : "#cbd5e1"} width={Math.max(70, transition.id.length * 7)} x={midX - Math.max(70, transition.id.length * 7) / 2} y={midY - 9} />
+                          <text fill="currentColor" fontSize="10" textAnchor="middle" x={midX} y={midY + 3}>
+                            {transition.id}
+                          </text>
+                        </g>
+                      );
+                    })}
+                    {stateMachineGraph.nodes.map(({ state, x, y }) => {
+                      const selected = state.id === smFromStateId;
+                      const initial = state.id === editorState.project.stateMachine.initialStateId;
+                      const preview = state.id === editorState.project.stateMachine.preview.fromStateId || state.id === editorState.project.stateMachine.preview.toStateId;
+                      return (
+                        <g
+                          key={state.id}
+                          className="cursor-pointer"
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => {
+                            setSmFromStateId(state.id);
+                            setSmStateId(state.id);
+                            setSmStateClipId(state.clipId);
+                          }}
+                        >
+                          <rect fill={selected ? "#dbeafe" : preview ? "#eff6ff" : "var(--card)"} height="56" rx="8" stroke={selected ? "#1d4ed8" : initial ? "#f59e0b" : "#cbd5e1"} strokeWidth={selected ? 3 : 2} width="112" x={x - 56} y={y - 28} />
+                          <text fill="currentColor" fontSize="13" fontWeight="600" textAnchor="middle" x={x} y={y - 4}>
+                            {state.id}
+                          </text>
+                          <text fill="#64748b" fontSize="10" textAnchor="middle" x={x} y={y + 13}>
+                            {state.clipId || "no clip"}
+                          </text>
+                        </g>
+                      );
+                    })}
+                  </svg>
+                </div>
+              </div>
             ) : null}
             {mode === "Procedural" ? (
               <div className="absolute left-3 top-3 z-20 grid w-[min(520px,calc(100%-24px))] grid-cols-2 gap-2" aria-label="Procedural layer panels">
