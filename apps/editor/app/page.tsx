@@ -74,10 +74,13 @@ import {
   createAddTimelineMarkerCommand,
   createAnimationClipCommand,
   createCopySelectedKeysCommand,
+  createDeleteSelectedKeysCommand,
   createNormalizeLoopCommand,
   createPasteKeysCommand,
   createReverseClipCommand,
   createRetimeClipCommand,
+  createScaleSelectedKeysCommand,
+  createSelectTrackKeysCommand,
   createSetTimelineSelectionCommand,
   createGroupedCommand,
   createSetBlendTreeCommand,
@@ -2089,6 +2092,21 @@ export default function EditorPage() {
               </Button>
               <Button size="sm" type="button" variant="outline" onClick={() => activeClip && runCommand(createAddTimelineEventCommand(activeClip.id, { id: `${activeClip.id}-event-${activeClip.events.length}`, time: activeClip.duration * 0.5, type: "cue" }))} disabled={!activeClip}>
                 Event
+              </Button>
+              <Button size="sm" type="button" variant="outline" onClick={() => activeClip && runCommand(createAddTimelineEventCommand(activeClip.id, { id: `${activeClip.id}-footstep-${activeClip.events.length}`, time: timelineCurrentTime, type: "footstep", payload: { foot: timelineTargetId.includes("Back") ? "back" : "front" } }))} disabled={!activeClip}>
+                Footstep
+              </Button>
+              <Button size="sm" type="button" variant="outline" onClick={() => activeClip && runCommand(createAddTimelineEventCommand(activeClip.id, { id: `${activeClip.id}-land-${activeClip.events.length}`, time: timelineCurrentTime, type: "land", payload: { strength: 1 } }))} disabled={!activeClip}>
+                Land
+              </Button>
+              <Button size="sm" type="button" variant="outline" onClick={() => activeClip && runCommand(createSelectTrackKeysCommand(activeClip.id, timelineTrackId))} disabled={!activeClip}>
+                Select Track
+              </Button>
+              <Button size="sm" type="button" variant="outline" disabled={!editorState.project.timeline.selectedKeyIds.length} onClick={() => runCommand(createScaleSelectedKeysCommand(1.25))}>
+                Scale Keys
+              </Button>
+              <Button size="sm" type="button" variant="outline" disabled={!editorState.project.timeline.selectedKeyIds.length} onClick={() => runCommand(createDeleteSelectedKeysCommand())}>
+                Delete Keys
               </Button>
               <Button size="sm" type="button" variant="outline" disabled={!editorState.project.timeline.selectedKeyIds.length} onClick={() => runCommand(createCopySelectedKeysCommand())}>
                 Copy Keys

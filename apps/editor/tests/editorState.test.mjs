@@ -19,6 +19,7 @@ import {
   createChangeCurveCommand,
   createCopyPoseCommand,
   createCopySelectedKeysCommand,
+  createDeleteSelectedKeysCommand,
   createBindPartToBoneCommand,
   createDeleteBoneCommand,
   createEditPathPointCommand,
@@ -46,6 +47,8 @@ import {
   createSetTransitionConditionsCommand,
   createSetKeyframeTangentsCommand,
   createRetimeClipCommand,
+  createScaleSelectedKeysCommand,
+  createSelectTrackKeysCommand,
   createSetTimelineSelectionCommand,
   createSetParentCommand,
   createSimplifyPartPathCommand,
@@ -455,6 +458,22 @@ test("timeline moves selected keys together with undo", () => {
   assert.equal(undone.project.animations.walk.tracks["head.rotation"].find((key) => key.id === "walk-head-1")?.time, 0.42);
 });
 
+test("timeline can select track keys scale selected keys and delete selection", () => {
+  const selectedTrack = executeCommand(freshContainer(), createSelectTrackKeysCommand("walk", "body.x"));
+  const selectedIds = selectedTrack.project.animations.walk.tracks["body.x"].map((key) => key.id);
+  assert.deepEqual(selectedTrack.project.timeline.selectedKeyIds, selectedIds);
+
+  const scaled = executeCommand(selectedTrack, createScaleSelectedKeysCommand(1.25));
+  assert.equal(scaled.project.animations.walk.tracks["body.x"][1].time, 0.5333333333333333);
+
+  const deleted = executeCommand(scaled, createDeleteSelectedKeysCommand());
+  assert.equal(deleted.project.animations.walk.tracks["body.x"], undefined);
+  assert.deepEqual(deleted.project.timeline.selectedKeyIds, []);
+
+  const undone = undo(deleted);
+  assert.deepEqual(undone.project.animations.walk.tracks["body.x"], scaled.project.animations.walk.tracks["body.x"]);
+});
+
 test("timeline retime, reverse, normalize loop, events, and markers are undoable", () => {
   const retimed = executeCommand(freshContainer(), createRetimeClipCommand("walk", 1.44));
   assert.equal(retimed.project.animations.walk.duration, 1.44);
@@ -468,11 +487,15 @@ test("timeline retime, reverse, normalize loop, events, and markers are undoable
 
   const marked = executeCommand(normalized, createAddTimelineMarkerCommand("walk", { id: "breakdown", time: 0.5, label: "Breakdown" }));
   const evented = executeCommand(marked, createAddTimelineEventCommand("walk", { id: "cue", time: 0.5, type: "cue" }));
+  const footstep = executeCommand(evented, createAddTimelineEventCommand("walk", { id: "footstep", time: 0.25, type: "footstep", payload: { foot: "front" } }));
   assert.ok(evented.project.animations.walk.markers.some((marker) => marker.id === "breakdown"));
   assert.ok(evented.project.animations.walk.events.some((event) => event.id === "cue"));
+  assert.deepEqual(footstep.project.animations.walk.events.find((event) => event.id === "footstep")?.payload, { foot: "front" });
 
-  const undone = undo(evented);
-  assert.equal(undone.project.animations.walk.events.some((event) => event.id === "cue"), false);
+  const undone = undo(footstep);
+  assert.equal(undone.project.animations.walk.events.some((event) => event.id === "footstep"), false);
+  const undoneCue = undo(undone);
+  assert.equal(undoneCue.project.animations.walk.events.some((event) => event.id === "cue"), false);
 });
 
 test("curve presets, tangents, and preview state are undoable", () => {

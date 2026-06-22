@@ -1365,6 +1365,54 @@ export function createSetTimelineSelectionCommand(clipId: string, keyIds: readon
   };
 }
 
+export function createSelectTrackKeysCommand(clipId: string, trackId: string): EditorCommand {
+  let previous: TimelineState | undefined;
+  return {
+    id: `timeline-select-track:${clipId}:${trackId}`,
+    label: "Select track keys",
+    do: (state) => {
+      previous = state.timeline;
+      const keyIds = state.animations[clipId]?.tracks[trackId]?.map((key) => key.id) ?? [];
+      return { ...state, timeline: { ...state.timeline, selectedClipId: clipId, selectedKeyIds: keyIds } };
+    },
+    undo: (state) => (previous ? { ...state, timeline: previous } : state)
+  };
+}
+
+export function createDeleteSelectedKeysCommand(): EditorCommand {
+  let previous: AnimationClip | undefined;
+  let previousTimeline: TimelineState | undefined;
+  return {
+    id: "timeline-delete-selected-keys",
+    label: "Delete selected keys",
+    do: (state) => {
+      const clip = state.animations[state.timeline.selectedClipId];
+      if (!clip || !state.timeline.selectedKeyIds.length) {
+        return state;
+      }
+      previous = clip;
+      previousTimeline = state.timeline;
+      const selected = new Set(state.timeline.selectedKeyIds);
+      return {
+        ...markDirty(state, clip.id, "animations"),
+        animations: {
+          ...state.animations,
+          [clip.id]: {
+            ...clip,
+            tracks: Object.fromEntries(
+              Object.entries(clip.tracks)
+                .map(([trackId, keys]) => [trackId, keys.filter((key) => !selected.has(key.id))] as const)
+                .filter(([, keys]) => keys.length)
+            )
+          }
+        },
+        timeline: { ...state.timeline, selectedKeyIds: [] }
+      };
+    },
+    undo: (state) => (previous && previousTimeline ? { ...markDirty(state, previous.id, "animations"), animations: { ...state.animations, [previous.id]: previous }, timeline: previousTimeline } : state)
+  };
+}
+
 export function createCopySelectedKeysCommand(): EditorCommand {
   let previous: readonly TimelineClipboardKey[] = [];
   return {
