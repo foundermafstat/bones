@@ -946,6 +946,39 @@ export function createApplyPoseCommand(poseId: string): EditorCommand {
   };
 }
 
+export function createApplyPoseBlendCommand(poseId: string, weight: number): EditorCommand {
+  let previous: Readonly<Record<string, BoneTransform>> = {};
+  const clamped = Math.max(0, Math.min(1, weight));
+  return {
+    id: `apply-pose-blend:${poseId}:${clamped}`,
+    label: "Apply pose blend",
+    do: (state) => {
+      const pose = state.poses[poseId];
+      if (!pose) {
+        return state;
+      }
+      previous = Object.fromEntries(
+        Object.keys(pose.boneTransforms)
+          .map((boneId): [string, BoneTransform | undefined] => [boneId, state.bones[boneId]])
+          .filter((entry): entry is [string, BoneTransform] => Boolean(entry[1]))
+      );
+      return {
+        ...markDirty(state, poseId, "poses"),
+        bones: {
+          ...state.bones,
+          ...Object.fromEntries(
+            Object.entries(pose.boneTransforms).flatMap(([boneId, target]) => {
+              const current = state.bones[boneId];
+              return current ? [[boneId, blendTransform(current, target, clamped)] as const] : [];
+            })
+          )
+        }
+      };
+    },
+    undo: (state) => ({ ...markDirty(state, poseId, "poses"), bones: { ...state.bones, ...previous } })
+  };
+}
+
 export function createPoseFromCurrentCommand(poseId: string, name: string, tags: readonly string[] = []): EditorCommand {
   return {
     id: `create-pose:${poseId}`,
@@ -1022,6 +1055,86 @@ export function createMirrorPoseCommand(poseId: string, nextId: string): EditorC
       const { [nextId]: _removed, ...poses } = state.poses;
       return { ...markDirty(state, nextId, "poses"), poses };
     }
+  };
+}
+
+export function createBlendPoseCommand(fromPoseId: string, toPoseId: string, nextId: string, weight: number): EditorCommand {
+  const clamped = Math.max(0, Math.min(1, weight));
+  return {
+    id: `blend-pose:${fromPoseId}:${toPoseId}:${nextId}:${clamped}`,
+    label: "Blend pose",
+    do: (state) => {
+      const fromPose = state.poses[fromPoseId];
+      const toPose = state.poses[toPoseId];
+      if (!fromPose || !toPose || state.poses[nextId]) {
+        return state;
+      }
+      const boneIds = Array.from(new Set([...Object.keys(fromPose.boneTransforms), ...Object.keys(toPose.boneTransforms)]));
+      const boneTransforms = Object.fromEntries(
+        boneIds.flatMap((boneId) => {
+          const from = fromPose.boneTransforms[boneId] ?? state.bones[boneId];
+          const to = toPose.boneTransforms[boneId] ?? state.bones[boneId];
+          return from && to ? [[boneId, blendTransform(from, to, clamped)] as const] : [];
+        })
+      );
+      return {
+        ...markDirty(state, nextId, "poses"),
+        poses: {
+          ...state.poses,
+          [nextId]: {
+            id: nextId,
+            name: `${fromPose.name} -> ${toPose.name} ${(clamped * 100).toFixed(0)}%`,
+            boneTransforms,
+            tags: Array.from(new Set([...fromPose.tags, ...toPose.tags, "blend"]))
+          }
+        }
+      };
+    },
+    undo: (state) => {
+      const { [nextId]: _removed, ...poses } = state.poses;
+      return { ...markDirty(state, nextId, "poses"), poses };
+    }
+  };
+}
+
+export function createPoseToKeyframesCommand(poseId: string, clipId: string, time: number): EditorCommand {
+  let previous: AnimationClip | undefined;
+  return {
+    id: `pose-to-keys:${poseId}:${clipId}:${time}`,
+    label: "Key pose",
+    do: (state) => {
+      const pose = state.poses[poseId];
+      const clip = state.animations[clipId];
+      if (!pose || !clip) {
+        return state;
+      }
+      previous = clip;
+      const nextTracks: Record<string, readonly Keyframe[]> = { ...clip.tracks };
+      for (const [boneId, transform] of Object.entries(pose.boneTransforms)) {
+        for (const property of ["x", "y", "rotation", "scaleX", "scaleY"] as const) {
+          const trackId = `${boneId}.${property}`;
+          const value = transform[property];
+          const keyframe: Keyframe = { id: `${clipId}-${poseId}-${trackId}-${time}`, time, value, interpolation: "bezier", curve: [0.25, 0, 0.35, 1], curvePreset: "easeInOut" };
+          nextTracks[trackId] = upsertKeyframe(nextTracks[trackId] ?? [], keyframe);
+        }
+      }
+      return {
+        ...markDirty(state, clipId, "animations"),
+        animations: {
+          ...state.animations,
+          [clipId]: {
+            ...clip,
+            tracks: nextTracks
+          }
+        },
+        timeline: {
+          ...state.timeline,
+          selectedClipId: clipId,
+          selectedKeyIds: Object.values(nextTracks).flatMap((keys) => keys.filter((key) => Math.abs(key.time - time) < 0.0001).map((key) => key.id))
+        }
+      };
+    },
+    undo: (state) => (previous ? { ...markDirty(state, clipId, "animations"), animations: { ...state.animations, [clipId]: previous } } : state)
   };
 }
 
@@ -1931,6 +2044,17 @@ function clonePose(pose: PoseDefinition): PoseDefinition {
   };
 }
 
+function blendTransform(from: BoneTransform, to: BoneTransform, weight: number): BoneTransform {
+  const mix = (a: number, b: number) => Number((a + (b - a) * weight).toFixed(4));
+  return {
+    x: mix(from.x, to.x),
+    y: mix(from.y, to.y),
+    rotation: mix(from.rotation, to.rotation),
+    scaleX: mix(from.scaleX, to.scaleX),
+    scaleY: mix(from.scaleY, to.scaleY)
+  };
+}
+
 function mirrorBoneId(boneId: string): string {
   if (boneId.includes("Front")) {
     return boneId.replace("Front", "Back");
@@ -1959,6 +2083,11 @@ function updateClipTrack(state: EditorProjectState, clipId: string, trackId: str
       }
     }
   };
+}
+
+function upsertKeyframe(keys: readonly Keyframe[], keyframe: Keyframe): readonly Keyframe[] {
+  const nextKeys = keys.filter((key) => Math.abs(key.time - keyframe.time) > 0.0001);
+  return [...nextKeys, keyframe].sort((a, b) => a.time - b.time);
 }
 
 function updateClip(state: EditorProjectState, clipId: string, updater: (clip: AnimationClip) => AnimationClip): EditorProjectState {

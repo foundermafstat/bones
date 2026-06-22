@@ -8,6 +8,8 @@ import {
   beginProjectTransaction,
   commitProjectTransaction,
   createApplyPoseCommand,
+  createApplyPoseBlendCommand,
+  createBlendPoseCommand,
   createAddKeyframeCommand,
   createAddTimelineEventCommand,
   createAddTimelineMarkerCommand,
@@ -29,6 +31,7 @@ import {
   createNormalizeLoopCommand,
   createPasteKeysCommand,
   createPastePoseCommand,
+  createPoseToKeyframesCommand,
   createRenameBoneCommand,
   createReverseClipCommand,
   createRotateBoneCommand,
@@ -363,6 +366,41 @@ test("copy and paste pose create an undoable pose copy", () => {
   const undone = undo(pasted);
   assert.equal(undone.project.poses.jump_peak_pasted, undefined);
   assert.equal(undone.project.poseClipboard?.id, "jump_peak");
+});
+
+test("pose blend applies weighted transforms and creates reusable blended pose", () => {
+  const project = structuredClone(initialEditorProject);
+  project.poses.pose_a = {
+    id: "pose_a",
+    name: "Pose A",
+    boneTransforms: { body: { x: 0, y: -250, rotation: 0, scaleX: 1, scaleY: 1 } },
+    tags: ["a"]
+  };
+  project.poses.pose_b = {
+    id: "pose_b",
+    name: "Pose B",
+    boneTransforms: { body: { x: 20, y: -230, rotation: 1, scaleX: 1.2, scaleY: 0.8 } },
+    tags: ["b"]
+  };
+
+  const applied = executeCommand(freshContainer(project), createApplyPoseBlendCommand("pose_b", 0.5));
+  assert.deepEqual(applied.project.bones.body, { x: 10, y: -240, rotation: 0.5, scaleX: 1.1, scaleY: 0.9 });
+
+  const blended = executeCommand(freshContainer(project), createBlendPoseCommand("pose_a", "pose_b", "pose_ab", 0.25));
+  assert.deepEqual(blended.project.poses.pose_ab.boneTransforms.body, { x: 5, y: -245, rotation: 0.25, scaleX: 1.05, scaleY: 0.95 });
+  assert.deepEqual(blended.project.poses.pose_ab.tags, ["a", "b", "blend"]);
+});
+
+test("pose to keyframes writes transform tracks at current time", () => {
+  const keyed = executeCommand(freshContainer(), createPoseToKeyframesCommand("jump_start", "jump", 0.1));
+
+  assert.equal(keyed.project.animations.jump.tracks["body.x"].find((key) => key.time === 0.1)?.value, 0);
+  assert.equal(keyed.project.animations.jump.tracks["body.y"].find((key) => key.time === 0.1)?.value, -244);
+  assert.equal(keyed.project.animations.jump.tracks["body.rotation"].find((key) => key.time === 0.1)?.value, -0.06);
+  assert.ok(keyed.project.timeline.selectedKeyIds.some((id) => id.includes("jump_start-body.rotation")));
+
+  const undone = undo(keyed);
+  assert.deepEqual(undone.project.animations.jump, initialEditorProject.animations.jump);
 });
 
 test("timeline creates clips and copies selected keys with snapping", () => {

@@ -52,11 +52,14 @@ import {
   createSmoothPartPathCommand,
   createAddAnimationTrackCommand,
   createApplyPoseCommand,
+  createApplyPoseBlendCommand,
+  createBlendPoseCommand,
   createCopyPoseCommand,
   createDuplicatePoseCommand,
   createMirrorPoseCommand,
   createPastePoseCommand,
   createPoseFromCurrentCommand,
+  createPoseToKeyframesCommand,
   createRenamePoseCommand,
   createUpdatePoseTagsCommand,
   createAddKeyframeCommand,
@@ -236,6 +239,7 @@ export default function EditorPage() {
   const [dragBone, setDragBone] = useState<{ readonly boneId: string; readonly point: readonly [number, number]; readonly handle: "head" | "tail" } | null>(null);
   const [dragTimelineKey, setDragTimelineKey] = useState<{ readonly clipId: string; readonly trackId: string; readonly keyframeId: string; readonly time: number } | null>(null);
   const [selectedPoseId, setSelectedPoseId] = useState("idle_neutral");
+  const [poseBlendWeight, setPoseBlendWeight] = useState(0.5);
   const [selectedPartId, setSelectedPartId] = useState("bodyShape");
   const [newPartId, setNewPartId] = useState("testSvgShape");
   const [newPartSource, setNewPartSource] = useState("/assets/shadow-hero-silhouette/part_01_rear_head_hair.svg");
@@ -307,6 +311,9 @@ export default function EditorPage() {
   const selectedPathClosed = selectedPart?.pathCommands?.at(-1)?.type === "Z";
   const poseIds = Object.keys(editorState.project.poses);
   const selectedPose = editorState.project.poses[selectedPoseId] ?? (poseIds[0] ? editorState.project.poses[poseIds[0]] : undefined);
+  const selectedPoseIndex = Math.max(0, poseIds.indexOf(selectedPose?.id ?? ""));
+  const nextPoseId = poseIds.length ? poseIds[(selectedPoseIndex + 1) % poseIds.length] : undefined;
+  const nextPose = nextPoseId ? editorState.project.poses[nextPoseId] : undefined;
   const selectedPoseTagText = selectedPose?.tags.join(", ") ?? "";
   const clipIds = Object.keys(editorState.project.animations);
   const authorClip = editorState.project.animations[timelineAuthorClipId] ?? editorState.project.animations[editorState.project.timeline.selectedClipId];
@@ -1576,6 +1583,12 @@ export default function EditorPage() {
                     </SelectContent>
                   </Select>
                   <p className="line-clamp-2 text-xs text-muted-foreground">{selectedPoseTagText || "untagged"}</p>
+                  <div className="grid grid-cols-[1fr_auto] gap-1">
+                    <Input className="h-7 text-xs" type="number" min={0} max={1} step={0.05} value={poseBlendWeight} onChange={(event) => setPoseBlendWeight(clampPanelSize(Number(event.target.value), 0, 1))} aria-label="Pose blend weight" />
+                    <Button size="sm" type="button" variant="outline" onClick={() => selectedPose && runCommand(createApplyPoseBlendCommand(selectedPose.id, poseBlendWeight))} disabled={!selectedPose}>
+                      Apply Blend
+                    </Button>
+                  </div>
                   <div className="grid grid-cols-2 gap-1">
                     <Button size="sm" type="button" variant="outline" onClick={() => selectedPose && runCommand(createApplyPoseCommand(selectedPose.id))} disabled={!selectedPose}>
                       Apply
@@ -1601,7 +1614,16 @@ export default function EditorPage() {
                     <Button size="sm" type="button" variant="outline" onClick={() => selectedPose && runCommand(createUpdatePoseTagsCommand(selectedPose.id, Array.from(new Set([...selectedPose.tags, "reviewed"]))))} disabled={!selectedPose}>
                       Tag
                     </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => selectedPose && nextPose && runCommand(createBlendPoseCommand(selectedPose.id, nextPose.id, `${selectedPose.id}_${nextPose.id}_blend`, poseBlendWeight))} disabled={!selectedPose || !nextPose}>
+                      Blend Pose
+                    </Button>
+                    <Button size="sm" type="button" variant="outline" onClick={() => selectedPose && activeClip && runCommand(createPoseToKeyframesCommand(selectedPose.id, activeClip.id, clampPanelSize(timelineCurrentTime, 0, activeClip.duration)))} disabled={!selectedPose || !activeClip}>
+                      Key Pose
+                    </Button>
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Blend target: {nextPose?.name ?? "none"} / key time {activeClip ? clampPanelSize(timelineCurrentTime, 0, activeClip.duration).toFixed(2) : "none"}
+                  </p>
                 </CardContent>
               </InspectorSection>
               <InspectorSection title="Curve">
