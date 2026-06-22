@@ -1,6 +1,7 @@
 import type { EditorProjectState } from "./editorState";
 import { initialEditorProject } from "./editorState";
 import { fromSourceProject, toSourceProject } from "./editorSourceProject";
+import { vectorizeSvgParts } from "./editorVectorImport";
 import { compileRig } from "@bones/compiler";
 
 export const EDITOR_DRAFT_KEY = "bones:editor:draft:v1";
@@ -54,11 +55,16 @@ export function parseImportedProject(json: string): ProjectImportResult {
   }
 }
 
-export function createProjectExportBundle(project: EditorProjectState): ProjectExportBundle {
+export async function createProjectExportBundle(project: EditorProjectState, loadText?: (assetPath: string) => Promise<string>): Promise<ProjectExportBundle> {
   try {
-    const source = toSourceProject(project);
+    const inputSvgParts = Object.values(project.parts).filter((part) => part.type === "svg").map((part) => part.id);
+    const vectorProject = await vectorizeSvgParts(project, loadText);
+    const source = toSourceProject(vectorProject);
     const compiled = compileRig(source);
     const svgParts = source.rigs.flatMap((rig) => (rig.parts ?? []).filter((part) => part.type === "svg").map((part) => part.id));
+    if (svgParts.length) {
+      throw new Error(`Production export still contains SVG parts: ${svgParts.join(", ")}.`);
+    }
     return {
       files: {
         "hero.source.rig.json": JSON.stringify(source, null, 2),
@@ -70,7 +76,7 @@ export function createProjectExportBundle(project: EditorProjectState): ProjectE
       validation: {
         ok: true,
         errors: [],
-        warnings: svgParts.length ? [`Production export still contains SVG parts: ${svgParts.join(", ")}`] : []
+        warnings: inputSvgParts.length ? [`SVG parts vectorized to path parts for production export: ${inputSvgParts.join(", ")}.`] : []
       }
     };
   } catch (error) {

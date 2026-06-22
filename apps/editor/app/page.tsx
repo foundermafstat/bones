@@ -456,15 +456,19 @@ export default function EditorPage() {
     setDragTimelineKey(null);
   };
   const exportBundle = async () => {
-    const bundle = createProjectExportBundle(editorState.project);
+    const bundle = await createProjectExportBundle(editorState.project);
     setLastExportBundle(bundle);
     if (!bundle.validation.ok) {
       setIoStatus(bundle.validation.errors.join("; "));
       return;
     }
     const json = JSON.stringify(bundle.files, null, 2);
-    await navigator.clipboard?.writeText(json);
-    setIoStatus(`copied ${json.length} bytes / ${Object.keys(bundle.files).length} files`);
+    try {
+      await navigator.clipboard?.writeText(json);
+      setIoStatus(`copied ${json.length} bytes / ${Object.keys(bundle.files).length} files`);
+    } catch {
+      setIoStatus(`export ready (${Object.keys(bundle.files).length} files); clipboard permission denied`);
+    }
   };
   const copyExportFiles = async () => {
     if (!lastExportBundle?.validation.ok) {
@@ -472,8 +476,12 @@ export default function EditorPage() {
       return;
     }
     const json = JSON.stringify(lastExportBundle.files, null, 2);
-    await navigator.clipboard?.writeText(json);
-    setIoStatus(`copied ${json.length} bytes / ${Object.keys(lastExportBundle.files).length} files`);
+    try {
+      await navigator.clipboard?.writeText(json);
+      setIoStatus(`copied ${json.length} bytes / ${Object.keys(lastExportBundle.files).length} files`);
+    } catch {
+      setIoStatus(`export ready (${Object.keys(lastExportBundle.files).length} files); clipboard permission denied`);
+    }
   };
   const copyExportFile = async (fileName: string) => {
     const contents = lastExportBundle?.files[fileName];
@@ -481,8 +489,12 @@ export default function EditorPage() {
       setIoStatus(`missing ${fileName}`);
       return;
     }
-    await navigator.clipboard?.writeText(contents);
-    setIoStatus(`copied ${fileName} (${contents.length} bytes)`);
+    try {
+      await navigator.clipboard?.writeText(contents);
+      setIoStatus(`copied ${fileName} (${contents.length} bytes)`);
+    } catch {
+      setIoStatus(`${fileName} ready; clipboard permission denied`);
+    }
   };
   const downloadExportFile = (fileName: string) => {
     const contents = lastExportBundle?.files[fileName];
@@ -501,8 +513,12 @@ export default function EditorPage() {
   const copySourceJson = async () => {
     try {
       const json = serializeEditorProject(editorState.project);
-      await navigator.clipboard?.writeText(json);
-      setIoStatus(`copied source JSON (${json.length} bytes)`);
+      try {
+        await navigator.clipboard?.writeText(json);
+        setIoStatus(`copied source JSON (${json.length} bytes)`);
+      } catch {
+        setIoStatus(`source JSON ready (${json.length} bytes); clipboard permission denied`);
+      }
     } catch (error) {
       setIoStatus(error instanceof Error ? error.message : "source JSON validation error");
     }
