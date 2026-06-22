@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   createAddBoneCommand,
+  createAddSvgPartCommand,
   createApplyPoseCommand,
   createAddTimelineEventCommand,
   createAddTimelineMarkerCommand,
@@ -10,6 +11,7 @@ import {
   createApplyCurvePresetCommand,
   createCopyPoseCommand,
   createCopySelectedKeysCommand,
+  createBindPartToBoneCommand,
   createEditPathPointCommand,
   createGroupedCommand,
   createMoveBoneCommand,
@@ -149,6 +151,30 @@ test("rename bone updates pose transform keys", () => {
 
   assert.equal(container.project.poses.test_pose.boneTransforms.body, undefined);
   assert.ok(container.project.poses.test_pose.boneTransforms.torso);
+});
+
+test("svg parts can be added and rebound through commands", () => {
+  const part = {
+    id: "testSvgShape",
+    boneId: "head",
+    type: "svg",
+    pivot: [0, 0],
+    points: [],
+    preset: undefined,
+    assetPath: "/assets/shadow-hero-silhouette/part_01_rear_head_hair.svg",
+    zIndex: 9
+  };
+  const added = executeCommand(freshContainer(), createAddSvgPartCommand(part));
+  assert.equal(added.project.parts.testSvgShape.type, "svg");
+  assert.equal(added.project.parts.testSvgShape.boneId, "head");
+  assert.equal(added.project.parts.testSvgShape.assetPath, part.assetPath);
+
+  const rebound = executeCommand(added, createBindPartToBoneCommand("testSvgShape", "body"));
+  assert.equal(rebound.project.parts.testSvgShape.boneId, "body");
+  assert.deepEqual(rebound.project.parts.testSvgShape.pivot, [0, 0]);
+
+  const undone = undo(rebound);
+  assert.equal(undone.project.parts.testSvgShape.boneId, "head");
 });
 
 test("pose apply restores bone transforms, deforms, and part properties", () => {

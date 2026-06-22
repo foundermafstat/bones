@@ -623,6 +623,48 @@ export function createBindProceduralPartCommand(partId: string, boneId: string, 
   };
 }
 
+export function createAddSvgPartCommand(part: ShapePart): EditorCommand {
+  let previous: ShapePart | undefined;
+  return {
+    id: `add-svg-part:${part.id}`,
+    label: "Add SVG part",
+    do(state) {
+      previous = state.parts[part.id];
+      if (!state.bones[part.boneId]) {
+        return state;
+      }
+      return { ...markDirty(state, part.id), parts: { ...state.parts, [part.id]: part } };
+    },
+    undo(state) {
+      if (previous) {
+        return { ...markDirty(state, part.id, "parts"), parts: { ...state.parts, [part.id]: previous } };
+      }
+      const { [part.id]: _removed, ...parts } = state.parts;
+      return { ...markDirty(state, part.id, "parts"), parts };
+    }
+  };
+}
+
+export function createBindPartToBoneCommand(partId: string, boneId: string): EditorCommand {
+  let previousBoneId: string | undefined;
+  return {
+    id: `bind-existing-part:${partId}:${boneId}`,
+    label: "Bind part to bone",
+    do(state) {
+      const part = state.parts[partId];
+      if (!part || !state.bones[boneId]) {
+        return state;
+      }
+      previousBoneId = part.boneId;
+      return { ...markDirty(state, partId), parts: { ...state.parts, [partId]: { ...part, boneId } } };
+    },
+    undo(state) {
+      const part = state.parts[partId];
+      return part && previousBoneId ? { ...markDirty(state, partId, "parts"), parts: { ...state.parts, [partId]: { ...part, boneId: previousBoneId } } } : state;
+    }
+  };
+}
+
 export function createEditPathPointCommand(partId: string, index: number, point?: readonly [number, number]): EditorCommand {
   let previous: ShapePart | undefined;
   const update = (state: EditorProjectState, nextPoint: readonly [number, number] | undefined) => {

@@ -30,12 +30,14 @@ import {
   createMoveBoneCommand,
   createRotateBoneCommand,
   createAddBoneCommand,
+  createAddSvgPartCommand,
   createDeleteBoneCommand,
   createRenameBoneCommand,
   createSetBoneMetadataCommand,
   createSetBoneTransformCommand,
   createSetParentCommand,
   createBindProceduralPartCommand,
+  createBindPartToBoneCommand,
   createEditPathPointCommand,
   createMirrorPathCommand,
   createSetPartDrawOrderCommand,
@@ -131,6 +133,11 @@ export default function EditorPage() {
   const [dragPoint, setDragPoint] = useState<{ readonly index: number; readonly point: readonly [number, number] } | null>(null);
   const [dragBone, setDragBone] = useState<{ readonly boneId: string; readonly point: readonly [number, number] } | null>(null);
   const [selectedPoseId, setSelectedPoseId] = useState("idle_neutral");
+  const [selectedPartId, setSelectedPartId] = useState("bodyShape");
+  const [newPartId, setNewPartId] = useState("testSvgShape");
+  const [newPartSource, setNewPartSource] = useState("/assets/shadow-hero-silhouette/part_01_rear_head_hair.svg");
+  const [newPartBoneId, setNewPartBoneId] = useState("head");
+  const [newPartDrawOrder, setNewPartDrawOrder] = useState(9);
   const [ioStatus, setIoStatus] = useState("ready");
   const [projectOrigin, setProjectOrigin] = useState<ProjectOrigin>("sample");
   const [lastExportBundle, setLastExportBundle] = useState<ProjectExportBundle | null>(null);
@@ -144,7 +151,8 @@ export default function EditorPage() {
   const rigPoints = useMemo(() => getRigWorldPoints(editorState.project), [editorState.project]);
   const displayedRigPoints = dragBone ? { ...rigPoints, [dragBone.boneId]: dragBone.point } : rigPoints;
   const rigViewBox = useMemo(() => getShapeViewBox(Object.values(displayedRigPoints)), [displayedRigPoints]);
-  const selectedPart = Object.values(editorState.project.parts).find((part) => part.boneId === selectedBone) ?? Object.values(editorState.project.parts)[0];
+  const partRows = useMemo(() => Object.values(editorState.project.parts).sort((left, right) => (left.zIndex ?? 0) - (right.zIndex ?? 0)), [editorState.project.parts]);
+  const selectedPart = editorState.project.parts[selectedPartId] ?? partRows.find((part) => part.boneId === selectedBone) ?? partRows[0];
   const shapePoints = dragPoint
     ? selectedPart?.points.map((point, index) => (index === dragPoint.index ? dragPoint.point : point)) ?? []
     : selectedPart?.points ?? [];
@@ -179,6 +187,7 @@ export default function EditorPage() {
     setEditorState({ project, history: { past: [], future: [] } });
     setProjectOrigin(origin);
     setSelectedPoseId(poseId);
+    setSelectedPartId(Object.keys(project.parts)[0] ?? "");
     setSelectedPointIndex(null);
     setDragPoint(null);
     setDragBone(null);
@@ -262,6 +271,17 @@ export default function EditorPage() {
     }
     const vectorPart = await vectorizeSvgPart(selectedPart);
     runCommand(createSetPartPathCommand(vectorPart.id, vectorPart.points, vectorPart.pathCommands, vectorPart.svgViewBox));
+  };
+  const addSvgPart = () => {
+    const id = newPartId.trim();
+    const assetPath = newPartSource.trim();
+    if (!id || !assetPath || !editorState.project.bones[newPartBoneId]) {
+      setIoStatus("part id, source, and bone are required");
+      return;
+    }
+    runCommand(createAddSvgPartCommand({ id, boneId: newPartBoneId, type: "svg", pivot: [0, 0], points: [], preset: undefined, assetPath, zIndex: newPartDrawOrder }));
+    setSelectedPartId(id);
+    setIoStatus(`added SVG part ${id}`);
   };
   const toolbarGroups: { label: string; actions: ToolbarAction[] }[] = [
     {
@@ -700,6 +720,79 @@ export default function EditorPage() {
                     </Button>
                     <Button size="sm" type="button" variant="outline" onClick={() => selectedPart && runCommand(createSetPartDrawOrderCommand(selectedPart.id, (selectedPart.zIndex ?? 0) + 1))} disabled={!selectedPart}>
                       Layer +
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card size="sm">
+                <CardHeader>
+                  <CardTitle>Parts</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-2">
+                  <div className="grid max-h-36 gap-1 overflow-auto pr-1">
+                    {partRows.map((part) => (
+                      <Button
+                        className="h-auto justify-start px-2 py-1 text-left"
+                        key={part.id}
+                        type="button"
+                        variant={part.id === selectedPart?.id ? "default" : part.boneId === selectedBone ? "outline" : "ghost"}
+                        onClick={() => setSelectedPartId(part.id)}
+                      >
+                        <span className="grid min-w-0 gap-0.5">
+                          <span className="truncate text-xs">{part.id}</span>
+                          <span className="truncate text-[11px] opacity-75">
+                            {part.type} / {part.boneId} / z {part.zIndex ?? 0}
+                          </span>
+                          <span className="truncate text-[11px] opacity-75">{part.assetPath ?? "no asset"}</span>
+                        </span>
+                      </Button>
+                    ))}
+                  </div>
+                  <div className="grid gap-1">
+                    <Label className="text-xs text-muted-foreground">Bind to Bone</Label>
+                    <Select
+                      value={selectedPart?.boneId ?? ""}
+                      onValueChange={(boneId) => selectedPart && runCommand(createBindPartToBoneCommand(selectedPart.id, boneId))}
+                      disabled={!selectedPart}
+                    >
+                      <SelectTrigger className="h-7 w-full" aria-label="Bind part to bone">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {editorState.project.hierarchy.map((boneId) => (
+                            <SelectItem key={boneId} value={boneId}>
+                              {boneId}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Separator />
+                  <div className="grid gap-1">
+                    <Label className="text-xs text-muted-foreground">Add SVG Part</Label>
+                    <Input className="h-7 text-xs" value={newPartId} onChange={(event) => setNewPartId(event.target.value)} aria-label="New SVG part id" />
+                    <Input className="h-7 text-xs" value={newPartSource} onChange={(event) => setNewPartSource(event.target.value)} aria-label="New SVG source" />
+                    <div className="grid grid-cols-[1fr_72px] gap-1">
+                      <Select value={newPartBoneId} onValueChange={setNewPartBoneId}>
+                        <SelectTrigger className="h-7 w-full" aria-label="New SVG bone">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            {editorState.project.hierarchy.map((boneId) => (
+                              <SelectItem key={boneId} value={boneId}>
+                                {boneId}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                      <Input className="h-7 text-xs" type="number" value={newPartDrawOrder} onChange={(event) => setNewPartDrawOrder(Number(event.target.value))} aria-label="New SVG draw order" />
+                    </div>
+                    <Button size="sm" type="button" variant="outline" onClick={addSvgPart}>
+                      Add SVG Part
                     </Button>
                   </div>
                 </CardContent>
