@@ -568,6 +568,16 @@ test("state machine graph commands edit states, transitions, parameters, blend t
 
   const blend = executeCommand(parameter, createSetBlendTreeCommand("locomotion", { type: "1d", parameter: "absSpeed", children: [{ threshold: 0, clipId: "idle" }, { threshold: 80, clipId: "walk" }, { threshold: 150, clipId: "walk" }] }));
   assert.equal(blend.project.stateMachine.states.find((state) => state.id === "locomotion").blendTree.children.length, 3);
+  const normalizedBlend = executeCommand(
+    blend,
+    createSetBlendTreeCommand("locomotion", { type: "1d", parameter: "absSpeed", children: [{ threshold: 80, clipId: "walk" }, { threshold: 0, clipId: "idle" }, { threshold: 10, clipId: "missing" }] })
+  );
+  assert.deepEqual(normalizedBlend.project.stateMachine.states.find((state) => state.id === "locomotion").blendTree.children, [{ threshold: 0, clipId: "idle" }, { threshold: 80, clipId: "walk" }]);
+  const rejectedBlend = executeCommand(normalizedBlend, createSetStateMachineParameterCommand("wallContact", "left"));
+  assert.deepEqual(
+    executeCommand(rejectedBlend, createSetBlendTreeCommand("locomotion", { type: "1d", parameter: "wallContact", children: [{ threshold: 0, clipId: "idle" }] })).project.stateMachine.states.find((state) => state.id === "locomotion").blendTree,
+    normalizedBlend.project.stateMachine.states.find((state) => state.id === "locomotion").blendTree
+  );
 
   const preview = executeCommand(blend, createSetStateMachinePreviewCommand("idle", "walk", 0.9));
   assert.deepEqual(preview.project.stateMachine.preview, { fromStateId: "idle", toStateId: "walk", weight: 0.9 });

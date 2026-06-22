@@ -108,6 +108,7 @@ import {
   redo,
   undo,
   type CurvePreset,
+  type BlendTree1D,
   type EditorProjectState,
   type EditorTransition,
   type EditorTransitionCondition,
@@ -350,8 +351,13 @@ export default function EditorPage() {
   const visibleTimelineTracks = timelineTracks.slice(editorState.project.timeline.virtualWindow.startRow, editorState.project.timeline.virtualWindow.startRow + editorState.project.timeline.virtualWindow.rowCount);
   const stateIds = editorState.project.stateMachine.states.map((state) => state.id);
   const parameterIds = Object.keys(editorState.project.stateMachine.parameters);
+  const numericParameterIds = parameterIds.filter((parameterId) => typeof editorState.project.stateMachine.parameters[parameterId] === "number");
   const smTransitionId = `${smFromStateId}-${smToStateId}`;
   const selectedTransition = editorState.project.stateMachine.transitions.find((transition) => transition.id === smSelectedTransitionId) ?? editorState.project.stateMachine.transitions[0];
+  const selectedStateNode = editorState.project.stateMachine.states.find((state) => state.id === smFromStateId);
+  const selectedBlendTree = selectedStateNode?.blendTree ?? { type: "1d", parameter: numericParameterIds.includes("absSpeed") ? "absSpeed" : numericParameterIds[0] ?? "absSpeed", children: [{ threshold: 0, clipId: selectedStateNode?.clipId || clipIds[0] || "" }] } satisfies BlendTree1D;
+  const blendTreeParameterValue = Number(editorState.project.stateMachine.parameters[selectedBlendTree.parameter] ?? 0);
+  const selectedBlendWeights = useMemo(() => sampleBlendTreeWeights(selectedBlendTree, blendTreeParameterValue), [blendTreeParameterValue, selectedBlendTree]);
   const stateMachineSimulation = useMemo(() => evaluateStateMachinePreview(editorState.project.stateMachine), [editorState.project.stateMachine]);
   const stateMachineGraph = useMemo(() => {
     const states = editorState.project.stateMachine.states;
@@ -427,6 +433,28 @@ export default function EditorPage() {
     setSmSelectedTransitionId(transition.id);
     setSmConnectorStartId(null);
     runCommand(createTransitionCommand(transition));
+  };
+  const applyBlendTree = (blendTree: BlendTree1D) => {
+    if (!selectedStateNode) {
+      return;
+    }
+    runCommand(createSetBlendTreeCommand(selectedStateNode.id, blendTree));
+  };
+  const updateBlendTreeChild = (index: number, patch: Partial<BlendTree1D["children"][number]>) => {
+    applyBlendTree({ ...selectedBlendTree, children: selectedBlendTree.children.map((child, childIndex) => (childIndex === index ? { ...child, ...patch } : child)) });
+  };
+  const moveBlendTreeChild = (index: number, direction: -1 | 1) => {
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= selectedBlendTree.children.length) {
+      return;
+    }
+    const children = [...selectedBlendTree.children];
+    const [child] = children.splice(index, 1);
+    if (!child) {
+      return;
+    }
+    children.splice(nextIndex, 0, child);
+    applyBlendTree({ ...selectedBlendTree, children });
   };
   const timelineTimeFromLane = (lane: HTMLElement, clientX: number, duration: number) => {
     const rect = lane.getBoundingClientRect();
@@ -1860,9 +1888,83 @@ export default function EditorPage() {
                     <Button size="sm" type="button" variant="outline" disabled={!smFromStateId} onClick={() => runCommand(createDeleteStateMachineStateCommand(smFromStateId))}>
                       Delete State
                     </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createSetBlendTreeCommand("locomotion", { type: "1d", parameter: "absSpeed", children: [{ threshold: 0, clipId: "idle" }, { threshold: 80, clipId: "walk" }, { threshold: 150, clipId: "walk" }] }))}>
+                    <Button size="sm" type="button" variant="outline" disabled={!selectedStateNode} onClick={() => selectedStateNode && runCommand(createSetBlendTreeCommand(selectedStateNode.id, { type: "1d", parameter: "absSpeed", children: [{ threshold: 0, clipId: "idle" }, { threshold: 80, clipId: "walk" }, { threshold: 150, clipId: "walk" }] }))}>
                       Blend 1D
                     </Button>
+                  </div>
+                  <div className="grid gap-2 rounded-md border p-2">
+                    <div className="grid grid-cols-[1fr_auto] gap-1">
+                      <Select value={selectedBlendTree.parameter} onValueChange={(parameter) => applyBlendTree({ ...selectedBlendTree, parameter })}>
+                        <SelectTrigger className="h-7" aria-label="Blend tree parameter">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            {numericParameterIds.map((parameterId) => (
+                              <SelectItem key={parameterId} value={parameterId}>{parameterId}</SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                        onClick={() =>
+                          applyBlendTree({
+                            ...selectedBlendTree,
+                            children: [...selectedBlendTree.children, { threshold: (selectedBlendTree.children.at(-1)?.threshold ?? 0) + 40, clipId: clipIds[0] ?? "" }]
+                          })
+                        }
+                      >
+                        Add Threshold
+                      </Button>
+                    </div>
+                    {selectedBlendTree.children.map((child, index) => (
+                      <div className="grid grid-cols-[72px_1fr_repeat(3,auto)] gap-1" key={`${child.clipId}-${index}`}>
+                        <Input className="h-7 text-xs" type="number" value={child.threshold} onChange={(event) => updateBlendTreeChild(index, { threshold: Number(event.target.value) })} aria-label={`Blend threshold ${index}`} />
+                        <Select value={child.clipId} onValueChange={(clipId) => updateBlendTreeChild(index, { clipId })}>
+                          <SelectTrigger className="h-7" aria-label={`Blend clip ${index}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              {clipIds.map((clipId) => (
+                                <SelectItem key={clipId} value={clipId}>{clipId}</SelectItem>
+                              ))}
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                        <Button size="sm" type="button" variant="outline" disabled={index === 0} onClick={() => moveBlendTreeChild(index, -1)}>
+                          Up
+                        </Button>
+                        <Button size="sm" type="button" variant="outline" disabled={index === selectedBlendTree.children.length - 1} onClick={() => moveBlendTreeChild(index, 1)}>
+                          Down
+                        </Button>
+                        <Button size="sm" type="button" variant="outline" disabled={selectedBlendTree.children.length <= 1} onClick={() => applyBlendTree({ ...selectedBlendTree, children: selectedBlendTree.children.filter((_, childIndex) => childIndex !== index) })}>
+                          Remove
+                        </Button>
+                      </div>
+                    ))}
+                    <svg viewBox="0 0 220 34" className="h-9 w-full rounded border bg-background" role="img" aria-label="Blend tree weight graph">
+                      <line x1="8" x2="212" y1="18" y2="18" stroke="#cbd5e1" />
+                      {selectedBlendTree.children.map((child, index) => {
+                        const thresholds = selectedBlendTree.children.map((item) => item.threshold);
+                        const min = Math.min(...thresholds);
+                        const max = Math.max(...thresholds, min + 1);
+                        const x = 8 + ((child.threshold - min) / Math.max(1, max - min)) * 204;
+                        return (
+                          <g key={`${child.clipId}-${child.threshold}-${index}`}>
+                            <line x1={x} x2={x} y1="8" y2="28" stroke="#4f8cff" />
+                            <text fill="currentColor" fontSize="8" textAnchor="middle" x={x} y="31">{child.clipId}</text>
+                          </g>
+                        );
+                      })}
+                      <line x1={8 + ((blendTreeParameterValue - Math.min(...selectedBlendTree.children.map((item) => item.threshold))) / Math.max(1, Math.max(...selectedBlendTree.children.map((item) => item.threshold), Math.min(...selectedBlendTree.children.map((item) => item.threshold)) + 1) - Math.min(...selectedBlendTree.children.map((item) => item.threshold)))) * 204} x2={8 + ((blendTreeParameterValue - Math.min(...selectedBlendTree.children.map((item) => item.threshold))) / Math.max(1, Math.max(...selectedBlendTree.children.map((item) => item.threshold), Math.min(...selectedBlendTree.children.map((item) => item.threshold)) + 1) - Math.min(...selectedBlendTree.children.map((item) => item.threshold)))) * 204} y1="4" y2="30" stroke="#f97316" strokeWidth="2" />
+                    </svg>
+                    <p className="text-xs text-muted-foreground">
+                      blend {selectedBlendTree.parameter}={blendTreeParameterValue.toFixed(0)} / {selectedBlendWeights.map((entry) => `${entry.clipId}:${entry.weight.toFixed(2)}`).join(", ") || "select blend state"}
+                    </p>
                   </div>
                   <div className="grid grid-cols-2 gap-1">
                     <Select value={smFromStateId} onValueChange={setSmFromStateId}>
@@ -2345,6 +2447,32 @@ function getShapeViewBox(points: readonly (readonly [number, number])[]): ShapeV
 function sampleCubicBezierY(t: number, curve: readonly [number, number, number, number]): number {
   const u = 1 - t;
   return u * u * u * 0 + 3 * u * u * t * curve[1] + 3 * u * t * t * curve[3] + t * t * t;
+}
+
+function sampleBlendTreeWeights(blendTree: BlendTree1D, value: number): readonly { readonly clipId: string; readonly weight: number }[] {
+  const children = [...blendTree.children].sort((left, right) => left.threshold - right.threshold);
+  if (!children.length) {
+    return [];
+  }
+  if (value <= children[0]!.threshold) {
+    return [{ clipId: children[0]!.clipId, weight: 1 }];
+  }
+  const last = children[children.length - 1]!;
+  if (value >= last.threshold) {
+    return [{ clipId: last.clipId, weight: 1 }];
+  }
+  for (let index = 0; index < children.length - 1; index += 1) {
+    const lower = children[index]!;
+    const upper = children[index + 1]!;
+    if (value >= lower.threshold && value <= upper.threshold) {
+      const weight = (value - lower.threshold) / Math.max(1, upper.threshold - lower.threshold);
+      return [
+        { clipId: lower.clipId, weight: Number((1 - weight).toFixed(3)) },
+        { clipId: upper.clipId, weight: Number(weight.toFixed(3)) }
+      ].filter((entry) => entry.weight > 0);
+    }
+  }
+  return [{ clipId: last.clipId, weight: 1 }];
 }
 
 function getRigWorldPoints(project: EditorProjectState): Readonly<Record<string, readonly [number, number]>> {

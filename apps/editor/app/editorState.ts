@@ -1888,7 +1888,11 @@ export function createSetBlendTreeCommand(stateId: string, blendTree: BlendTree1
     label: "Set blend tree",
     do: (state) => {
       previous = state.stateMachine.states.find((item) => item.id === stateId);
-      return { ...markDirty(state, stateId, "stateMachine"), stateMachine: { ...state.stateMachine, states: state.stateMachine.states.map((item) => (item.id === stateId ? { ...item, blendTree } : item)) } };
+      const normalized = normalizeBlendTreeForProject(state, blendTree);
+      if (!previous || !normalized) {
+        return state;
+      }
+      return { ...markDirty(state, stateId, "stateMachine"), stateMachine: { ...state.stateMachine, states: state.stateMachine.states.map((item) => (item.id === stateId ? { ...item, blendTree: normalized } : item)) } };
     },
     undo: (state) => (previous ? { ...markDirty(state, stateId, "stateMachine"), stateMachine: { ...state.stateMachine, states: state.stateMachine.states.map((item) => (item.id === stateId ? previous! : item)) } } : state)
   };
@@ -2441,6 +2445,17 @@ function evaluateBlendTree(blendTree: BlendTree1D, parameterValue: number | bool
     { clipId: lower.clipId, weight: Number((1 - alpha).toFixed(3)) },
     { clipId: upper.clipId, weight: Number(alpha.toFixed(3)) }
   ].filter((entry) => entry.weight > 0);
+}
+
+function normalizeBlendTreeForProject(state: EditorProjectState, blendTree: BlendTree1D): BlendTree1D | undefined {
+  if (typeof state.stateMachine.parameters[blendTree.parameter] !== "number") {
+    return undefined;
+  }
+  const children = blendTree.children
+    .filter((child) => state.animations[child.clipId] && Number.isFinite(child.threshold))
+    .map((child) => ({ threshold: Number(child.threshold), clipId: child.clipId }))
+    .sort((left, right) => left.threshold - right.threshold);
+  return children.length ? { type: "1d", parameter: blendTree.parameter, children } : undefined;
 }
 
 function renameAnimation(state: EditorProjectState, clipId: string, nextId: string): EditorProjectState {
