@@ -29,6 +29,11 @@ EDITOR_URL=http://localhost:3000/ pnpm smoke:editor-browser
 - `scenarios` - проходят `idle`, `walk`, `jump`, `fall`, `land`;
 - `graph` - виден State Machine Graph;
 - `export` - export собирает `7 files ready`, включая `hero.compiled.json` и `hero.release-manifest.json`;
+- `layout.desktopPanelsVisible` - на 1440x900 видны Hierarchy, Inspector, Timeline и canvas viewport;
+- `layout.timelineExpandedCanvasStable` - после увеличения нижней панели canvas остается видимым и не схлопывается;
+- `layout.timelineCollapsedControlsClear` - после сворачивания timeline controls не пересекаются;
+- `layout.inspectorScroll` - right inspector умеет доскроллить export artifacts;
+- `layout.toolbarControlsClear` - toolbar controls не пересекаются;
 - `responsive` - editor остается видимым на mobile viewport;
 - `console.summary` - классификация browser warn/error;
 - `console.appIssues` / `consoleErrors` пустые;
@@ -52,7 +57,8 @@ Console classifier:
 5. В `Preview` нажать `idle`, `walk`, `jump`, `fall`, `land`; debug scenario должен меняться.
 6. В `State Machine` проверить видимость `State Machine Graph`.
 7. В `Timeline` перетащить keyframe; точка должна двигаться без layout jump.
-8. Нажать `Export`; ожидаемый результат - `7 files ready`, `hero.compiled.json`, `hero.release-manifest.json`, `hero.compiled.json.gz`.
-9. Изменить ширину окна до mobile-like размера; панели должны оставаться видимыми, без framework overlay.
+8. Увеличить и уменьшить нижнюю панель; персонаж/canvas не должен сплющиваться или исчезать, controls не должны налезать.
+9. Нажать `Export`; ожидаемый результат - `7 files ready`, `hero.compiled.json`, `hero.release-manifest.json`, `hero.compiled.json.gz`.
+10. Изменить ширину окна до mobile-like размера; панели должны оставаться видимыми, без framework overlay.
 
 Успех: все пункты проходят, export не содержит SVG в source/compiled runtime artifact, preview остается видимым после export, `SchemaValidationError` отсутствует.
