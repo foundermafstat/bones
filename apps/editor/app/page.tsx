@@ -130,6 +130,7 @@ import { evaluateRuntimeBudget, runtimePerformanceBudgets, type QualityPresetNam
 
 const modes = ["Rig", "Shape", "Pose", "Timeline", "Curve", "State Machine", "Procedural", "Preview"] as const;
 const stateMachineViewBox = { x: 0, y: 0, width: 640, height: 360 } as const;
+const curveEditorViewBox = { x: 0, y: 0, width: 120, height: 100 } as const;
 type ProjectOrigin = "sample" | "empty" | "draft" | "imported";
 
 const sampleProject = {
@@ -264,6 +265,7 @@ export default function EditorPage() {
   const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
   const [dragPoint, setDragPoint] = useState<{ readonly index: number; readonly point: readonly [number, number] } | null>(null);
   const [dragBone, setDragBone] = useState<{ readonly boneId: string; readonly point: readonly [number, number]; readonly handle: "head" | "tail" } | null>(null);
+  const [dragCurve, setDragCurve] = useState<{ readonly handleIndex: 0 | 1; readonly curve: readonly [number, number, number, number] } | null>(null);
   const [dragHierarchyBoneId, setDragHierarchyBoneId] = useState<string | null>(null);
   const [dragTimelineKey, setDragTimelineKey] = useState<{ readonly clipId: string; readonly trackId: string; readonly keyframeId: string; readonly time: number } | null>(null);
   const [selectedPoseId, setSelectedPoseId] = useState("idle_neutral");
@@ -361,14 +363,15 @@ export default function EditorPage() {
   const selectedTimelineKey = activeClip ? activeClip.tracks[selectedTimelineTrackId]?.find((key) => key.id === selectedKeyId) : undefined;
   const selectedTimelineEvent = activeClip ? activeClip.events.find((event) => event.id === selectedTimelineEventId) : undefined;
   const selectedCurve = selectedTimelineKey?.curve ?? [0, 0, 1, 1] as const;
-  const curvePath = `M 12 88 C ${12 + selectedCurve[0] * 96} ${88 - selectedCurve[1] * 72}, ${12 + selectedCurve[2] * 96} ${88 - selectedCurve[3] * 72}, 108 16`;
+  const displayedCurve = dragCurve?.curve ?? selectedCurve;
+  const curvePath = `M 12 88 C ${12 + displayedCurve[0] * 96} ${88 - displayedCurve[1] * 72}, ${12 + displayedCurve[2] * 96} ${88 - displayedCurve[3] * 72}, 108 16`;
   const selectedKeyCurvePreset = selectedTimelineKey?.curvePreset ?? (selectedTimelineKey?.interpolation === "bezier" ? "bezier" : selectedTimelineKey?.interpolation ?? "linear");
   const curveSamples = useMemo(
     () => Array.from({ length: 7 }, (_, index) => {
       const t = index / 6;
-      return { frame: Math.round(t * 60), value: sampleCubicBezierY(t, selectedCurve) };
+      return { frame: Math.round(t * 60), value: sampleCubicBezierY(t, displayedCurve) };
     }),
-    [selectedCurve]
+    [displayedCurve]
   );
   const timelineTracks = Array.from(new Set([...(activeClip ? Object.keys(activeClip.tracks) : []), ...sampleProject.tracks]));
   const emptyTimelineTracks = activeClip ? Object.entries(activeClip.tracks).filter(([, keys]) => keys.length === 0).map(([trackId]) => trackId) : [];
@@ -710,6 +713,7 @@ export default function EditorPage() {
     setSelectedPointIndex(null);
     setDragPoint(null);
     setDragBone(null);
+    setDragCurve(null);
     setDragHierarchyBoneId(null);
     setDragTimelineKey(null);
   };
@@ -765,6 +769,20 @@ export default function EditorPage() {
     } catch {
       setIoStatus("event payload JSON is invalid");
     }
+  };
+  const curveFromPoint = (handleIndex: 0 | 1, point: readonly [number, number]): readonly [number, number, number, number] => {
+    const nextCurve = [...displayedCurve] as [number, number, number, number];
+    nextCurve[handleIndex * 2] = Number(clampPanelSize((point[0] - 12) / 96, 0, 1).toFixed(3));
+    nextCurve[handleIndex * 2 + 1] = Number(clampPanelSize((88 - point[1]) / 72, 0, 1).toFixed(3));
+    return nextCurve;
+  };
+  const commitCurveDrag = () => {
+    if (!activeClip || !selectedTimelineKey || !dragCurve) {
+      setDragCurve(null);
+      return;
+    }
+    runCommand(createEditBezierHandlesCommand(activeClip.id, selectedTimelineTrackId, selectedTimelineKey.id, dragCurve.curve));
+    setDragCurve(null);
   };
   const copyExportFiles = async () => {
     if (!lastExportBundle?.validation.ok) {
@@ -2017,13 +2035,48 @@ export default function EditorPage() {
               <InspectorSection title="Curve">
                 <CardContent className="grid gap-2">
                   <p className="line-clamp-2 text-xs text-muted-foreground">{activeTrack.map((key) => `${key.id}: ${key.interpolation}`).join(", ")}</p>
-                  <svg viewBox="0 0 120 100" className="h-28 w-full rounded-md border bg-muted" role="img" aria-label="Curve graph">
+                  <svg
+                    viewBox="0 0 120 100"
+                    className="h-28 w-full rounded-md border bg-muted touch-none"
+                    role="img"
+                    aria-label="Curve graph"
+                    onPointerMove={(event) => {
+                      if (!dragCurve) {
+                        return;
+                      }
+                      setDragCurve({ handleIndex: dragCurve.handleIndex, curve: curveFromPoint(dragCurve.handleIndex, svgPointFromEvent(event, curveEditorViewBox)) });
+                    }}
+                    onPointerUp={commitCurveDrag}
+                    onPointerCancel={() => setDragCurve(null)}
+                  >
                     <path d="M 12 88 H 108 M 12 88 V 16" fill="none" stroke="hsl(var(--border))" strokeWidth="1" />
                     <path d={curvePath} fill="none" stroke="hsl(var(--primary))" strokeWidth="3" />
-                    <line x1="12" y1="88" x2={12 + selectedCurve[0] * 96} y2={88 - selectedCurve[1] * 72} stroke="hsl(var(--muted-foreground))" strokeDasharray="4 3" />
-                    <line x1="108" y1="16" x2={12 + selectedCurve[2] * 96} y2={88 - selectedCurve[3] * 72} stroke="hsl(var(--muted-foreground))" strokeDasharray="4 3" />
-                    <circle cx={12 + selectedCurve[0] * 96} cy={88 - selectedCurve[1] * 72} r="4" fill="hsl(var(--primary))" />
-                    <circle cx={12 + selectedCurve[2] * 96} cy={88 - selectedCurve[3] * 72} r="4" fill="hsl(var(--primary))" />
+                    <line x1="12" y1="88" x2={12 + displayedCurve[0] * 96} y2={88 - displayedCurve[1] * 72} stroke="hsl(var(--muted-foreground))" strokeDasharray="4 3" />
+                    <line x1="108" y1="16" x2={12 + displayedCurve[2] * 96} y2={88 - displayedCurve[3] * 72} stroke="hsl(var(--muted-foreground))" strokeDasharray="4 3" />
+                    {([0, 1] as const).map((handleIndex) => {
+                      const xValue = handleIndex === 0 ? displayedCurve[0] : displayedCurve[2];
+                      const yValue = handleIndex === 0 ? displayedCurve[1] : displayedCurve[3];
+                      return (
+                        <circle
+                          key={handleIndex}
+                          cx={12 + xValue * 96}
+                          cy={88 - yValue * 72}
+                          r={dragCurve?.handleIndex === handleIndex ? 5.5 : 4}
+                          fill="hsl(var(--primary))"
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Curve drag handle ${handleIndex + 1}`}
+                          onPointerDown={(event) => {
+                            if (!activeClip || !selectedTimelineKey) {
+                              return;
+                            }
+                            event.preventDefault();
+                            event.currentTarget.setPointerCapture(event.pointerId);
+                            setDragCurve({ handleIndex, curve: displayedCurve });
+                          }}
+                        />
+                      );
+                    })}
                   </svg>
                   <div className="grid grid-cols-2 gap-1">
                     <Select
