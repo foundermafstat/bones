@@ -264,6 +264,7 @@ export default function EditorPage() {
   const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
   const [dragPoint, setDragPoint] = useState<{ readonly index: number; readonly point: readonly [number, number] } | null>(null);
   const [dragBone, setDragBone] = useState<{ readonly boneId: string; readonly point: readonly [number, number]; readonly handle: "head" | "tail" } | null>(null);
+  const [dragHierarchyBoneId, setDragHierarchyBoneId] = useState<string | null>(null);
   const [dragTimelineKey, setDragTimelineKey] = useState<{ readonly clipId: string; readonly trackId: string; readonly keyframeId: string; readonly time: number } | null>(null);
   const [selectedPoseId, setSelectedPoseId] = useState("idle_neutral");
   const [poseBlendWeight, setPoseBlendWeight] = useState(0.5);
@@ -315,6 +316,7 @@ export default function EditorPage() {
   const [ioStatus, setIoStatus] = useState("ready");
   const [lastCommand, setLastCommand] = useState("none");
   const [projectOrigin, setProjectOrigin] = useState<ProjectOrigin>("sample");
+  const [confirmDeleteBoneId, setConfirmDeleteBoneId] = useState("");
   const [availableDraft, setAvailableDraft] = useState<DraftMetadata | null>(null);
   const [lastExportBundle, setLastExportBundle] = useState<ProjectExportBundle | null>(null);
   const [pendingImport, setPendingImport] = useState<ProjectImportResult | null>(null);
@@ -434,6 +436,19 @@ export default function EditorPage() {
     [editorState.project.stateMachine, platformerDebug.params]
   );
   const previewEvents = activeClip?.events ?? [];
+  const canDropBoneOnParent = (boneId: string, parentId: string) => {
+    if (boneId === "root" || boneId === parentId) {
+      return false;
+    }
+    let cursor = editorState.project.parents[parentId] ?? null;
+    while (cursor) {
+      if (cursor === boneId) {
+        return false;
+      }
+      cursor = editorState.project.parents[cursor] ?? null;
+    }
+    return true;
+  };
   const addTimelineEventPreset = (type: string, category: "gameplay" | "audio" | "vfx" | "camera" | "debug", payload?: Readonly<Record<string, JsonValue>>, duration?: number) => {
     if (!activeClip) {
       return;
@@ -678,6 +693,7 @@ export default function EditorPage() {
   useEffect(() => {
     setRenameBoneId(selectedBone);
     setNewBoneParentId(selectedBone);
+    setConfirmDeleteBoneId("");
   }, [selectedBone]);
   useEffect(() => {
     setTimelineEventPayloadText(JSON.stringify(selectedTimelineEvent?.payload ?? {}));
@@ -693,6 +709,7 @@ export default function EditorPage() {
     setSelectedPointIndex(null);
     setDragPoint(null);
     setDragBone(null);
+    setDragHierarchyBoneId(null);
     setDragTimelineKey(null);
   };
   const loadDraftProject = () => {
@@ -874,7 +891,7 @@ export default function EditorPage() {
         { label: "Rotate", onClick: () => runCommand(createRotateBoneCommand(selectedBone, 0.1)) },
         { label: "Add Bone", onClick: () => runCommand(createAddBoneCommand(selectedBone, `bone${editorState.project.hierarchy.length}`)) },
         { label: "Rename", onClick: () => runCommand(createRenameBoneCommand(selectedBone, `${selectedBone}Renamed`)) },
-        { label: "Delete", disabled: selectedBone === "root", variant: "destructive", onClick: () => runCommand(createDeleteBoneCommand(selectedBone)) }
+        { label: "Delete", disabled: selectedBone === "root", variant: "destructive", onClick: () => { setConfirmDeleteBoneId(selectedBone); setIoStatus(`review delete impact for ${selectedBone}`); } }
       ]
     },
     {
@@ -1099,9 +1116,40 @@ export default function EditorPage() {
                   const depth = item === "root" ? 0 : index > 2 ? 2 : 1;
 
                   return (
-                    <li key={item}>
+                    <li
+                      key={item}
+                      draggable={item !== "root"}
+                      onDragStart={(event) => {
+                        if (item === "root") {
+                          event.preventDefault();
+                          return;
+                        }
+                        event.dataTransfer.setData("text/bone-id", item);
+                        event.dataTransfer.effectAllowed = "move";
+                        setDragHierarchyBoneId(item);
+                      }}
+                      onDragEnd={() => setDragHierarchyBoneId(null)}
+                      onDragOver={(event) => {
+                        const boneId = dragHierarchyBoneId ?? event.dataTransfer.getData("text/bone-id");
+                        if (boneId && canDropBoneOnParent(boneId, item)) {
+                          event.preventDefault();
+                          event.dataTransfer.dropEffect = "move";
+                        }
+                      }}
+                      onDrop={(event) => {
+                        const boneId = dragHierarchyBoneId ?? event.dataTransfer.getData("text/bone-id");
+                        if (!boneId || !canDropBoneOnParent(boneId, item)) {
+                          return;
+                        }
+                        event.preventDefault();
+                        runCommand(createSetParentCommand(boneId, item));
+                        setEditorState((state) => ({ ...state, project: { ...state.project, selectedBoneId: boneId } }));
+                        setIoStatus(`parented ${boneId} to ${item}`);
+                        setDragHierarchyBoneId(null);
+                      }}
+                    >
                       <Button
-                        className="h-7 w-full justify-start text-xs"
+                        className={`h-7 w-full justify-start text-xs ${dragHierarchyBoneId && canDropBoneOnParent(dragHierarchyBoneId, item) ? "ring-1 ring-primary/40" : ""}`}
                         style={{ paddingLeft: `${8 + depth * 12}px` }}
                         type="button"
                         variant={item === selectedBone ? "secondary" : "ghost"}
@@ -1620,6 +1668,30 @@ export default function EditorPage() {
                   <p className="text-xs text-muted-foreground">
                     Delete impact: {childBoneCount} children / {boundPartCount} parts / {boundTrackCount} tracks / {poseRefCount} poses / {proceduralRefCount} procedural refs
                   </p>
+                  <div className="grid grid-cols-[1fr_auto] gap-1 rounded-md border border-destructive/20 bg-destructive/5 p-2">
+                    <p className="text-xs text-muted-foreground">
+                      {confirmDeleteBoneId === selectedBone ? `Confirm deletion of ${selectedBone}; affected refs will be removed or rebound.` : "Use Delete to review impact before removing the selected bone."}
+                    </p>
+                    <Button
+                      size="sm"
+                      type="button"
+                      variant={confirmDeleteBoneId === selectedBone ? "destructive" : "outline"}
+                      aria-label={confirmDeleteBoneId === selectedBone ? "Rig Confirm Delete Bone" : "Rig Review Delete Bone"}
+                      disabled={selectedBone === "root"}
+                      onClick={() => {
+                        if (confirmDeleteBoneId === selectedBone) {
+                          runCommand(createDeleteBoneCommand(selectedBone));
+                          setIoStatus(`deleted bone ${selectedBone}`);
+                          setConfirmDeleteBoneId("");
+                          return;
+                        }
+                        setConfirmDeleteBoneId(selectedBone);
+                        setIoStatus(`review delete impact for ${selectedBone}`);
+                      }}
+                    >
+                      {confirmDeleteBoneId === selectedBone ? "Confirm Delete" : "Delete Bone"}
+                    </Button>
+                  </div>
                   <div className="grid grid-cols-2 gap-1">
                     <Button size="sm" type="button" variant="outline" aria-label="Rig Parent Root" onClick={() => runCommand(createSetParentCommand(selectedBone, "root"))} disabled={selectedBone === "root"}>
                       Parent Root
