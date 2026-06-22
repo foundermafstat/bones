@@ -57,6 +57,9 @@ URL: `http://localhost:3000/`
      - `1 -> 1`
    - `Project -> Copy Source JSON`.
    - Проверить в JSON: `animations[].id === "smokeWalk"` и track `body / transform.scaleY` содержит 3 keyframes.
+   - Shift-click выбрать два keyframes на разных tracks.
+   - Drag одного выбранного keyframe по timeline.
+   - Проверить, что оба selected keyframes сдвинулись вместе, а Undo возвращает оба времени.
 
 8. Curve
    - Mode `Curve`.
@@ -67,6 +70,10 @@ URL: `http://localhost:3000/`
 
 9. State Machine
    - Mode `State Machine`.
+   - Проверить, что в viewport виден `State Machine Graph`.
+   - Кликнуть state node и проверить, что выбранный state синхронизируется с inspector controls.
+   - Кликнуть transition label и проверить preview `from -> to / weight`.
+   - Нажать weight `0.0`, `0.5`, `1.0` и проверить live preview weight.
    - From `idle`, to `jump`.
    - Duration `0.12`, easing `anticipation`, syncMode `none`.
    - Condition `jumpPressed == true`.
@@ -85,11 +92,11 @@ URL: `http://localhost:3000/`
     - Проверить `proceduralPresets`: breathing amplitude `1.5`, foot IK enabled with both feet.
 
 11. Preview
-    - Mode `Preview`.
-    - Нажать `walk`, затем `jump`, затем `land`.
-    - Проверить debug overlay:
-      - active state меняется на `walk`, `jump`, `land`;
-      - clip меняется на `Walk`, `Jump`, `Land`;
+   - Mode `Preview`.
+   - Нажать `idle`, `walk`, `jump`, `fall`, `land`.
+   - Проверить debug overlay:
+      - active state меняется на выбранный сценарий;
+      - clip меняется на `Idle`, `Walk`, `Jump`, `Fall`, `Land`;
       - collision debug overlay виден;
       - params обновляются.
 
@@ -106,4 +113,7 @@ URL: `http://localhost:3000/`
 - Все шаги выполнены без app console errors.
 - `Export Bundle` возвращает 5 файлов.
 - `hero.compiled.json` парсится как JSON.
+- `hero.source.rig.json`, `hero.rig.json` и `hero.compiled.json` не содержат parts с `type: "svg"` после production export.
 - Runtime preview остается видимым после import/export.
+- State Machine graph отображается в viewport и управляет transition preview.
+- Timeline поддерживает drag одного keyframe и drag выбранной группы keyframes.
