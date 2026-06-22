@@ -74,6 +74,7 @@ import {
   createAddTimelineEventCommand,
   createAddTimelineMarkerCommand,
   createDeleteTimelineEventCommand,
+  createUpdateTimelineEventCommand,
   createAnimationClipCommand,
   createCopySelectedKeysCommand,
   createDeleteSelectedKeysCommand,
@@ -84,6 +85,7 @@ import {
   createScaleSelectedKeysCommand,
   createSelectTrackKeysCommand,
   createSetTimelineSelectionCommand,
+  createSetTimelineAutoKeyCommand,
   createGroupedCommand,
   createDeleteStateMachineStateCommand,
   createDeleteTransitionCommand,
@@ -115,7 +117,8 @@ import {
   type EditorTransitionCondition,
   type EditorStateContainer,
   type Keyframe,
-  type StateMachineNodePosition
+  type StateMachineNodePosition,
+  type TimelineEvent
 } from "./editorState";
 import { createProjectExportBundle, EDITOR_DRAFT_KEY, EDITOR_DRAFT_META_KEY, loadDraft, loadDraftMeta, parseImportedProject, saveDraft, serializeEditorProject, type DraftMetadata, type ProjectExportBundle, type ProjectImportResult } from "./projectIo";
 import { PixiPreview } from "./PixiPreview";
@@ -284,6 +287,8 @@ export default function EditorPage() {
   const [timelineCurrentTime, setTimelineCurrentTime] = useState(0);
   const [timelineKeyValue, setTimelineKeyValue] = useState(1);
   const [timelineAuthorClipId, setTimelineAuthorClipId] = useState("idle");
+  const [selectedTimelineEventId, setSelectedTimelineEventId] = useState("");
+  const [timelineEventPayloadText, setTimelineEventPayloadText] = useState("{}");
   const [smStateId, setSmStateId] = useState("airborne");
   const [smStateClipId, setSmStateClipId] = useState("jump");
   const [smRenameStateId, setSmRenameStateId] = useState("jumpStart");
@@ -351,6 +356,7 @@ export default function EditorPage() {
   const timelineTrackId = `${timelineTargetId}.${timelineProperty}`;
   const selectedTimelineTrackId = activeClip ? Object.entries(activeClip.tracks).find(([, keys]) => keys.some((key) => key.id === selectedKeyId))?.[0] ?? timelineTrackId : timelineTrackId;
   const selectedTimelineKey = activeClip ? activeClip.tracks[selectedTimelineTrackId]?.find((key) => key.id === selectedKeyId) : undefined;
+  const selectedTimelineEvent = activeClip ? activeClip.events.find((event) => event.id === selectedTimelineEventId) : undefined;
   const selectedCurve = selectedTimelineKey?.curve ?? [0, 0, 1, 1] as const;
   const curvePath = `M 12 88 C ${12 + selectedCurve[0] * 96} ${88 - selectedCurve[1] * 72}, ${12 + selectedCurve[2] * 96} ${88 - selectedCurve[3] * 72}, 108 16`;
   const selectedKeyCurvePreset = selectedTimelineKey?.curvePreset ?? (selectedTimelineKey?.interpolation === "bezier" ? "bezier" : selectedTimelineKey?.interpolation ?? "linear");
@@ -674,6 +680,9 @@ export default function EditorPage() {
     setNewBoneParentId(selectedBone);
   }, [selectedBone]);
   useEffect(() => {
+    setTimelineEventPayloadText(JSON.stringify(selectedTimelineEvent?.payload ?? {}));
+  }, [selectedTimelineEvent?.id, selectedTimelineEvent?.payload]);
+  useEffect(() => {
     setAvailableDraft(loadDraftMeta());
   }, []);
   const replaceProject = (project: EditorProjectState, origin: ProjectOrigin, poseId = "") => {
@@ -721,6 +730,22 @@ export default function EditorPage() {
       setIoStatus(`copied ${json.length} bytes / ${Object.keys(bundle.files).length} files`);
     } catch {
       setIoStatus(`export ready (${Object.keys(bundle.files).length} files); clipboard permission denied`);
+    }
+  };
+  const updateSelectedTimelineEventPayload = () => {
+    if (!activeClip || !selectedTimelineEvent) {
+      return;
+    }
+    try {
+      const parsed = JSON.parse(timelineEventPayloadText) as unknown;
+      if (parsed === null || Array.isArray(parsed) || typeof parsed !== "object") {
+        setIoStatus("event payload must be a JSON object");
+        return;
+      }
+      runCommand(createUpdateTimelineEventCommand(activeClip.id, selectedTimelineEvent.id, { payload: parsed as Readonly<Record<string, JsonValue>> }));
+      setIoStatus(`updated event ${selectedTimelineEvent.id}`);
+    } catch {
+      setIoStatus("event payload JSON is invalid");
     }
   };
   const copyExportFiles = async () => {
@@ -2397,6 +2422,11 @@ export default function EditorPage() {
               onClick={() => {
                 const clipId = newClipId.trim();
                 setTimelineAuthorClipId(clipId);
+                setTimelineTargetId("body");
+                setTimelineProperty("scaleY");
+                setTimelineCurrentTime(0);
+                setTimelineKeyValue(1);
+                setSelectedTimelineEventId("");
                 runCommand(createAnimationClipCommand(clipId, clipId, newClipDuration, newClipLoop));
               }}
             >
@@ -2447,6 +2477,9 @@ export default function EditorPage() {
               <Button size="sm" type="button" variant="outline" disabled={!activeClip} onClick={() => activeClip && runCommand(createAddAnimationTrackCommand(activeClip.id, timelineTrackId))}>
                 Add Track
               </Button>
+              <Badge variant="outline" title="Active timeline target">
+                Target {timelineTrackId}
+              </Badge>
               <Input className="h-7 w-16 text-xs" type="number" step="0.1" value={timelineCurrentTime} onChange={(event) => setTimelineCurrentTime(Number(event.target.value))} aria-label="Timeline current time" />
               <Input className="h-7 w-16 text-xs" type="number" step="0.1" value={timelineKeyValue} onChange={(event) => setTimelineKeyValue(Number(event.target.value))} aria-label="Timeline key value" />
               <Button size="sm" type="button" variant="outline" disabled={!activeClip} onClick={() => activeClip && runCommand(createSetKeyframeAtTimeCommand(activeClip.id, timelineTrackId, timelineCurrentTime, timelineKeyValue))}>
@@ -2497,7 +2530,9 @@ export default function EditorPage() {
               <Button size="sm" type="button" variant="outline" disabled={!activeClip || !editorState.project.timeline.keyClipboard.length} onClick={() => activeClip && runCommand(createPasteKeysCommand(activeClip.id, activeClip.duration * 0.5))}>
                 Paste Keys
               </Button>
-              <Badge variant={editorState.project.timeline.autoKey ? "default" : "outline"}>Auto-key {editorState.project.timeline.autoKey ? "on" : "off"}</Badge>
+              <Button size="sm" type="button" variant={editorState.project.timeline.autoKey ? "default" : "outline"} aria-label="Timeline Auto-key Toggle" onClick={() => runCommand(createSetTimelineAutoKeyCommand(!editorState.project.timeline.autoKey))}>
+                Auto-key {editorState.project.timeline.autoKey ? "on" : "off"}
+              </Button>
             </div>
             </div>
           </div>
@@ -2509,6 +2544,37 @@ export default function EditorPage() {
               <span className="text-xs text-muted-foreground">{selectedTimelineTrackId}</span>
               <Input className="h-7 w-20 text-xs" type="number" step="0.01" value={selectedTimelineKey.time} onChange={(event) => activeClip && runCommand(createUpdateKeyframeCommand(activeClip.id, selectedTimelineTrackId, selectedTimelineKey.id, { time: Number(event.target.value) }))} aria-label="Selected key time" />
               <Input className="h-7 w-20 text-xs" type="number" step="0.01" value={selectedTimelineKey.value} onChange={(event) => activeClip && runCommand(createUpdateKeyframeCommand(activeClip.id, selectedTimelineTrackId, selectedTimelineKey.id, { value: Number(event.target.value) }))} aria-label="Selected key value" />
+            </div>
+          ) : null}
+          {activeClip && selectedTimelineEvent ? (
+            <div className="mb-1 grid gap-1 rounded-md border border-emerald-200 bg-emerald-50 p-2" aria-label="Timeline event inspector">
+              <div className="flex items-center gap-1">
+                <Badge variant="outline">{selectedTimelineEvent.id}</Badge>
+                <Input className="h-7 w-20 text-xs" type="number" step="0.01" value={selectedTimelineEvent.time} onChange={(event) => runCommand(createUpdateTimelineEventCommand(activeClip.id, selectedTimelineEvent.id, { time: Number(event.target.value) }))} aria-label="Selected event time" />
+                <Input className="h-7 w-28 text-xs" value={selectedTimelineEvent.type} onChange={(event) => runCommand(createUpdateTimelineEventCommand(activeClip.id, selectedTimelineEvent.id, { type: event.target.value }))} aria-label="Selected event type" />
+                <Select value={selectedTimelineEvent.category ?? "debug"} onValueChange={(category) => runCommand(createUpdateTimelineEventCommand(activeClip.id, selectedTimelineEvent.id, { category: category as TimelineEvent["category"] }))}>
+                  <SelectTrigger className="h-7 w-28" aria-label="Selected event category">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {["gameplay", "audio", "vfx", "camera", "debug"].map((category) => (
+                        <SelectItem key={category} value={category}>{category}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <Input className="h-7 w-20 text-xs" type="number" step="0.01" value={selectedTimelineEvent.duration ?? 0} onChange={(event) => runCommand(createUpdateTimelineEventCommand(activeClip.id, selectedTimelineEvent.id, { duration: Number(event.target.value) || undefined }))} aria-label="Selected event duration" />
+                <Button size="sm" type="button" variant="destructive" onClick={() => { runCommand(createDeleteTimelineEventCommand(activeClip.id, selectedTimelineEvent.id)); setSelectedTimelineEventId(""); }}>
+                  Delete Event
+                </Button>
+              </div>
+              <div className="flex items-center gap-1">
+                <Input className="h-7 min-w-0 flex-1 text-xs" value={timelineEventPayloadText} onChange={(event) => setTimelineEventPayloadText(event.target.value)} aria-label="Selected event payload JSON" />
+                <Button size="sm" type="button" variant="outline" onClick={updateSelectedTimelineEventPayload}>
+                  Apply Payload
+                </Button>
+              </div>
             </div>
           ) : null}
           {activeClip ? (
@@ -2525,11 +2591,11 @@ export default function EditorPage() {
                     <Tooltip key={timelineEvent.id}>
                       <TooltipTrigger asChild>
                         <button
-                          className="absolute top-1/2 z-20 h-4 min-w-4 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-emerald-700 bg-emerald-500 text-[9px] text-white"
+                          className={`absolute top-1/2 z-20 h-4 min-w-4 -translate-x-1/2 -translate-y-1/2 rounded-sm border text-[9px] text-white ${selectedTimelineEventId === timelineEvent.id ? "border-emerald-950 bg-emerald-700 ring-2 ring-emerald-300" : "border-emerald-700 bg-emerald-500"}`}
                           style={{ left: `${left}%`, width: width ? `${width}%` : undefined }}
                           type="button"
-                          aria-label={`Delete event ${timelineEvent.id}`}
-                          onClick={() => runCommand(createDeleteTimelineEventCommand(activeClip.id, timelineEvent.id))}
+                          aria-label={`Select event ${timelineEvent.id}`}
+                          onClick={() => setSelectedTimelineEventId(timelineEvent.id)}
                         >
                           {timelineEvent.type.slice(0, 1)}
                         </button>

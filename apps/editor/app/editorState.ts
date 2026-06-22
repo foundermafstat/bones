@@ -118,6 +118,14 @@ export interface TimelineEvent {
   readonly payload?: Readonly<Record<string, JsonValue>>;
 }
 
+export interface TimelineEventPatch {
+  readonly time?: number;
+  readonly type?: string;
+  readonly category?: TimelineEvent["category"];
+  readonly duration?: number | undefined;
+  readonly payload?: TimelineEvent["payload"];
+}
+
 export interface TimelineMarker {
   readonly id: string;
   readonly time: number;
@@ -1559,6 +1567,54 @@ export function createAddTimelineEventCommand(clipId: string, event: TimelineEve
   };
 }
 
+export function createUpdateTimelineEventCommand(clipId: string, eventId: string, patch: TimelineEventPatch): EditorCommand {
+  let previous: TimelineEvent | undefined;
+  return {
+    id: `timeline-event-update:${clipId}:${eventId}`,
+    label: "Update timeline event",
+    do: (state) =>
+      updateClip(state, clipId, (clip) => {
+        previous = previous ?? clip.events.find((item) => item.id === eventId);
+        return {
+          ...clip,
+          events: clip.events
+            .map((item) => (item.id === eventId ? applyTimelineEventPatch(item, patch) : item))
+            .sort((a, b) => a.time - b.time)
+        };
+      }),
+    undo: (state) =>
+      previous
+        ? updateClip(state, clipId, (clip) => ({
+            ...clip,
+            events: [...clip.events.filter((item) => item.id !== eventId), previous!].sort((a, b) => a.time - b.time)
+          }))
+        : state
+  };
+}
+
+function applyTimelineEventPatch(event: TimelineEvent, patch: TimelineEventPatch): TimelineEvent {
+  let next: TimelineEvent = event;
+  if (patch.time !== undefined) {
+    next = { ...next, time: patch.time };
+  }
+  if (patch.type !== undefined) {
+    next = { ...next, type: patch.type };
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "category")) {
+    const { category: _category, ...withoutCategory } = next;
+    next = patch.category === undefined ? withoutCategory : { ...withoutCategory, category: patch.category };
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "duration")) {
+    const { duration: _duration, ...withoutDuration } = next;
+    next = patch.duration === undefined ? withoutDuration : { ...withoutDuration, duration: patch.duration };
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "payload")) {
+    const { payload: _payload, ...withoutPayload } = next;
+    next = patch.payload === undefined ? withoutPayload : { ...withoutPayload, payload: patch.payload };
+  }
+  return next;
+}
+
 export function createDeleteTimelineEventCommand(clipId: string, eventId: string): EditorCommand {
   let previous: TimelineEvent | undefined;
   return {
@@ -1573,6 +1629,19 @@ export function createDeleteTimelineEventCommand(clipId: string, eventId: string
       previous
         ? updateClip(state, clipId, (clip) => ({ ...clip, events: [...clip.events.filter((item) => item.id !== eventId), previous!].sort((a, b) => a.time - b.time) }))
         : state
+  };
+}
+
+export function createSetTimelineAutoKeyCommand(enabled: boolean): EditorCommand {
+  let previous: TimelineState | undefined;
+  return {
+    id: `timeline-auto-key:${enabled}`,
+    label: "Set timeline auto-key",
+    do: (state) => {
+      previous = state.timeline;
+      return { ...state, timeline: { ...state.timeline, autoKey: enabled } };
+    },
+    undo: (state) => (previous ? { ...state, timeline: previous } : state)
   };
 }
 

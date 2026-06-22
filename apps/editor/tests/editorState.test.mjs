@@ -21,6 +21,7 @@ import {
   createCopyPoseCommand,
   createCopySelectedKeysCommand,
   createDeleteTimelineEventCommand,
+  createUpdateTimelineEventCommand,
   createDeleteSelectedKeysCommand,
   createBindPartToBoneCommand,
   createDeleteBoneCommand,
@@ -55,6 +56,7 @@ import {
   createScaleSelectedKeysCommand,
   createSelectTrackKeysCommand,
   createSetTimelineSelectionCommand,
+  createSetTimelineAutoKeyCommand,
   createSetParentCommand,
   createSimplifyPartPathCommand,
   createSmoothPartPathCommand,
@@ -536,17 +538,31 @@ test("timeline retime, reverse, normalize loop, events, and markers are undoable
   const evented = executeCommand(marked, createAddTimelineEventCommand("walk", { id: "cue", time: 0.5, type: "cue", category: "debug" }));
   const footstep = executeCommand(evented, createAddTimelineEventCommand("walk", { id: "footstep", time: 0.25, type: "footstep", category: "audio", payload: { foot: "front" } }));
   const attack = executeCommand(footstep, createAddTimelineEventCommand("walk", { id: "attack", time: 0.4, type: "attackWindow", category: "gameplay", duration: 0.18, payload: { phase: "active" } }));
-  const deletedAttack = executeCommand(attack, createDeleteTimelineEventCommand("walk", "attack"));
+  const updatedAttack = executeCommand(attack, createUpdateTimelineEventCommand("walk", "attack", { time: 0.45, payload: { phase: "recovery" } }));
+  const deletedAttack = executeCommand(updatedAttack, createDeleteTimelineEventCommand("walk", "attack"));
   assert.ok(evented.project.animations.walk.markers.some((marker) => marker.id === "breakdown"));
   assert.ok(evented.project.animations.walk.events.some((event) => event.id === "cue"));
   assert.deepEqual(footstep.project.animations.walk.events.find((event) => event.id === "footstep")?.payload, { foot: "front" });
   assert.equal(attack.project.animations.walk.events.find((event) => event.id === "attack")?.duration, 0.18);
+  assert.equal(updatedAttack.project.animations.walk.events.find((event) => event.id === "attack")?.time, 0.45);
+  assert.deepEqual(updatedAttack.project.animations.walk.events.find((event) => event.id === "attack")?.payload, { phase: "recovery" });
   assert.equal(deletedAttack.project.animations.walk.events.some((event) => event.id === "attack"), false);
 
   const restoredAttack = undo(deletedAttack);
   assert.equal(restoredAttack.project.animations.walk.events.find((event) => event.id === "attack")?.category, "gameplay");
   const undoneAttack = undo(restoredAttack);
-  assert.equal(undoneAttack.project.animations.walk.events.some((event) => event.id === "attack"), false);
+  assert.equal(undoneAttack.project.animations.walk.events.find((event) => event.id === "attack")?.time, 0.4);
+  assert.deepEqual(undoneAttack.project.animations.walk.events.find((event) => event.id === "attack")?.payload, { phase: "active" });
+  const removedAttack = undo(undoneAttack);
+  assert.equal(removedAttack.project.animations.walk.events.some((event) => event.id === "attack"), false);
+});
+
+test("timeline auto-key toggle is undoable", () => {
+  const enabled = executeCommand(freshContainer(), createSetTimelineAutoKeyCommand(true));
+  assert.equal(enabled.project.timeline.autoKey, true);
+
+  const undone = undo(enabled);
+  assert.equal(undone.project.timeline.autoKey, false);
 });
 
 test("curve presets, tangents, and preview state are undoable", () => {
