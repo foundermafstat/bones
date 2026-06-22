@@ -264,6 +264,36 @@
           "id": 0,
           "targetKind": "bone",
           "target": 1,
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": -0.04,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 0.6,
+              "value": 0.08,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0.8,
+                0.2,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": 1,
+          "targetKind": "bone",
+          "target": 1,
           "property": "transform.y",
           "keyframes": [
             {
@@ -289,12 +319,112 @@
               ]
             }
           ]
+        },
+        {
+          "id": 2,
+          "targetKind": "bone",
+          "target": 2,
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": -0.05,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 0.6,
+              "value": 0.12,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0.8,
+                0.2,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "targetKind": "bone",
+          "target": 3,
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": 1.84,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 0.6,
+              "value": 1.62,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0.8,
+                0.2,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "targetKind": "bone",
+          "target": 6,
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": 1.15,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 0.6,
+              "value": 1.38,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0.8,
+                0.2,
+                1
+              ]
+            }
+          ]
         }
       ],
       "trackLookup": {
-        "fall.body.y": 0
+        "fall.body.rotation": 0,
+        "fall.body.y": 1,
+        "fall.head.rotation": 2,
+        "fall.thighBack.rotation": 3,
+        "fall.thighFront.rotation": 4
       },
-      "events": []
+      "events": [
+        {
+          "time": 0.04,
+          "type": "airborne",
+          "category": "gameplay"
+        }
+      ]
     },
     {
       "id": 1,
@@ -814,11 +944,17 @@
       "events": [
         {
           "time": 0.08,
-          "type": "anticipation"
+          "type": "anticipation",
+          "category": "gameplay",
+          "duration": 0.04
         },
         {
           "time": 0.12,
-          "type": "liftoff"
+          "type": "liftoff",
+          "category": "gameplay",
+          "payload": {
+            "impulse": 1
+          }
         }
       ]
     },
@@ -887,16 +1023,110 @@
               ]
             }
           ]
+        },
+        {
+          "id": 2,
+          "targetKind": "bone",
+          "target": 1,
+          "property": "transform.y",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": -31,
+              "interpolation": "bezier",
+              "curve": [
+                0.18,
+                0,
+                0.5,
+                1
+              ]
+            },
+            {
+              "time": 0.14,
+              "value": -38,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0.9,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 0.34,
+              "value": -36,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0,
+                0.2,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "targetKind": "bone",
+          "target": 2,
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": 0.12,
+              "interpolation": "bezier",
+              "curve": [
+                0.18,
+                0,
+                0.5,
+                1
+              ]
+            },
+            {
+              "time": 0.18,
+              "value": -0.04,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0.9,
+                0.2,
+                1
+              ]
+            },
+            {
+              "time": 0.34,
+              "value": 0,
+              "interpolation": "bezier",
+              "curve": [
+                0.2,
+                0,
+                0.2,
+                1
+              ]
+            }
+          ]
         }
       ],
       "trackLookup": {
         "land.body.scaleX": 0,
-        "land.body.scaleY": 1
+        "land.body.scaleY": 1,
+        "land.body.y": 2,
+        "land.head.rotation": 3
       },
       "events": [
         {
           "time": 0,
           "type": "dust",
+          "category": "vfx",
+          "payload": {
+            "strength": 1
+          }
+        },
+        {
+          "time": 0,
+          "type": "land",
+          "category": "gameplay",
+          "duration": 0.08,
           "payload": {
             "strength": 1
           }
@@ -905,6 +1135,610 @@
     },
     {
       "id": 4,
+      "duration": 0.64,
+      "fps": 60,
+      "loop": true,
+      "tracks": [
+        {
+          "id": 0,
+          "targetKind": "bone",
+          "target": 1,
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": -0.0313,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            },
+            {
+              "time": 0.32,
+              "value": 0.0313,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            },
+            {
+              "time": 0.64,
+              "value": -0.0313,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": 1,
+          "targetKind": "bone",
+          "target": 1,
+          "property": "transform.x",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": -1.344,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            },
+            {
+              "time": 0.32,
+              "value": 1.344,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            },
+            {
+              "time": 0.64,
+              "value": -1.344,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "targetKind": "bone",
+          "target": 1,
+          "property": "transform.y",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": -40,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            },
+            {
+              "time": 0.16,
+              "value": -37.5,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            },
+            {
+              "time": 0.32,
+              "value": -39.5,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            },
+            {
+              "time": 0.48,
+              "value": -37.5,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            },
+            {
+              "time": 0.64,
+              "value": -40,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "targetKind": "bone",
+          "target": 5,
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": -1.175,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.16,
+              "value": -1.725,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.32,
+              "value": -1.275,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.48,
+              "value": -1.6,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.64,
+              "value": -1.175,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "targetKind": "bone",
+          "target": 8,
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": -1.275,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.16,
+              "value": -1.65,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.32,
+              "value": -1.2,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.48,
+              "value": -1.775,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.64,
+              "value": -1.275,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": 5,
+          "targetKind": "bone",
+          "target": 2,
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": 0.0438,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            },
+            {
+              "time": 0.32,
+              "value": -0.0375,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            },
+            {
+              "time": 0.64,
+              "value": 0.0438,
+              "interpolation": "bezier",
+              "curve": [
+                0.3,
+                0,
+                0.7,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": 6,
+          "targetKind": "bone",
+          "target": 4,
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": -0.05,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.16,
+              "value": 0.4,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.32,
+              "value": 0.15,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.48,
+              "value": -0.35,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.64,
+              "value": -0.05,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": 7,
+          "targetKind": "bone",
+          "target": 7,
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": 0.15,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.16,
+              "value": -0.35,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.32,
+              "value": -0.075,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.48,
+              "value": 0.35,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.64,
+              "value": 0.15,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": 8,
+          "targetKind": "bone",
+          "target": 3,
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": 2.325,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.16,
+              "value": 1.775,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.32,
+              "value": 1.4,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.48,
+              "value": 1.825,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.64,
+              "value": 2.325,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": 9,
+          "targetKind": "bone",
+          "target": 6,
+          "property": "transform.rotation",
+          "keyframes": [
+            {
+              "time": 0,
+              "value": 1.4,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.16,
+              "value": 1.825,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.32,
+              "value": 2.275,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.48,
+              "value": 1.775,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            },
+            {
+              "time": 0.64,
+              "value": 1.4,
+              "interpolation": "bezier",
+              "curve": [
+                0.25,
+                0,
+                0.35,
+                1
+              ]
+            }
+          ]
+        }
+      ],
+      "trackLookup": {
+        "run.body.rotation": 0,
+        "run.body.x": 1,
+        "run.body.y": 2,
+        "run.footBack.rotation": 3,
+        "run.footFront.rotation": 4,
+        "run.head.rotation": 5,
+        "run.shinBack.rotation": 6,
+        "run.shinFront.rotation": 7,
+        "run.thighBack.rotation": 8,
+        "run.thighFront.rotation": 9
+      },
+      "events": [
+        {
+          "time": 0.03,
+          "type": "footstep",
+          "category": "audio",
+          "payload": {
+            "foot": "front",
+            "weight": 1
+          }
+        },
+        {
+          "time": 0.35,
+          "type": "footstep",
+          "category": "audio",
+          "payload": {
+            "foot": "back",
+            "weight": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": 5,
       "duration": 0.84,
       "fps": 60,
       "loop": true,
@@ -1490,6 +2324,8 @@
         {
           "time": 0.04,
           "type": "footstep",
+          "category": "audio",
+          "duration": 0.03,
           "payload": {
             "foot": "front",
             "weight": 0.9
@@ -1498,6 +2334,8 @@
         {
           "time": 0.46,
           "type": "footstep",
+          "category": "audio",
+          "duration": 0.03,
           "payload": {
             "foot": "back",
             "weight": 0.9
@@ -1530,21 +2368,25 @@
         {
           "id": 4,
           "clip": 4
+        },
+        {
+          "id": 5,
+          "clip": 5
         }
       ],
       "transitions": [
         {
           "id": 0,
-          "from": 4,
+          "from": 5,
           "to": 2,
           "duration": 0.08,
           "easing": "anticipation",
-          "priority": 5,
+          "priority": 10,
           "canInterrupt": true,
           "syncMode": "none",
           "conditions": [
             {
-              "parameter": 3,
+              "parameter": 4,
               "operator": "<",
               "value": -1
             }
@@ -1570,7 +2412,7 @@
         {
           "id": 2,
           "from": 1,
-          "to": 4,
+          "to": 5,
           "duration": 0.14,
           "easing": "easeOut",
           "priority": 0,
@@ -1595,7 +2437,7 @@
           "syncMode": "none",
           "conditions": [
             {
-              "parameter": 3,
+              "parameter": 4,
               "operator": ">",
               "value": 0
             }
@@ -1612,15 +2454,49 @@
           "syncMode": "none",
           "conditions": [
             {
-              "parameter": 1,
-              "operator": "==",
-              "value": true
+              "parameter": 3,
+              "operator": ">",
+              "value": 0.22
             }
           ]
         },
         {
           "id": 5,
           "from": 4,
+          "to": 2,
+          "duration": 0.08,
+          "easing": "anticipation",
+          "priority": 10,
+          "canInterrupt": true,
+          "syncMode": "none",
+          "conditions": [
+            {
+              "parameter": 4,
+              "operator": "<",
+              "value": -1
+            }
+          ]
+        },
+        {
+          "id": 6,
+          "from": 4,
+          "to": 5,
+          "duration": 0.16,
+          "easing": "easeInOut",
+          "priority": 1,
+          "canInterrupt": true,
+          "syncMode": "phaseMatch",
+          "conditions": [
+            {
+              "parameter": 0,
+              "operator": "<=",
+              "value": 105
+            }
+          ]
+        },
+        {
+          "id": 7,
+          "from": 5,
           "to": 1,
           "duration": 0.18,
           "easing": "easeInOut",
@@ -1632,6 +2508,23 @@
               "parameter": 0,
               "operator": "<=",
               "value": 20
+            }
+          ]
+        },
+        {
+          "id": 8,
+          "from": 5,
+          "to": 4,
+          "duration": 0.12,
+          "easing": "easeOut",
+          "priority": 1,
+          "canInterrupt": true,
+          "syncMode": "phaseMatch",
+          "conditions": [
+            {
+              "parameter": 0,
+              "operator": ">",
+              "value": 110
             }
           ]
         }
@@ -1656,6 +2549,11 @@
           "id": 3,
           "type": "number",
           "defaultValue": 0
+        },
+        {
+          "id": 4,
+          "type": "number",
+          "defaultValue": 0
         }
       ],
       "stateLookup": {
@@ -1663,16 +2561,71 @@
         "idle": 1,
         "jump": 2,
         "land": 3,
-        "walk": 4
+        "run": 4,
+        "walk": 5
       },
       "parameterLookup": {
         "absSpeed": 0,
         "grounded": 1,
         "landed": 2,
-        "velocityY": 3
+        "timeInState": 3,
+        "velocityY": 4
       }
     }
   ],
+  "proceduralLayers": [
+    {
+      "type": "breathing",
+      "enabled": true,
+      "frequency": 0.8,
+      "amplitude": 1.1,
+      "affectedBones": {
+        "1": {
+          "transform.scaleY": 1.02
+        },
+        "2": {
+          "transform.y": -1
+        }
+      }
+    },
+    {
+      "type": "secondaryMotion",
+      "targetKind": "bone",
+      "target": 2,
+      "stiffness": 0.18,
+      "damping": 0.72,
+      "velocityInfluence": 0.24,
+      "gravityInfluence": 0.1,
+      "windInfluence": 0.18,
+      "maxOffset": 8
+    },
+    {
+      "type": "squashStretch",
+      "rules": []
+    }
+  ],
+  "constraints": {
+    "feet": [
+      {
+        "footBone": 8,
+        "shinBone": 7,
+        "thighBone": 6,
+        "raycastOffsetX": 0,
+        "raycastHeight": 20,
+        "maxCorrection": 10,
+        "blend": 0.85
+      },
+      {
+        "footBone": 5,
+        "shinBone": 4,
+        "thighBone": 3,
+        "raycastOffsetX": 0,
+        "raycastHeight": 20,
+        "maxCorrection": 10,
+        "blend": 0.85
+      }
+    ]
+  },
   "lookups": {
     "rigs": {
       "shadowHero": 0
@@ -1699,7 +2652,8 @@
       "idle": 1,
       "jump": 2,
       "land": 3,
-      "walk": 4
+      "run": 4,
+      "walk": 5
     },
     "stateMachines": {
       "locomotion": 0

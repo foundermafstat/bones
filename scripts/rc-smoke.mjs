@@ -14,9 +14,10 @@ const loadedFixture = RigLoader.fromCompiled(fixture);
 const level = parseLdtkLevel(ldtkRoom);
 
 assert.equal(compiled.runtimeTarget, "pixi-v8");
-assert.equal(compiled.animations?.length, 5);
+assert.equal(compiled.animations?.length, 6);
 assert.ok(compiled.lookups?.animations.idle !== undefined);
 assert.ok(compiled.lookups?.animations.walk !== undefined);
+assert.ok(compiled.lookups?.animations.run !== undefined);
 assert.ok(compiled.lookups?.animations.jump !== undefined);
 assert.ok(compiled.lookups?.animations.fall !== undefined);
 assert.ok(compiled.lookups?.animations.land !== undefined);
