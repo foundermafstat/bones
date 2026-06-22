@@ -36,6 +36,14 @@ export interface BoneMetadata {
   readonly facing?: -1 | 1;
 }
 
+export interface BoneMetadataPatch {
+  readonly locked?: boolean | undefined;
+  readonly hidden?: boolean | undefined;
+  readonly mirrorGroup?: string | undefined;
+  readonly tags?: readonly string[] | undefined;
+  readonly facing?: -1 | 1 | undefined;
+}
+
 export interface ShapePart {
   readonly id: string;
   readonly boneId: string;
@@ -587,14 +595,14 @@ export function createSetBoneTransformCommand(boneId: string, transform: BoneTra
   };
 }
 
-export function createSetBoneMetadataCommand(boneId: string, metadata: BoneMetadata): EditorCommand {
+export function createSetBoneMetadataCommand(boneId: string, metadata: BoneMetadataPatch): EditorCommand {
   let previous: BoneMetadata | undefined;
   return {
     id: `set-bone-metadata:${boneId}`,
     label: "Set bone metadata",
     do: (state) => {
       previous = state.boneMetadata[boneId];
-      return { ...markDirty(state, boneId), boneMetadata: { ...state.boneMetadata, [boneId]: { ...(state.boneMetadata[boneId] ?? {}), ...metadata } } };
+      return { ...markDirty(state, boneId), boneMetadata: { ...state.boneMetadata, [boneId]: mergeBoneMetadata(state.boneMetadata[boneId], metadata) } };
     },
     undo: (state) => {
       const nextMetadata = { ...state.boneMetadata };
@@ -1614,8 +1622,28 @@ function renameDirtyRefs(state: EditorProjectState, boneId: string, nextId: stri
   return {
     ...state,
     dirtyParts: renameIds(state.dirtyParts),
-    dirtyScopes: Object.fromEntries(Object.entries(state.dirtyScopes).map(([scope, ids]) => [scope, renameIds(ids)])) as DirtyScopes
+    dirtyScopes: {
+      project: renameIds(state.dirtyScopes.project),
+      bones: renameIds(state.dirtyScopes.bones),
+      parts: renameIds(state.dirtyScopes.parts),
+      animations: renameIds(state.dirtyScopes.animations),
+      poses: renameIds(state.dirtyScopes.poses),
+      stateMachine: renameIds(state.dirtyScopes.stateMachine),
+      procedural: renameIds(state.dirtyScopes.procedural)
+    }
   };
+}
+
+function mergeBoneMetadata(previous: BoneMetadata | undefined, patch: BoneMetadataPatch): BoneMetadata {
+  const next: Record<string, unknown> = { ...(previous ?? {}) };
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined) {
+      delete next[key];
+    } else {
+      next[key] = value;
+    }
+  }
+  return next as BoneMetadata;
 }
 
 function renameProceduralBoneRefs(procedural: ProceduralPresetState, boneId: string, nextId: string): ProceduralPresetState {
