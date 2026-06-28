@@ -1,0 +1,167 @@
+
+character for spine.png
+size: 2017,747
+format: RGBA8888
+filter: Linear,Linear
+repeat: none
+body
+  rotate: true
+  xy: 1644, 2
+  size: 234, 254
+  orig: 241, 261
+  offset: 3, 4
+  index: -1
+cape_background
+  rotate: true
+  xy: 1132, 334
+  size: 411, 512
+  orig: 413, 512
+  offset: 0, 0
+  index: -1
+cape_left
+  rotate: true
+  xy: 1132, 171
+  size: 161, 510
+  orig: 168, 517
+  offset: 3, 3
+  index: -1
+cape_right
+  rotate: false
+  xy: 1646, 238
+  size: 248, 507
+  orig: 255, 512
+  offset: 3, 1
+  index: -1
+collar
+  rotate: true
+  xy: 948, 17
+  size: 300, 173
+  orig: 308, 178
+  offset: 4, 3
+  index: -1
+darkness
+  rotate: true
+  xy: 662, 319
+  size: 426, 468
+  orig: 427, 468
+  offset: 0, 0
+  index: -1
+eyes
+  rotate: false
+  xy: 405, 133
+  size: 233, 66
+  orig: 237, 71
+  offset: 1, 3
+  index: -1
+hip
+  rotate: false
+  xy: 405, 15
+  size: 230, 116
+  orig: 238, 124
+  offset: 4, 4
+  index: -1
+hood
+  rotate: true
+  xy: 2, 201
+  size: 544, 658
+  orig: 548, 662
+  offset: 0, 3
+  index: -1
+left_finger_1
+  rotate: false
+  xy: 822, 45
+  size: 59, 91
+  orig: 62, 93
+  offset: 0, 0
+  index: -1
+left_finger_2
+  rotate: false
+  xy: 1574, 75
+  size: 62, 94
+  orig: 62, 96
+  offset: 0, 2
+  index: -1
+left_foot
+  rotate: false
+  xy: 640, 12
+  size: 180, 124
+  orig: 188, 131
+  offset: 4, 4
+  index: -1
+left_hand_1
+  rotate: false
+  xy: 1896, 334
+  size: 118, 197
+  orig: 124, 204
+  offset: 4, 3
+  index: -1
+left_hand_2
+  rotate: true
+  xy: 1123, 11
+  size: 158, 267
+  orig: 162, 270
+  offset: 0, 0
+  index: -1
+left_leg_2
+  rotate: false
+  xy: 1900, 213
+  size: 97, 119
+  orig: 100, 122
+  offset: 2, 1
+  index: -1
+left_leg_3
+  rotate: true
+  xy: 2, 47
+  size: 152, 218
+  orig: 158, 225
+  offset: 2, 4
+  index: -1
+right_finger_1
+  rotate: false
+  xy: 883, 46
+  size: 61, 90
+  orig: 70, 94
+  offset: 5, 0
+  index: -1
+right_finger_2
+  rotate: true
+  xy: 1900, 17
+  size: 71, 90
+  orig: 71, 94
+  offset: 0, 0
+  index: -1
+right_foot
+  rotate: false
+  xy: 222, 74
+  size: 181, 125
+  orig: 189, 132
+  offset: 4, 4
+  index: -1
+right_hand_1
+  rotate: true
+  xy: 662, 138
+  size: 179, 284
+  orig: 184, 284
+  offset: 3, 0
+  index: -1
+right_hand_2
+  rotate: false
+  xy: 1896, 533
+  size: 119, 212
+  orig: 127, 218
+  offset: 4, 3
+  index: -1
+right_leg_2
+  rotate: false
+  xy: 1900, 90
+  size: 91, 121
+  orig: 97, 125
+  offset: 3, 0
+  index: -1
+right_leg_3
+  rotate: true
+  xy: 1392, 12
+  size: 157, 180
+  orig: 160, 217
+  offset: 1, 3
+  index: -1

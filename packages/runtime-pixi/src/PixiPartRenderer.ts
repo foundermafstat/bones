@@ -104,13 +104,16 @@ function createMeshRenderable(part: RuntimeCompiledPart): RenderedPart {
     throw new Error(`Mesh part '${part.id}' is missing mesh data.`);
   }
   const positions = new Float32Array(part.mesh.vertices);
+  const uvs = part.mesh.uvs && part.mesh.uvs.length === part.mesh.vertices.length ? new Float32Array(part.mesh.uvs) : new Float32Array(part.mesh.vertices.length);
   const geometry = new MeshGeometry({
     positions,
-    uvs: new Float32Array(part.mesh.vertices.length),
+    uvs,
     indices: new Uint32Array(part.mesh.indices)
   });
-  const renderable = new Mesh({ geometry, texture: Texture.WHITE });
-  (renderable as Mesh<MeshGeometry> & { tint?: string | number }).tint = part.fill?.color ?? "#050505";
+  const renderable = new Mesh({ geometry, texture: part.mesh.texture ? Texture.from(part.mesh.texture) : Texture.WHITE });
+  if (!part.mesh.texture) {
+    (renderable as Mesh<MeshGeometry> & { tint?: string | number }).tint = part.fill?.color ?? "#050505";
+  }
   (renderable as Mesh<MeshGeometry> & { __bonesMeshPositions?: Float32Array }).__bonesMeshPositions = positions;
   return { renderable, meshBaseVertices: new Float32Array(part.mesh.vertices), meshPositions: positions };
 }

@@ -1,4 +1,4 @@
-import type { JsonValue, PathCommand } from "@bones/schema";
+import type { JsonValue, MeshShape, PathCommand } from "@bones/schema";
 import {
   closePath as closeVectorPath,
   convertLineToSmoothCubic,
@@ -56,10 +56,11 @@ export interface BoneMetadataPatch {
 export interface ShapePart {
   readonly id: string;
   readonly boneId: string;
-  readonly type: "procedural" | "path" | "svg";
+  readonly type: "procedural" | "path" | "svg" | "mesh";
   readonly pivot: readonly [number, number];
   readonly points: readonly (readonly [number, number])[];
   readonly pathCommands?: readonly PathCommand[];
+  readonly mesh?: MeshShape;
   readonly preset: "tapered-limb" | "organic-blob" | "capsule" | undefined;
   readonly assetPath?: string;
   readonly svgViewBox?: readonly [number, number, number, number];
@@ -99,7 +100,7 @@ export interface AnimationClip {
 export interface Keyframe {
   readonly id: string;
   readonly time: number;
-  readonly value: number;
+  readonly value: JsonValue;
   readonly interpolation: "linear" | "step" | "hold" | "bezier" | "spring";
   readonly curve?: readonly [number, number, number, number];
   readonly curvePreset?: CurvePreset;

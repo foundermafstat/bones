@@ -310,6 +310,101 @@ test("mesh deform tracks update vertices without rebuilding renderable and reset
   assert.deepEqual(Array.from(positions), [0, 0, 10, 0, 0, 10]);
 });
 
+test("skinned mesh vertices follow sampled bone transforms", () => {
+  const instance = new RigInstance({
+    compiledFormatVersion: "1.0.0",
+    schemaVersion: "1.0.0",
+    runtimeTarget: "pixi-v8",
+    sourceProjectId: "project.skinned",
+    name: "Skinned",
+    rig: {
+      id: 0,
+      rootBone: 0,
+      bones: [
+        { id: 0, parent: -1, local: [0, 0, 0, 1, 1, 0, 0], length: 0 },
+        { id: 1, parent: 0, local: [10, 0, 0, 1, 1, 0, 0], length: 10 }
+      ],
+      parts: [
+        {
+          id: 0,
+          bone: 0,
+          type: "mesh",
+          drawOrder: 0,
+          visible: true,
+          opacity: 1,
+          local: [0, 0, 0, 1, 1, 0, 0],
+          mesh: {
+            vertices: [10, 0, 20, 0, 10, 10],
+            indices: [0, 1, 2],
+            skin: [
+              [{ bone: 1, x: 0, y: 0, weight: 1 }],
+              [{ bone: 1, x: 10, y: 0, weight: 1 }],
+              [{ bone: 1, x: 0, y: 10, weight: 1 }]
+            ]
+          }
+        }
+      ]
+    }
+  });
+  const meshPart = instance.getPartContainer(0).children[0];
+  const positions = meshPart.__bonesMeshPositions;
+
+  assert.equal(instance.getPartContainer(0).parent, instance.rigContainer);
+  assert.deepEqual(Array.from(positions), [10, 0, 20, 0, 10, 10]);
+
+  instance.applySample({
+    normalizedTime: 0,
+    localTime: 0,
+    values: [{ targetKind: "bone", target: 1, property: "transform.x", value: 20 }]
+  });
+
+  assert.deepEqual(Array.from(positions), [20, 0, 30, 0, 20, 10]);
+});
+
+test("skinned mesh deform offsets are applied before skinning", () => {
+  const instance = new RigInstance({
+    compiledFormatVersion: "1.0.0",
+    schemaVersion: "1.0.0",
+    runtimeTarget: "pixi-v8",
+    sourceProjectId: "project.skinned-deform",
+    name: "Skinned Deform",
+    rig: {
+      id: 0,
+      rootBone: 0,
+      bones: [
+        { id: 0, parent: -1, local: [0, 0, Math.PI / 2, 1, 1, 0, 0], length: 0 },
+        { id: 1, parent: 0, local: [10, 0, 0, 1, 1, 0, 0], length: 10 }
+      ],
+      parts: [
+        {
+          id: 0,
+          bone: 0,
+          type: "mesh",
+          drawOrder: 0,
+          visible: true,
+          opacity: 1,
+          local: [0, 0, 0, 1, 1, 0, 0],
+          mesh: {
+            vertices: [0, 10],
+            indices: [0],
+            skin: [[{ bone: 1, x: 0, y: 0, weight: 1 }]]
+          }
+        }
+      ]
+    }
+  });
+  const positions = instance.getPartContainer(0).children[0].__bonesMeshPositions;
+
+  instance.applySample({
+    normalizedTime: 0,
+    localTime: 0,
+    values: [{ targetKind: "part", target: 0, property: "deform", value: [0, 5] }]
+  });
+
+  assert.ok(Math.abs(positions[0] + 5) < 0.0001);
+  assert.ok(Math.abs(positions[1] - 10) < 0.0001);
+});
+
 test("update exposes state machine blend tree as mixer layers", () => {
   const instance = new RigInstance({
     ...compiledFixture,

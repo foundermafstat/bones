@@ -1,0 +1,241 @@
+[
+  {
+    "id": 0,
+    "initialState": 1,
+    "states": [
+      {
+        "id": 0,
+        "clip": 0
+      },
+      {
+        "id": 1,
+        "clip": 1
+      },
+      {
+        "id": 2,
+        "clip": 2
+      },
+      {
+        "id": 3,
+        "clip": 3
+      },
+      {
+        "id": 4,
+        "clip": 5,
+        "blendTree": {
+          "type": "1d",
+          "parameter": 0,
+          "children": [
+            {
+              "threshold": 0,
+              "clip": 1
+            },
+            {
+              "threshold": 80,
+              "clip": 5
+            },
+            {
+              "threshold": 150,
+              "clip": 4
+            }
+          ]
+        }
+      },
+      {
+        "id": 5,
+        "clip": 4
+      },
+      {
+        "id": 6,
+        "clip": 5
+      }
+    ],
+    "transitions": [
+      {
+        "id": 0,
+        "from": 1,
+        "to": 2,
+        "duration": 0.06,
+        "easing": "anticipation",
+        "priority": 10,
+        "canInterrupt": true,
+        "syncMode": "none",
+        "conditions": [
+          {
+            "parameter": 2,
+            "operator": "==",
+            "value": true
+          }
+        ]
+      },
+      {
+        "id": 1,
+        "from": 0,
+        "to": 3,
+        "duration": 0.08,
+        "easing": "overshoot",
+        "priority": 8,
+        "canInterrupt": true,
+        "syncMode": "none",
+        "conditions": [
+          {
+            "parameter": 1,
+            "operator": "==",
+            "value": true
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "from": 1,
+        "to": 6,
+        "duration": 0.12,
+        "easing": "easeOut",
+        "priority": 0,
+        "canInterrupt": true,
+        "syncMode": "phaseMatch",
+        "conditions": [
+          {
+            "parameter": 0,
+            "operator": ">",
+            "value": 12
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "from": 2,
+        "to": 0,
+        "duration": 0.1,
+        "easing": "easeIn",
+        "priority": 5,
+        "canInterrupt": true,
+        "syncMode": "normalizedTime",
+        "conditions": [
+          {
+            "parameter": 5,
+            "operator": ">",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "from": 3,
+        "to": 1,
+        "duration": 0.18,
+        "easing": "easeOut",
+        "priority": 0,
+        "canInterrupt": false,
+        "syncMode": "none",
+        "conditions": [
+          {
+            "parameter": 4,
+            "operator": ">",
+            "value": 0.2
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "from": 5,
+        "to": 6,
+        "duration": 0.12,
+        "easing": "easeInOut",
+        "priority": 1,
+        "canInterrupt": true,
+        "syncMode": "phaseMatch",
+        "conditions": [
+          {
+            "parameter": 0,
+            "operator": "<=",
+            "value": 120
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "from": 6,
+        "to": 1,
+        "duration": 0.14,
+        "easing": "easeInOut",
+        "priority": 0,
+        "canInterrupt": true,
+        "syncMode": "phaseMatch",
+        "conditions": [
+          {
+            "parameter": 0,
+            "operator": "<=",
+            "value": 8
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "from": 6,
+        "to": 5,
+        "duration": 0.12,
+        "easing": "easeOut",
+        "priority": 1,
+        "canInterrupt": true,
+        "syncMode": "phaseMatch",
+        "conditions": [
+          {
+            "parameter": 0,
+            "operator": ">",
+            "value": 130
+          }
+        ]
+      }
+    ],
+    "parameters": [
+      {
+        "id": 0,
+        "type": "number",
+        "defaultValue": 0
+      },
+      {
+        "id": 1,
+        "type": "boolean",
+        "defaultValue": true
+      },
+      {
+        "id": 2,
+        "type": "boolean",
+        "defaultValue": false
+      },
+      {
+        "id": 3,
+        "type": "number",
+        "defaultValue": 0
+      },
+      {
+        "id": 4,
+        "type": "number",
+        "defaultValue": 0
+      },
+      {
+        "id": 5,
+        "type": "number",
+        "defaultValue": 0
+      }
+    ],
+    "stateLookup": {
+      "fall": 0,
+      "idle": 1,
+      "jump": 2,
+      "land": 3,
+      "locomotion": 4,
+      "run": 5,
+      "walk": 6
+    },
+    "parameterLookup": {
+      "absSpeed": 0,
+      "grounded": 1,
+      "jumpPressed": 2,
+      "speed": 3,
+      "timeInState": 4,
+      "velocityY": 5
+    }
+  }
+]

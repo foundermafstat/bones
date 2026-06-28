@@ -95,7 +95,7 @@ export function compileRig(projectInput: unknown, options: CompileOptions = {}):
           ...(part.procedural
             ? { procedural: { preset: part.procedural.preset, params: part.procedural.params ?? {} } }
             : {}),
-          ...(part.mesh ? { mesh: { vertices: [...part.mesh.vertices], indices: [...part.mesh.indices] } } : {}),
+          ...(part.mesh ? { mesh: compileMesh(part, lookups) } : {}),
           ...(part.svg
             ? {
                 svg: {
@@ -144,6 +144,30 @@ export function optimizeCurves(
     return defaultBezier;
   }
   return curve ? [curve[0], curve[1], curve[2], curve[3]] : [0.25, 0.1, 0.25, 1];
+}
+
+function compileMesh(part: PartDefinition, lookups: CompiledLookupTablesV1): NonNullable<CompiledPartV1["mesh"]> {
+  if (!part.mesh) {
+    throw new Error(`Part '${part.id}' is missing mesh data.`);
+  }
+  return {
+    vertices: [...part.mesh.vertices],
+    indices: [...part.mesh.indices],
+    ...(part.mesh.uvs ? { uvs: [...part.mesh.uvs] } : {}),
+    ...(part.mesh.texture ? { texture: part.mesh.texture } : {}),
+    ...(part.mesh.skin
+      ? {
+          skin: part.mesh.skin.map((vertex) =>
+            vertex.map((influence) => ({
+              bone: lookupRequired(lookups.bones, influence.boneId, "bone"),
+              x: influence.x,
+              y: influence.y,
+              weight: influence.weight
+            }))
+          )
+        }
+      : {})
+  };
 }
 
 function compileAnimationClip(

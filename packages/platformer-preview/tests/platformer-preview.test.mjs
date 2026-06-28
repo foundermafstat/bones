@@ -34,3 +34,12 @@ test("controller supports jump/fall/wall slide and death zone debug", () => {
   const death = updatePlatformerController(createInitialControllerState(85, 0), { moveX: 0, jumpPressed: false }, 0.016, level);
   assert.equal(death.debug.touchedDeathZone, true);
 });
+
+test("controller switches from walk to run when run input is held", () => {
+  const walk = updatePlatformerController(createInitialControllerState(0, 0), { moveX: 1, jumpPressed: false }, 0.016, level);
+  assert.equal(walk.animationState, "walk");
+
+  const run = updatePlatformerController(createInitialControllerState(0, 0), { moveX: 1, jumpPressed: false, runHeld: true }, 0.016, level);
+  assert.equal(run.animationState, "run");
+  assert.equal(toAnimationParameters(run).absSpeed, Math.abs(run.velocityX));
+});

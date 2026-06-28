@@ -7,6 +7,7 @@ export interface BonesPlatformerPreviewPackage {
 export interface PlatformerInputState {
   readonly moveX: number;
   readonly jumpPressed: boolean;
+  readonly runHeld?: boolean;
   readonly touchX?: number;
   readonly touchJump?: boolean;
 }
@@ -21,7 +22,7 @@ export interface PlatformerControllerState {
   readonly landingImpact: number;
   readonly facing: -1 | 1;
   readonly wallContact: "left" | "right" | "none";
-  readonly animationState: "idle" | "walk" | "jump" | "fall" | "land" | "wallSlide";
+  readonly animationState: "idle" | "walk" | "run" | "jump" | "fall" | "land" | "wallSlide";
   readonly cameraX: number;
   readonly cameraY: number;
   readonly debug: PlatformerDebugState;
@@ -55,7 +56,7 @@ export function createInitialControllerState(x = 0, y = 0): PlatformerController
 export function updatePlatformerController(state: PlatformerControllerState, input: PlatformerInputState, dt: number, level?: PlatformerPreviewLevelData): PlatformerControllerState {
   const moveX = input.touchX ?? input.moveX;
   const jumpPressed = input.touchJump ?? input.jumpPressed;
-  const velocityX = moveX * 150;
+  const velocityX = moveX * (input.runHeld ? 240 : 150);
   const jumpVelocity = jumpPressed && (state.grounded || state.wallContact !== "none") ? -260 : state.velocityY;
   const velocityY = Math.min(320, jumpVelocity + 720 * dt);
   const nextX = state.x + velocityX * dt;
@@ -116,6 +117,9 @@ function selectAnimationState(velocityX: number, velocityY: number, grounded: bo
   }
   if (jumpPressed) {
     return "jump";
+  }
+  if (Math.abs(velocityX) > 190) {
+    return "run";
   }
   return Math.abs(velocityX) > 1 ? "walk" : "idle";
 }

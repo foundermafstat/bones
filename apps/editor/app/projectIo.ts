@@ -3,11 +3,12 @@ import { cleanDirtyScopes, initialEditorProject } from "./editorState.ts";
 import { fromSourceProject, toSourceProject } from "./editorSourceProject.ts";
 import { vectorizeSvgParts } from "./editorVectorImport.ts";
 import { compileRig, type CompiledRigProjectV1 } from "@bones/compiler";
-import type { RigProject } from "@bones/schema";
+import type { BoneDefinition, MeshShape, PartDefinition, PathCommand, RigProject, Transform2D } from "@bones/schema";
 
 export const EDITOR_DRAFT_KEY = "bones:editor:draft:v1";
 export const EDITOR_DRAFT_META_KEY = "bones:editor:draft-meta:v1";
 export const CURRENT_EDITOR_SCHEMA_VERSION = "1.0.0";
+export const DEFAULT_RUNTIME_BUNDLE_FILE = "hero.path-runtime.bundle.json";
 
 export interface SerializedEditorProject {
   readonly schemaVersion: string;
@@ -195,12 +196,24 @@ export async function createProjectExportBundle(project: EditorProjectState, loa
     if (validation.errors.length) {
       throw new Error(validation.errors.join("; "));
     }
+    const pathSource = createPathRuntimeSourceProject(source);
+    const pathCompiled = compileRig(pathSource);
+    const pathValidation = validateProductionExport(pathSource, pathCompiled, profile);
+    if (pathValidation.errors.length) {
+      throw new Error(pathValidation.errors.join("; "));
+    }
     const files: Record<string, string> = {
       "hero.source.rig.json": JSON.stringify(source, null, 2),
       "hero.rig.json": JSON.stringify({ schemaVersion: source.schemaVersion, runtimeTarget: source.runtimeTarget, rigs: source.rigs }, null, 2),
       "hero.animations.json": JSON.stringify({ schemaVersion: source.schemaVersion, animations: source.animations, poses: source.poses }, null, 2),
       "hero.state-machine.json": JSON.stringify({ schemaVersion: source.schemaVersion, stateMachines: source.stateMachines, proceduralPresets: source.proceduralPresets }, null, 2),
-      "hero.compiled.json": JSON.stringify(compiled, null, 2)
+      "hero.compiled.json": JSON.stringify(compiled, null, 2),
+      "hero.path.source.rig.json": JSON.stringify(pathSource, null, 2),
+      "hero.path.compiled.json": JSON.stringify(pathCompiled, null, 2),
+      "hero.path.runtime.rig.json": JSON.stringify({ compiledFormatVersion: pathCompiled.compiledFormatVersion, schemaVersion: pathCompiled.schemaVersion, runtimeTarget: pathCompiled.runtimeTarget, sourceProjectId: pathCompiled.sourceProjectId, name: pathCompiled.name, rig: pathCompiled.rig, lookups: pathCompiled.lookups }, null, 2),
+      "hero.path.runtime.animations.json": JSON.stringify({ compiledFormatVersion: pathCompiled.compiledFormatVersion, animations: pathCompiled.animations, lookups: pathCompiled.lookups.animations }, null, 2),
+      "hero.path.runtime.state-machines.json": JSON.stringify({ compiledFormatVersion: pathCompiled.compiledFormatVersion, stateMachines: pathCompiled.stateMachines, lookups: pathCompiled.lookups.stateMachines }, null, 2),
+      [DEFAULT_RUNTIME_BUNDLE_FILE]: JSON.stringify(createRuntimeDownloadBundle(pathSource, pathCompiled), null, 2)
     };
     const compressedCompiled = profile !== "development" ? await gzipBase64(files["hero.compiled.json"]!) : undefined;
     if (compressedCompiled) {
@@ -219,9 +232,11 @@ export async function createProjectExportBundle(project: EditorProjectState, loa
         errors: [],
         warnings: [
           ...validation.warnings,
+          ...pathValidation.warnings,
           ...(inputSvgParts.length ? [`SVG parts vectorized to path parts for production export: ${inputSvgParts.join(", ")}.`] : []),
+          [`Path runtime download artifact added: ${DEFAULT_RUNTIME_BUNDLE_FILE}.`],
           ...(compressedCompiled ? ["Compiled runtime artifact added as base64-encoded gzip: hero.compiled.json.gz."] : ["Gzip compression unavailable in this environment; use pnpm export:sample for release packaging."])
-        ]
+        ].flat()
       }
     };
   } catch (error) {
@@ -233,6 +248,318 @@ export async function createProjectExportBundle(project: EditorProjectState, loa
       validation: { ok: false, errors: [error instanceof Error ? error.message : "Unknown export error"], warnings: [] }
     };
   }
+}
+
+function createPathRuntimeSourceProject(source: RigProject): RigProject {
+  return {
+    ...source,
+    rigs: source.rigs.map((rig) => {
+      const boneWorldMatrices = buildBoneWorldMatrices(rig.bones);
+      return {
+        ...rig,
+        parts: (rig.parts ?? []).map((part) => toPathRuntimePart(part, boneWorldMatrices))
+      };
+    }),
+    editor: {
+      ...(source.editor ?? {}),
+      custom: {
+        ...(source.editor?.custom ?? {}),
+        exportMode: "path-runtime"
+      }
+    }
+  };
+}
+
+function toPathRuntimePart(part: PartDefinition, boneWorldMatrices: ReadonlyMap<string, Matrix2D>): PartDefinition {
+  if (part.path && part.type === "path") {
+    return part;
+  }
+  if (!part.mesh) {
+    return part;
+  }
+
+  const targetBoneId = selectDominantSkinBone(part.mesh) ?? part.boneId;
+  const vertices = part.mesh.skin?.length ? skinnedVerticesInBoneLocal(part.mesh.skin, targetBoneId, boneWorldMatrices) : part.mesh.vertices;
+  const commands = meshBoundaryToPathCommands(vertices, part.mesh.indices);
+  if (!commands.length) {
+    return part;
+  }
+
+  return {
+    id: part.id,
+    name: part.name,
+    boneId: targetBoneId,
+    type: "path",
+    ...(part.drawOrder !== undefined ? { drawOrder: part.drawOrder } : {}),
+    ...(part.visible !== undefined ? { visible: part.visible } : {}),
+    ...(part.opacity !== undefined ? { opacity: part.opacity } : {}),
+    local: part.mesh.skin?.length ? identityTransform() : part.local ?? part.transform ?? identityTransform(),
+    fill: part.fill ?? { type: "solid", color: "#62636a", alpha: part.opacity ?? 1 },
+    path: { closed: true, commands },
+    ...(part.editor
+      ? {
+          editor: {
+            ...part.editor,
+            custom: {
+              ...(part.editor.custom ?? {}),
+              vectorizedFrom: part.mesh.texture ?? part.id,
+              vectorization: "mesh-boundary-to-path"
+            }
+          }
+        }
+      : {})
+  };
+}
+
+function createRuntimeDownloadBundle(source: RigProject, compiled: CompiledRigProjectV1): Record<string, unknown> {
+  return {
+    artifactVersion: "1.0.0",
+    kind: "bones-path-runtime-bundle",
+    entry: "compiled",
+    sourceProject: {
+      id: source.id,
+      name: source.name,
+      runtimeTarget: source.runtimeTarget
+    },
+    counts: {
+      bones: compiled.rig.bones.length,
+      parts: compiled.rig.parts.length,
+      pathParts: compiled.rig.parts.filter((part) => Boolean(part.path)).length,
+      animations: compiled.animations.length,
+      states: compiled.stateMachines.reduce((count, machine) => count + machine.states.length, 0)
+    },
+    compiled,
+    runtime: {
+      rig: compiled.rig,
+      animations: compiled.animations,
+      stateMachines: compiled.stateMachines,
+      proceduralLayers: compiled.proceduralLayers,
+      ...(compiled.constraints ? { constraints: compiled.constraints } : {}),
+      lookups: compiled.lookups
+    }
+  };
+}
+
+function selectDominantSkinBone(mesh: MeshShape): string | undefined {
+  const weights = new Map<string, number>();
+  for (const vertex of mesh.skin ?? []) {
+    for (const influence of vertex) {
+      weights.set(influence.boneId, (weights.get(influence.boneId) ?? 0) + influence.weight);
+    }
+  }
+  return [...weights.entries()].sort((left, right) => right[1] - left[1])[0]?.[0];
+}
+
+function skinnedVerticesInBoneLocal(skin: NonNullable<MeshShape["skin"]>, targetBoneId: string, boneWorldMatrices: ReadonlyMap<string, Matrix2D>): readonly number[] {
+  const inverseTarget = invertMatrix(boneWorldMatrices.get(targetBoneId) ?? identityMatrix());
+  const vertices: number[] = [];
+  for (const vertex of skin) {
+    let worldX = 0;
+    let worldY = 0;
+    let totalWeight = 0;
+    for (const influence of vertex) {
+      const world = applyMatrix(boneWorldMatrices.get(influence.boneId) ?? identityMatrix(), influence.x, influence.y);
+      worldX += world.x * influence.weight;
+      worldY += world.y * influence.weight;
+      totalWeight += influence.weight;
+    }
+    if (totalWeight > 0 && Math.abs(totalWeight - 1) > 0.0001) {
+      worldX /= totalWeight;
+      worldY /= totalWeight;
+    }
+    const local = applyMatrix(inverseTarget, worldX, worldY);
+    vertices.push(round(local.x), round(local.y));
+  }
+  return vertices;
+}
+
+function meshBoundaryToPathCommands(vertices: readonly number[], indices: readonly number[]): readonly PathCommand[] {
+  const loops = indices.length ? traceBoundaryLoops(indices) : [Array.from({ length: Math.floor(vertices.length / 2) }, (_, index) => index)];
+  const commands: PathCommand[] = [];
+  for (const loop of loops) {
+    const points = simplifyLoop(loop.map((vertexIndex) => ({ x: vertices[vertexIndex * 2] ?? 0, y: vertices[vertexIndex * 2 + 1] ?? 0 })));
+    if (points.length < 3) {
+      continue;
+    }
+    commands.push({ type: "M", x: round(points[0]!.x), y: round(points[0]!.y) });
+    for (const point of points.slice(1)) {
+      commands.push({ type: "L", x: round(point.x), y: round(point.y) });
+    }
+    commands.push({ type: "Z" });
+  }
+  return commands;
+}
+
+function traceBoundaryLoops(indices: readonly number[]): readonly (readonly number[])[] {
+  const edgeCounts = new Map<string, { readonly a: number; readonly b: number; readonly count: number }>();
+  for (let index = 0; index < indices.length; index += 3) {
+    countEdge(edgeCounts, indices[index], indices[index + 1]);
+    countEdge(edgeCounts, indices[index + 1], indices[index + 2]);
+    countEdge(edgeCounts, indices[index + 2], indices[index]);
+  }
+
+  const adjacency = new Map<number, Set<number>>();
+  const remaining = new Set<string>();
+  for (const [key, edge] of edgeCounts.entries()) {
+    if (edge.count !== 1) {
+      continue;
+    }
+    remaining.add(key);
+    addNeighbor(adjacency, edge.a, edge.b);
+    addNeighbor(adjacency, edge.b, edge.a);
+  }
+
+  const loops: number[][] = [];
+  while (remaining.size) {
+    const startKey = remaining.values().next().value;
+    const startEdge = startKey ? edgeCounts.get(startKey) : undefined;
+    if (!startKey || !startEdge) {
+      break;
+    }
+    const loop = [startEdge.a, startEdge.b];
+    remaining.delete(startKey);
+    let previous = startEdge.a;
+    let current = startEdge.b;
+    while (current !== startEdge.a) {
+      const next = [...(adjacency.get(current) ?? [])].find((candidate) => candidate !== previous && remaining.has(edgeKey(current, candidate)));
+      if (next === undefined) {
+        break;
+      }
+      remaining.delete(edgeKey(current, next));
+      previous = current;
+      current = next;
+      if (current !== startEdge.a) {
+        loop.push(current);
+      }
+    }
+    loops.push(loop);
+  }
+  return loops.sort((left, right) => right.length - left.length);
+}
+
+function countEdge(edges: Map<string, { readonly a: number; readonly b: number; readonly count: number }>, a: number | undefined, b: number | undefined): void {
+  if (!Number.isFinite(a) || !Number.isFinite(b)) {
+    return;
+  }
+  const edgeA = a!;
+  const edgeB = b!;
+  const key = edgeKey(edgeA, edgeB);
+  const edge = edges.get(key) ?? { a: Math.min(edgeA, edgeB), b: Math.max(edgeA, edgeB), count: 0 };
+  edges.set(key, { ...edge, count: edge.count + 1 });
+}
+
+function edgeKey(a: number, b: number): string {
+  return a < b ? `${a}:${b}` : `${b}:${a}`;
+}
+
+function addNeighbor(adjacency: Map<number, Set<number>>, from: number, to: number): void {
+  const neighbors = adjacency.get(from) ?? new Set<number>();
+  neighbors.add(to);
+  adjacency.set(from, neighbors);
+}
+
+function simplifyLoop(points: readonly { readonly x: number; readonly y: number }[]): readonly { readonly x: number; readonly y: number }[] {
+  if (points.length <= 3) {
+    return points;
+  }
+  const out: { readonly x: number; readonly y: number }[] = [];
+  for (let index = 0; index < points.length; index += 1) {
+    const previous = points[(index - 1 + points.length) % points.length]!;
+    const current = points[index]!;
+    const next = points[(index + 1) % points.length]!;
+    const area = Math.abs((current.x - previous.x) * (next.y - previous.y) - (current.y - previous.y) * (next.x - previous.x));
+    if (area > 0.01) {
+      out.push(current);
+    }
+  }
+  return out.length >= 3 ? out : points;
+}
+
+interface Matrix2D {
+  readonly a: number;
+  readonly b: number;
+  readonly c: number;
+  readonly d: number;
+  readonly tx: number;
+  readonly ty: number;
+}
+
+function buildBoneWorldMatrices(bones: readonly BoneDefinition[]): ReadonlyMap<string, Matrix2D> {
+  const matrices = new Map<string, Matrix2D>();
+  const bonesById = new Map(bones.map((bone) => [bone.id, bone]));
+  const visit = (boneId: string): Matrix2D => {
+    const cached = matrices.get(boneId);
+    if (cached) {
+      return cached;
+    }
+    const bone = bonesById.get(boneId);
+    if (!bone) {
+      return identityMatrix();
+    }
+    const local = matrixFromTransform(bone.local ?? bone.transform ?? identityTransform());
+    const world = bone.parentId ? multiplyMatrices(visit(bone.parentId), local) : local;
+    matrices.set(boneId, world);
+    return world;
+  };
+  for (const bone of bones) {
+    visit(bone.id);
+  }
+  return matrices;
+}
+
+function matrixFromTransform(transform: Transform2D): Matrix2D {
+  const skewX = transform.skewX ?? 0;
+  const skewY = transform.skewY ?? 0;
+  return {
+    a: Math.cos(transform.rotation + skewY) * transform.scaleX,
+    b: Math.sin(transform.rotation + skewY) * transform.scaleX,
+    c: -Math.sin(transform.rotation - skewX) * transform.scaleY,
+    d: Math.cos(transform.rotation - skewX) * transform.scaleY,
+    tx: transform.x,
+    ty: transform.y
+  };
+}
+
+function multiplyMatrices(left: Matrix2D, right: Matrix2D): Matrix2D {
+  return {
+    a: left.a * right.a + left.c * right.b,
+    b: left.b * right.a + left.d * right.b,
+    c: left.a * right.c + left.c * right.d,
+    d: left.b * right.c + left.d * right.d,
+    tx: left.a * right.tx + left.c * right.ty + left.tx,
+    ty: left.b * right.tx + left.d * right.ty + left.ty
+  };
+}
+
+function invertMatrix(matrix: Matrix2D): Matrix2D {
+  const determinant = matrix.a * matrix.d - matrix.b * matrix.c;
+  if (Math.abs(determinant) < 0.000001) {
+    return identityMatrix();
+  }
+  return {
+    a: matrix.d / determinant,
+    b: -matrix.b / determinant,
+    c: -matrix.c / determinant,
+    d: matrix.a / determinant,
+    tx: (matrix.c * matrix.ty - matrix.d * matrix.tx) / determinant,
+    ty: (matrix.b * matrix.tx - matrix.a * matrix.ty) / determinant
+  };
+}
+
+function applyMatrix(matrix: Matrix2D, x: number, y: number): { readonly x: number; readonly y: number } {
+  return { x: matrix.a * x + matrix.c * y + matrix.tx, y: matrix.b * x + matrix.d * y + matrix.ty };
+}
+
+function identityMatrix(): Matrix2D {
+  return { a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 };
+}
+
+function identityTransform(): Transform2D {
+  return { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 };
+}
+
+function round(value: number): number {
+  return Number(value.toFixed(4));
 }
 
 function validateProductionExport(source: RigProject, compiled: CompiledRigProjectV1, profile: ExportProfile): { readonly errors: string[]; readonly warnings: string[] } {

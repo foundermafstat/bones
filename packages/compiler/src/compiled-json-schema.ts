@@ -139,7 +139,17 @@ export const compiledRigProjectJsonSchema = {
           required: ["vertices", "indices"],
           properties: {
             vertices: { type: "array", items: { type: "number" } },
-            indices: { type: "array", items: { type: "integer", minimum: 0 } }
+            indices: { type: "array", items: { type: "integer", minimum: 0 } },
+            uvs: { type: "array", items: { type: "number" } },
+            texture: { type: "string", minLength: 1 },
+            skin: {
+              type: "array",
+              items: {
+                type: "array",
+                minItems: 1,
+                items: { $ref: "#/$defs/meshInfluence" }
+              }
+            }
           }
         },
         svg: {
@@ -156,6 +166,17 @@ export const compiledRigProjectJsonSchema = {
             }
           }
         }
+      }
+    },
+    meshInfluence: {
+      type: "object",
+      additionalProperties: false,
+      required: ["bone", "x", "y", "weight"],
+      properties: {
+        bone: numericId,
+        x: { type: "number" },
+        y: { type: "number" },
+        weight: { type: "number", minimum: 0 }
       }
     },
     animationClip: {

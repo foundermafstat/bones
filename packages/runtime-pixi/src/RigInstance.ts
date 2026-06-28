@@ -34,6 +34,7 @@ export class RigInstance {
   private readonly boneById = new Map<number, BoneRuntime>();
   private readonly partById = new Map<number, PartRuntime>();
   private readonly compiledPartById = new Map<number, RuntimeCompiledRig["rig"]["parts"][number]>();
+  private readonly boneWorldMatrices = new Map<number, MatrixLike>();
   private readonly constraintParams: Record<string, AnimationParameters[keyof AnimationParameters]> = {};
   private readonly constraintParamKeys: string[] = [];
   private readonly boneWorldParamKeys = new Map<number, { readonly x: string; readonly y: string }>();
@@ -52,6 +53,7 @@ export class RigInstance {
     this.options = options;
     this.container = namedContainer(`Bones:${this.compiled.name}`);
     this.rigContainer = namedContainer("rig");
+    this.rigContainer.sortableChildren = true;
     this.container.addChild(this.rigContainer);
 
     this.bones = this.compiled.rig.bones.map((bone) => ({
@@ -90,7 +92,9 @@ export class RigInstance {
           renderable: rendered.renderable,
           ...(rendered.graphicsContext ? { graphicsContext: rendered.graphicsContext } : {}),
           ...(rendered.meshBaseVertices ? { meshBaseVertices: rendered.meshBaseVertices } : {}),
-          ...(rendered.meshPositions ? { meshPositions: rendered.meshPositions } : {})
+          ...(rendered.meshPositions ? { meshPositions: rendered.meshPositions } : {}),
+          ...(part.mesh?.skin?.length && rendered.meshPositions ? { meshDeformOffsets: new Float32Array(rendered.meshPositions.length) } : {}),
+          ...(part.mesh?.skin?.length ? { skinned: true } : {})
         };
       }
       return runtimePart;
@@ -110,6 +114,7 @@ export class RigInstance {
 
     this.buildHierarchy();
     this.applyDefaultTransforms();
+    this.updateSkinnedMeshes();
   }
 
   update(dt: number, params: AnimationParameters = {}): RigUpdateState {
@@ -135,6 +140,7 @@ export class RigInstance {
     if (constraintSample) {
       this.applySampleValues(constraintSample, true);
     }
+    this.updateSkinnedMeshes();
     const emittedEvents = this.emitAnimationEvents(this.mixer.events);
 
     return {
@@ -191,6 +197,7 @@ export class RigInstance {
   applySample(sample: AnimationSample): void {
     this.applyDefaultTransforms();
     this.applySampleValues(sample, false);
+    this.updateSkinnedMeshes();
   }
 
   on(event: "animationEvent", listener: (event: RuntimeAnimationEventDispatch) => void): () => void {
@@ -325,6 +332,10 @@ export class RigInstance {
     }
 
     for (const part of [...this.parts].sort((a, b) => a.drawOrder - b.drawOrder || a.id - b.id)) {
+      if (part.skinned) {
+        this.rigContainer.addChild(part.container);
+        continue;
+      }
       const bone = this.getBoneContainer(part.bone);
       if (!bone) {
         throw new Error(`Compiled rig references missing part bone '${part.bone}'.`);
@@ -351,6 +362,10 @@ export class RigInstance {
   }
 
   private resetMeshDeform(part: PartRuntime): void {
+    if (part.skinned && part.meshDeformOffsets) {
+      part.meshDeformOffsets.fill(0);
+      return;
+    }
     if (part.meshBaseVertices && part.meshPositions) {
       part.meshPositions.set(part.meshBaseVertices);
       updateMeshBuffer(part);
@@ -358,7 +373,17 @@ export class RigInstance {
   }
 
   private applyMeshDeform(part: PartRuntime, value: unknown, additive: boolean): void {
-    if (!part.meshBaseVertices || !part.meshPositions || !Array.isArray(value)) {
+    if (!Array.isArray(value)) {
+      return;
+    }
+    if (part.skinned && part.meshDeformOffsets) {
+      for (let index = 0; index < part.meshDeformOffsets.length; index += 1) {
+        const offset = typeof value[index] === "number" ? value[index] : 0;
+        part.meshDeformOffsets[index] = additive ? part.meshDeformOffsets[index] + offset : offset;
+      }
+      return;
+    }
+    if (!part.meshBaseVertices || !part.meshPositions) {
       return;
     }
     for (let index = 0; index < part.meshPositions.length; index += 1) {
@@ -366,6 +391,48 @@ export class RigInstance {
       part.meshPositions[index] = additive ? part.meshPositions[index] + offset : part.meshBaseVertices[index] + offset;
     }
     updateMeshBuffer(part);
+  }
+
+  private updateSkinnedMeshes(): void {
+    this.updateBoneWorldMatrices();
+    for (const part of this.parts) {
+      if (!part.meshPositions || !part.skinned) {
+        continue;
+      }
+      const skin = this.compiledPartById.get(part.id)?.mesh?.skin;
+      if (!skin?.length) {
+        continue;
+      }
+      for (let vertexIndex = 0; vertexIndex < skin.length; vertexIndex += 1) {
+        const influences = skin[vertexIndex] ?? [];
+        const deformX = part.meshDeformOffsets?.[vertexIndex * 2] ?? 0;
+        const deformY = part.meshDeformOffsets?.[vertexIndex * 2 + 1] ?? 0;
+        let worldX = 0;
+        let worldY = 0;
+        for (const influence of influences) {
+          const bone = this.boneById.get(influence.bone);
+          if (!bone) {
+            continue;
+          }
+          const boneMatrix = this.boneWorldMatrices.get(bone.id) ?? identityMatrix();
+          const point = applyMatrix(boneMatrix, influence.x + deformX, influence.y + deformY);
+          worldX += point.x * influence.weight;
+          worldY += point.y * influence.weight;
+        }
+        part.meshPositions[vertexIndex * 2] = worldX;
+        part.meshPositions[vertexIndex * 2 + 1] = worldY;
+      }
+      updateMeshBuffer(part);
+    }
+  }
+
+  private updateBoneWorldMatrices(): void {
+    this.boneWorldMatrices.clear();
+    for (const bone of this.bones) {
+      const local = matrixFromContainer(bone.container);
+      const parent = bone.parent >= 0 ? this.boneWorldMatrices.get(bone.parent) : undefined;
+      this.boneWorldMatrices.set(bone.id, parent ? multiplyMatrices(parent, local) : local);
+    }
   }
 }
 
@@ -407,6 +474,53 @@ function namedContainer(label: string): Container {
   const container = new Container();
   container.label = label;
   return container;
+}
+
+interface MatrixLike {
+  readonly a: number;
+  readonly b: number;
+  readonly c: number;
+  readonly d: number;
+  readonly tx: number;
+  readonly ty: number;
+}
+
+function matrixFromContainer(container: Container): MatrixLike {
+  const rotation = container.rotation;
+  const skew = container.skew;
+  const scale = container.scale;
+  const rotationY = rotation + skew.y;
+  const rotationX = rotation - skew.x;
+  return {
+    a: Math.cos(rotationY) * scale.x,
+    b: Math.sin(rotationY) * scale.x,
+    c: -Math.sin(rotationX) * scale.y,
+    d: Math.cos(rotationX) * scale.y,
+    tx: container.position.x,
+    ty: container.position.y
+  };
+}
+
+function multiplyMatrices(left: MatrixLike, right: MatrixLike): MatrixLike {
+  return {
+    a: left.a * right.a + left.c * right.b,
+    b: left.b * right.a + left.d * right.b,
+    c: left.a * right.c + left.c * right.d,
+    d: left.b * right.c + left.d * right.d,
+    tx: left.a * right.tx + left.c * right.ty + left.tx,
+    ty: left.b * right.tx + left.d * right.ty + left.ty
+  };
+}
+
+function identityMatrix(): MatrixLike {
+  return { a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 };
+}
+
+function applyMatrix(matrix: MatrixLike, x: number, y: number): { readonly x: number; readonly y: number } {
+  return {
+    x: matrix.a * x + matrix.c * y + matrix.tx,
+    y: matrix.b * x + matrix.d * y + matrix.ty
+  };
 }
 
 function updateMeshBuffer(part: PartRuntime): void {

@@ -159,7 +159,28 @@ export const rigProjectJsonSchema = {
       required: ["vertices", "indices"],
       properties: {
         vertices: { type: "array", items: { type: "number" } },
-        indices: { type: "array", items: { type: "integer", minimum: 0 } }
+        indices: { type: "array", items: { type: "integer", minimum: 0 } },
+        uvs: { type: "array", items: { type: "number" } },
+        texture: { type: "string", minLength: 1 },
+        skin: {
+          type: "array",
+          items: {
+            type: "array",
+            minItems: 1,
+            items: { $ref: "#/$defs/meshInfluence" }
+          }
+        }
+      }
+    },
+    meshInfluence: {
+      type: "object",
+      additionalProperties: false,
+      required: ["boneId", "x", "y", "weight"],
+      properties: {
+        boneId: { $ref: "#/$defs/nonEmptyString" },
+        x: { type: "number" },
+        y: { type: "number" },
+        weight: { type: "number", minimum: 0 }
       }
     },
     svgShape: {

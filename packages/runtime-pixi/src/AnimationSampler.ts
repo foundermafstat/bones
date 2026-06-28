@@ -137,6 +137,14 @@ export function interpolateValue(
     }
     return from + (to - from) * t;
   }
+  if (property === "deform" && Array.isArray(from) && Array.isArray(to)) {
+    const length = Math.max(from.length, to.length);
+    return Array.from({ length }, (_, index) => {
+      const fromValue = typeof from[index] === "number" ? from[index] : 0;
+      const toValue = typeof to[index] === "number" ? to[index] : 0;
+      return fromValue + (toValue - fromValue) * t;
+    });
+  }
   return t < 1 ? from : to;
 }
 

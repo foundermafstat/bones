@@ -4,6 +4,7 @@ import {
   assertRigProject,
   type AnimationClip as SourceAnimationClip,
   type AnimationTrack,
+  type AnimationTrackTargetKind,
   type AnimationTrackProperty,
   type BoneDefinition,
   type EditorMetadata,
@@ -195,7 +196,7 @@ function toSourcePart(part: ShapePart): PartDefinition {
     }
   };
 
-  const exportedType = part.pathCommands ? "path" : part.type;
+  const exportedType = part.mesh ? "mesh" : part.pathCommands ? "path" : part.type;
   return {
     id: part.id,
     name: part.id,
@@ -206,6 +207,7 @@ function toSourcePart(part: ShapePart): PartDefinition {
     fill: { type: "solid", color: "#050505", alpha: 1 },
     ...(exportedType === "path" ? { path: { closed: true, commands: part.pathCommands ?? pointsToPath(part.points) } } : {}),
     ...(exportedType === "procedural" ? { procedural: { preset: part.preset ?? "organic-blob" } } : {}),
+    ...(exportedType === "mesh" && part.mesh ? { mesh: part.mesh } : {}),
     ...(exportedType === "svg" ? { svg: { source: part.assetPath ?? part.id } } : {}),
     editor
   };
@@ -213,7 +215,7 @@ function toSourcePart(part: ShapePart): PartDefinition {
 
 function fromSourcePart(part: PartDefinition): ShapePart {
   const custom = part.editor?.custom;
-  const assetPath = stringValue(custom?.assetPath) ?? part.svg?.source;
+  const assetPath = stringValue(custom?.assetPath) ?? part.svg?.source ?? part.mesh?.texture;
   const width = numberValue(custom?.width);
   const anchor = readNumberPair(custom?.anchor);
   const offset = readNumberPair(custom?.offset);
@@ -222,10 +224,11 @@ function fromSourcePart(part: PartDefinition): ShapePart {
   return {
     id: part.id,
     boneId: part.boneId,
-    type: part.type === "mesh" ? "path" : part.type,
+    type: part.type,
     pivot: readNumberPair(custom?.pivot) ?? [0, 0],
     points: readPointList(custom?.points) ?? pathToPoints(part.path?.commands ?? []),
     ...(pathCommands ? { pathCommands } : {}),
+    ...(part.mesh ? { mesh: part.mesh } : {}),
     preset: part.procedural?.preset === "tapered-limb" || part.procedural?.preset === "organic-blob" || part.procedural?.preset === "capsule" ? part.procedural.preset : undefined,
     ...(assetPath ? { assetPath } : {}),
     ...(svgViewBox ? { svgViewBox } : {}),
@@ -296,11 +299,12 @@ function fromSourceAnimationClip(clip: SourceAnimationClip): AnimationClip {
 
 function toSourceTrack(trackId: string, keyframes: readonly Keyframe[]): AnimationTrack {
   const splitIndex = trackId.lastIndexOf(".");
-  const boneId = splitIndex > 0 ? trackId.slice(0, splitIndex) : trackId;
+  const targetId = splitIndex > 0 ? trackId.slice(0, splitIndex) : trackId;
   const property = splitIndex > 0 ? trackId.slice(splitIndex + 1) : "x";
+  const target = parseTrackTarget(targetId);
   return {
     id: trackId,
-    target: { kind: "bone", id: boneId },
+    target,
     property: toSourceTrackProperty(property),
     keyframes: keyframes.map((keyframe) => ({
       time: keyframe.time,
@@ -314,7 +318,8 @@ function toSourceTrack(trackId: string, keyframes: readonly Keyframe[]): Animati
 
 function fromTrackId(track: AnimationTrack): string {
   const property = track.property.startsWith("transform.") ? track.property.slice("transform.".length) : track.property;
-  return `${track.target.id}.${property}`;
+  const prefix = track.target.kind === "bone" ? track.target.id : `${track.target.kind}:${track.target.id}`;
+  return `${prefix}.${property}`;
 }
 
 function fromSourceKeyframe(keyframe: SourceAnimationClip["tracks"][number]["keyframes"][number]): Keyframe {
@@ -324,7 +329,7 @@ function fromSourceKeyframe(keyframe: SourceAnimationClip["tracks"][number]["key
   return {
     id: stringValue(keyframe.editor?.custom?.id) ?? `key-${keyframe.time}`,
     time: keyframe.time,
-    value: typeof keyframe.value === "number" ? keyframe.value : 0,
+    value: keyframe.value,
     interpolation: keyframe.interpolation ?? "linear",
     ...(keyframe.curve ? { curve: keyframe.curve } : {}),
     ...(curvePreset ? { curvePreset } : {}),
@@ -383,7 +388,31 @@ function toSourceTrackProperty(property: string): AnimationTrackProperty {
   if (property === "scaleY") {
     return "transform.scaleY";
   }
+  if (property === "skewX") {
+    return "transform.skewX";
+  }
+  if (property === "skewY") {
+    return "transform.skewY";
+  }
+  if (property === "visible" || property === "opacity" || property === "drawOrder" || property === "deform") {
+    return property;
+  }
   return "transform.x";
+}
+
+function parseTrackTarget(value: string): AnimationTrack["target"] {
+  const splitIndex = value.indexOf(":");
+  if (splitIndex > 0) {
+    const kind = value.slice(0, splitIndex);
+    if (isTrackTargetKind(kind)) {
+      return { kind, id: value.slice(splitIndex + 1) };
+    }
+  }
+  return { kind: "bone", id: value };
+}
+
+function isTrackTargetKind(value: string): value is AnimationTrackTargetKind {
+  return value === "bone" || value === "part" || value === "project" || value === "stateMachine";
 }
 
 function orderBones(bones: readonly BoneDefinition[], rootBoneId: string): string[] {

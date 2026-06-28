@@ -73,11 +73,23 @@ export interface CompiledPartV1 {
   readonly mesh?: {
     readonly vertices: readonly number[];
     readonly indices: readonly number[];
+    readonly uvs?: readonly number[];
+    readonly texture?: string;
+    readonly skin?: readonly CompiledMeshVertexSkinV1[];
   };
   readonly svg?: {
     readonly source: string;
     readonly viewBox?: readonly [number, number, number, number];
   };
+}
+
+export type CompiledMeshVertexSkinV1 = readonly CompiledMeshVertexInfluenceV1[];
+
+export interface CompiledMeshVertexInfluenceV1 {
+  readonly bone: NumericId;
+  readonly x: number;
+  readonly y: number;
+  readonly weight: number;
 }
 
 export interface CompiledAnimationClipV1 {

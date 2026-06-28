@@ -117,6 +117,18 @@ export interface ProceduralShape {
 export interface MeshShape {
   readonly vertices: readonly number[];
   readonly indices: readonly number[];
+  readonly uvs?: readonly number[];
+  readonly texture?: string;
+  readonly skin?: readonly MeshVertexSkin[];
+}
+
+export type MeshVertexSkin = readonly MeshVertexInfluence[];
+
+export interface MeshVertexInfluence {
+  readonly boneId: string;
+  readonly x: number;
+  readonly y: number;
+  readonly weight: number;
 }
 
 export interface SvgShape {

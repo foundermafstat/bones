@@ -74,11 +74,23 @@ export interface RuntimeCompiledPart {
   readonly mesh?: {
     readonly vertices: readonly number[];
     readonly indices: readonly number[];
+    readonly uvs?: readonly number[];
+    readonly texture?: string;
+    readonly skin?: readonly RuntimeMeshVertexSkin[];
   };
   readonly svg?: {
     readonly source: string;
     readonly viewBox?: readonly [number, number, number, number];
   };
+}
+
+export type RuntimeMeshVertexSkin = readonly RuntimeMeshVertexInfluence[];
+
+export interface RuntimeMeshVertexInfluence {
+  readonly bone: NumericId;
+  readonly x: number;
+  readonly y: number;
+  readonly weight: number;
 }
 
 export interface RigInstanceOptions {
@@ -111,6 +123,8 @@ export interface PartRuntime {
   readonly graphicsContext?: GraphicsContext;
   readonly meshBaseVertices?: Float32Array;
   readonly meshPositions?: Float32Array;
+  readonly meshDeformOffsets?: Float32Array;
+  readonly skinned?: boolean;
 }
 
 export interface RigUpdateState {

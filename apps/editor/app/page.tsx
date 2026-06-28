@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -106,7 +106,6 @@ import {
   createEmptyEditorProject,
   evaluateStateMachinePreview,
   executeCommand,
-  initialEditorProject,
   markAutosaveSaved,
   redo,
   undo,
@@ -120,11 +119,12 @@ import {
   type StateMachineNodePosition,
   type TimelineEvent
 } from "./editorState";
-import { createProjectExportBundle, createRuntimeParityReport, EDITOR_DRAFT_KEY, EDITOR_DRAFT_META_KEY, loadDraft, loadDraftMeta, parseImportedProject, saveDraft, serializeEditorProject, type DraftMetadata, type ProjectExportBundle, type ProjectImportResult, type RuntimeParityReport } from "./projectIo";
+import { defaultEditorProject } from "./defaultEditorProject";
+import { createProjectExportBundle, createRuntimeParityReport, DEFAULT_RUNTIME_BUNDLE_FILE, EDITOR_DRAFT_KEY, EDITOR_DRAFT_META_KEY, loadDraft, loadDraftMeta, parseImportedProject, saveDraft, serializeEditorProject, type DraftMetadata, type ProjectExportBundle, type ProjectImportResult, type RuntimeParityReport } from "./projectIo";
 import { PixiPreview } from "./PixiPreview";
 import { inspectSvgVector, vectorizeSvgPart } from "./editorVectorImport";
 import { parseLdtkLevel } from "@bones/ldtk-adapter";
-import { createInitialControllerState, toAnimationParameters, updatePlatformerController } from "@bones/platformer-preview";
+import { createInitialControllerState, toAnimationParameters, updatePlatformerController, type PlatformerControllerState } from "@bones/platformer-preview";
 import type { CompiledRigProjectV1 } from "@bones/compiler";
 import type { JsonValue } from "@bones/schema";
 import { evaluateRuntimeBudget, runtimePerformanceBudgets, type QualityPresetName, type RuntimeCompiledRig, type RuntimeProfilerStats } from "@bones/runtime-pixi";
@@ -139,24 +139,17 @@ const sampleProject = {
 };
 const defaultBoneTailLength = 42;
 
-const previewClips = [
-  { id: 0, name: "Idle" },
-  { id: 1, name: "Walk" },
-  { id: 2, name: "Jump" },
-  { id: 3, name: "Fall" },
-  { id: 4, name: "Land" }
-] as const;
-
-const previewScenarios = ["idle", "walk", "run", "jump", "fall", "land", "wallSlide", "movingPlatform"] as const;
-const previewScenarioClipIds: Record<(typeof previewScenarios)[number], number> = {
-  idle: 0,
-  walk: 1,
-  run: 1,
-  jump: 2,
-  fall: 3,
-  land: 4,
-  wallSlide: 3,
-  movingPlatform: 1
+const previewScenarios = ["control", "idle", "walk", "run", "jump", "fall", "land", "wallSlide", "movingPlatform"] as const;
+const previewScenarioClipIds: Record<(typeof previewScenarios)[number], string> = {
+  control: "idle",
+  idle: "idle",
+  walk: "walk",
+  run: "run",
+  jump: "jump",
+  fall: "fall",
+  land: "land",
+  wallSlide: "fall",
+  movingPlatform: "walk"
 };
 
 const modeSurfaceDescriptions: Record<string, string> = {
@@ -292,14 +285,33 @@ function getReachableStateIds(initialStateId: string, transitions: readonly Edit
   return reachable;
 }
 
+function isPreviewControlKey(code: string): boolean {
+  return code === "KeyA" || code === "KeyD" || code === "KeyW" || code === "ArrowLeft" || code === "ArrowRight" || code === "Space" || code === "ShiftLeft" || code === "ShiftRight";
+}
+
+function keysToPlatformerInput(keys: ReadonlySet<string>) {
+  const left = keys.has("KeyA") || keys.has("ArrowLeft");
+  const right = keys.has("KeyD") || keys.has("ArrowRight");
+  return {
+    moveX: (right ? 1 : 0) - (left ? 1 : 0),
+    jumpPressed: keys.has("Space") || keys.has("KeyW"),
+    runHeld: keys.has("ShiftLeft") || keys.has("ShiftRight")
+  };
+}
+
+function clipIdForControllerState(state: PlatformerControllerState): string {
+  return state.animationState === "wallSlide" ? "fall" : state.animationState;
+}
+
 export default function EditorPage() {
   const [mode, setMode] = useState<EditorMode>("Rig");
   const [leftPanelWidth, setLeftPanelWidth] = useState(220);
   const [rightPanelWidth, setRightPanelWidth] = useState(420);
   const [timelineHeight, setTimelineHeight] = useState(178);
   const [previewPlaying, setPreviewPlaying] = useState(true);
-  const [previewClipId, setPreviewClipId] = useState(0);
+  const [previewClipId, setPreviewClipId] = useState("idle");
   const [previewScenario, setPreviewScenario] = useState<(typeof previewScenarios)[number]>("idle");
+  const [liveControllerState, setLiveControllerState] = useState<PlatformerControllerState>(() => createInitialControllerState(0, 0));
   const [previewRecords, setPreviewRecords] = useState<readonly { readonly scenario: string; readonly state: string; readonly params: Readonly<Record<string, unknown>> }[]>([]);
   const [previewQuality, setPreviewQuality] = useState<QualityPresetName>("medium");
   const [previewRuntimeMode, setPreviewRuntimeMode] = useState<"source" | "compiled">("source");
@@ -366,12 +378,13 @@ export default function EditorPage() {
   const [lastExportBundle, setLastExportBundle] = useState<ProjectExportBundle | null>(null);
   const [runtimeParityReport, setRuntimeParityReport] = useState<RuntimeParityReport | null>(null);
   const [pendingImport, setPendingImport] = useState<ProjectImportResult | null>(null);
+  const previewKeysRef = useRef(new Set<string>());
   const [editorState, setEditorState] = useState<EditorStateContainer>({
-    project: initialEditorProject,
+    project: defaultEditorProject,
     history: { past: [], future: [] }
   });
   const selectedBone = editorState.project.selectedBoneId;
-  const selectedTransform = editorState.project.bones[selectedBone] ?? editorState.project.bones.root ?? initialEditorProject.bones.body!;
+  const selectedTransform = editorState.project.bones[selectedBone] ?? editorState.project.bones.root ?? defaultEditorProject.bones.root!;
   const selectedBoneMetadata = editorState.project.boneMetadata[selectedBone] ?? {};
   const rigPoints = useMemo(() => getRigWorldPoints(editorState.project), [editorState.project]);
   const displayedRigPoints = dragBone?.handle === "head" ? { ...rigPoints, [dragBone.boneId]: dragBone.point } : rigPoints;
@@ -485,12 +498,61 @@ export default function EditorPage() {
     [previewQuality, profilerStats]
   );
   const previewLevel = useMemo(() => parseLdtkLevel(sampleLdtkLevel), []);
+  useEffect(() => {
+    if (mode !== "Preview") {
+      previewKeysRef.current.clear();
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!isPreviewControlKey(event.code)) {
+        return;
+      }
+      event.preventDefault();
+      previewKeysRef.current.add(event.code);
+      setPreviewScenario("control");
+      setPreviewPlaying(true);
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (!isPreviewControlKey(event.code)) {
+        return;
+      }
+      event.preventDefault();
+      previewKeysRef.current.delete(event.code);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, [mode]);
+  useEffect(() => {
+    if (mode !== "Preview" || previewScenario !== "control") {
+      return;
+    }
+    let animationFrame = 0;
+    let previousTime = performance.now();
+    const tick = (time: number) => {
+      const dt = Math.min(0.033, Math.max(0.001, (time - previousTime) / 1000));
+      previousTime = time;
+      setLiveControllerState((state) => {
+        const next = updatePlatformerController(state, keysToPlatformerInput(previewKeysRef.current), dt, previewLevel);
+        setPreviewClipId(clipIdForControllerState(next));
+        return next;
+      });
+      animationFrame = requestAnimationFrame(tick);
+    };
+    animationFrame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(animationFrame);
+  }, [mode, previewLevel, previewScenario]);
   const platformerDebug = useMemo(() => {
     const state =
-      previewScenario === "walk"
+      previewScenario === "control"
+        ? liveControllerState
+        : previewScenario === "walk"
         ? updatePlatformerController(createInitialControllerState(0, 0), { moveX: 1, jumpPressed: false }, 0.2, previewLevel)
         : previewScenario === "run"
-          ? updatePlatformerController(createInitialControllerState(0, 0), { moveX: 1.8, jumpPressed: false }, 0.35, previewLevel)
+          ? updatePlatformerController(createInitialControllerState(0, 0), { moveX: 1, jumpPressed: false, runHeld: true }, 0.35, previewLevel)
         : previewScenario === "jump"
           ? updatePlatformerController(createInitialControllerState(0, 0), { moveX: 0, jumpPressed: true }, 0.016, previewLevel)
           : previewScenario === "fall"
@@ -503,7 +565,7 @@ export default function EditorPage() {
                   ? updatePlatformerController({ ...createInitialControllerState(36, 0), velocityX: 32, grounded: true }, { moveX: 0.5, jumpPressed: false }, 0.25, previewLevel)
               : updatePlatformerController(createInitialControllerState(0, 0), { moveX: 0, jumpPressed: false }, 0.016, previewLevel);
     return { state, params: toAnimationParameters(state) };
-  }, [previewLevel, previewScenario]);
+  }, [liveControllerState, previewLevel, previewScenario]);
   const previewStateMachineSimulation = useMemo(
     () => evaluateStateMachinePreview({ ...editorState.project.stateMachine, parameters: { ...editorState.project.stateMachine.parameters, ...platformerDebug.params } }),
     [editorState.project.stateMachine, platformerDebug.params]
@@ -805,12 +867,24 @@ export default function EditorPage() {
     window.localStorage.removeItem(EDITOR_DRAFT_KEY);
     window.localStorage.removeItem(EDITOR_DRAFT_META_KEY);
     setAvailableDraft(null);
-    replaceProject(structuredClone(initialEditorProject), "sample", "idle_neutral");
+    replaceProject(structuredClone(defaultEditorProject), "sample", "idle_neutral");
     setIoStatus("sample loaded; draft cleared");
   };
   const startEmptyProject = () => {
     replaceProject(createEmptyEditorProject(), "empty");
     setIoStatus("new empty project");
+  };
+  const downloadExportContents = (fileName: string, contents: string, status?: string) => {
+    const url = URL.createObjectURL(new Blob([contents], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    setIoStatus(status ?? `downloaded ${fileName}`);
   };
   const exportBundle = async () => {
     const bundle = await createProjectExportBundle(editorState.project);
@@ -820,13 +894,13 @@ export default function EditorPage() {
       setIoStatus(bundle.validation.errors.join("; "));
       return;
     }
-    const json = JSON.stringify(bundle.files, null, 2);
-    try {
-      await navigator.clipboard?.writeText(json);
-      setIoStatus(`copied ${json.length} bytes / ${Object.keys(bundle.files).length} files`);
-    } catch {
-      setIoStatus(`export ready (${Object.keys(bundle.files).length} files); clipboard permission denied`);
+    const downloadFileName = bundle.files[DEFAULT_RUNTIME_BUNDLE_FILE] ? DEFAULT_RUNTIME_BUNDLE_FILE : "hero.compiled.json";
+    const contents = bundle.files[downloadFileName];
+    if (!contents) {
+      setIoStatus("export built, but runtime bundle is missing");
+      return;
     }
+    downloadExportContents(downloadFileName, contents, `downloaded ${downloadFileName} / ${Object.keys(bundle.files).length} files built`);
   };
   const runRuntimeParityCheck = async () => {
     const bundle = lastExportBundle?.validation.ok ? lastExportBundle : await createProjectExportBundle(editorState.project);
@@ -942,13 +1016,7 @@ export default function EditorPage() {
       setIoStatus(`missing ${fileName}`);
       return;
     }
-    const url = URL.createObjectURL(new Blob([contents], { type: "application/json" }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = fileName;
-    link.click();
-    URL.revokeObjectURL(url);
-    setIoStatus(`downloaded ${fileName}`);
+    downloadExportContents(fileName, contents);
   };
   const downloadExportBundle = () => {
     if (!lastExportBundle?.validation.ok) {
@@ -956,13 +1024,7 @@ export default function EditorPage() {
       return;
     }
     const contents = JSON.stringify(lastExportBundle.files, null, 2);
-    const url = URL.createObjectURL(new Blob([contents], { type: "application/json" }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "hero.export-bundle.json";
-    link.click();
-    URL.revokeObjectURL(url);
-    setIoStatus(`downloaded export bundle (${Object.keys(lastExportBundle.files).length} files)`);
+    downloadExportContents("hero.export-bundle.json", contents, `downloaded export bundle (${Object.keys(lastExportBundle.files).length} files)`);
   };
   const copySourceJson = async () => {
     try {
@@ -1195,15 +1257,15 @@ export default function EditorPage() {
             <Button size="sm" variant={!previewPlaying ? "default" : "outline"} type="button" onClick={() => setPreviewPlaying(false)}>
               Pause
             </Button>
-            <Select value={String(previewClipId)} onValueChange={(value) => setPreviewClipId(Number(value))}>
+            <Select value={previewClipId} onValueChange={setPreviewClipId}>
               <SelectTrigger className="w-28" size="sm" aria-label="Preview animation clip">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {previewClips.map((clip) => (
-                    <SelectItem key={clip.id} value={String(clip.id)}>
-                      {clip.name}
+                  {clipIds.map((clipId) => (
+                    <SelectItem key={clipId} value={clipId}>
+                      {editorState.project.animations[clipId]?.name ?? clipId}
                     </SelectItem>
                   ))}
                 </SelectGroup>
@@ -1361,13 +1423,34 @@ export default function EditorPage() {
               <span className="truncate text-xs text-muted-foreground">{modeSurfaceDescriptions[mode]}</span>
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span>{previewClips.find((clip) => clip.id === previewClipId)?.name}</span>
+              <span>{editorState.project.animations[previewClipId]?.name ?? previewClipId}</span>
               <Separator className="h-4" orientation="vertical" />
               <span>{previewPlaying ? "Playing" : "Paused"}</span>
             </div>
           </CardHeader>
           <CardContent className="relative min-h-0 flex-1 overflow-hidden bg-[linear-gradient(var(--border)_1px,transparent_1px),linear-gradient(90deg,var(--border)_1px,transparent_1px)] bg-[size:24px_24px] p-0" aria-label="PixiJS canvas viewport">
-            <PixiPreview clipId={previewClipId} compiledProject={compiledPreviewProject} playing={previewPlaying} project={editorState.project} quality={previewQuality} runtimeMode={previewRuntimeMode} showSkeleton={mode !== "Preview" && mode !== "Rig"} onProfilerStats={setProfilerStats} />
+            <PixiPreview
+              clipId={previewClipId}
+              compiledProject={compiledPreviewProject}
+              playing={previewPlaying}
+              project={editorState.project}
+              quality={previewQuality}
+              runtimeMode={previewRuntimeMode}
+              sceneState={
+                mode === "Preview"
+                  ? {
+                      x: platformerDebug.state.x,
+                      y: platformerDebug.state.y,
+                      cameraX: platformerDebug.state.cameraX,
+                      cameraY: platformerDebug.state.cameraY,
+                      facing: platformerDebug.state.facing,
+                      colliders: previewLevel.colliders
+                    }
+                  : undefined
+              }
+              showSkeleton={mode !== "Preview" && mode !== "Rig"}
+              onProfilerStats={setProfilerStats}
+            />
             {mode === "Preview" ? (
               <div className="absolute inset-0 z-20 pointer-events-none">
                 <div className="pointer-events-auto absolute left-3 top-3 grid w-[min(560px,calc(100%-24px))] gap-2 rounded-md border bg-card/95 p-3 shadow-sm" aria-label="Gameplay preview overlay">
@@ -1430,7 +1513,7 @@ export default function EditorPage() {
                     <div>
                       <p className="font-medium">State {platformerDebug.state.animationState}</p>
                       <p className="text-muted-foreground">Runtime {previewRuntimeMode === "compiled" ? "compiled export" : "editor source"}</p>
-                      <p className="text-muted-foreground">Clip {previewClips[previewClipId]?.name ?? "Unknown"} / transition {previewStateMachineSimulation.transitionId ?? "none"} {previewStateMachineSimulation.transitionWeight.toFixed(2)}</p>
+                      <p className="text-muted-foreground">Clip {editorState.project.animations[previewClipId]?.name ?? previewClipId} / transition {previewStateMachineSimulation.transitionId ?? "none"} {previewStateMachineSimulation.transitionWeight.toFixed(2)}</p>
                       <p className="text-muted-foreground">Params absSpeed {platformerDebug.params.absSpeed} velocityY {platformerDebug.params.velocityY}</p>
                       <p className="text-muted-foreground">grounded {String(platformerDebug.params.grounded)} landing {platformerDebug.params.landingImpact}</p>
                       <p className="text-muted-foreground">active {previewStateMachineSimulation.previousStateId} -&gt; {previewStateMachineSimulation.activeStateId}</p>
@@ -1947,8 +2030,8 @@ export default function EditorPage() {
                     <Button size="sm" type="button" variant="outline" onClick={() => void copyExportFile("hero.release-manifest.json")} disabled={!lastExportBundle?.files["hero.release-manifest.json"]}>
                       Copy Manifest
                     </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={() => void copyExportFile("hero.compiled.json")} disabled={!lastExportBundle?.files["hero.compiled.json"]}>
-                      Copy Runtime JSON
+                    <Button size="sm" type="button" variant="outline" onClick={() => void copyExportFile(DEFAULT_RUNTIME_BUNDLE_FILE)} disabled={!lastExportBundle?.files[DEFAULT_RUNTIME_BUNDLE_FILE]}>
+                      Copy Runtime Bundle
                     </Button>
                     <Button size="sm" type="button" variant="outline" onClick={downloadExportBundle} disabled={!lastExportBundle?.validation.ok}>
                       Download All
@@ -2892,7 +2975,7 @@ export default function EditorPage() {
             <div className="mb-1 flex items-center gap-1">
               <span className="text-xs text-muted-foreground">{selectedTimelineTrackId}</span>
               <Input className="h-7 w-20 text-xs" type="number" step="0.01" value={selectedTimelineKey.time} onChange={(event) => activeClip && runCommand(createUpdateKeyframeCommand(activeClip.id, selectedTimelineTrackId, selectedTimelineKey.id, { time: Number(event.target.value) }))} aria-label="Selected key time" />
-              <Input className="h-7 w-20 text-xs" type="number" step="0.01" value={selectedTimelineKey.value} onChange={(event) => activeClip && runCommand(createUpdateKeyframeCommand(activeClip.id, selectedTimelineTrackId, selectedTimelineKey.id, { value: Number(event.target.value) }))} aria-label="Selected key value" />
+              <Input className="h-7 w-20 text-xs" type="number" step="0.01" value={typeof selectedTimelineKey.value === "number" ? selectedTimelineKey.value : ""} disabled={typeof selectedTimelineKey.value !== "number"} onChange={(event) => activeClip && runCommand(createUpdateKeyframeCommand(activeClip.id, selectedTimelineTrackId, selectedTimelineKey.id, { value: Number(event.target.value) }))} aria-label="Selected key value" />
             </div>
           ) : null}
           {activeClip && selectedTimelineEvent ? (

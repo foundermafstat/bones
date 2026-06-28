@@ -381,8 +381,8 @@ function validatePart(input: unknown, path: string, boneIds: ReadonlySet<string>
   if (input.type === "svg" && (!isRecord(input.svg) || typeof input.svg.source !== "string" || input.svg.source === "")) {
     errors.push({ path: `${path}.svg.source`, message: "SVG parts must include a non-empty svg.source." });
   }
-  if (input.type === "mesh" && (!isRecord(input.mesh) || !Array.isArray(input.mesh.vertices) || !Array.isArray(input.mesh.indices))) {
-    errors.push({ path: `${path}.mesh`, message: "Mesh parts must include vertices and indices arrays." });
+  if (input.type === "mesh") {
+    validateMesh(input.mesh, `${path}.mesh`, boneIds, errors);
   }
   validatePartPayloadMatchesType(input, path, errors);
 }
@@ -407,6 +407,65 @@ function validateProcedural(input: unknown, path: string, errors: ValidationIssu
   if (input.params !== undefined && !isRecord(input.params)) {
     errors.push({ path: `${path}.params`, message: "Procedural params must be an object." });
   }
+}
+
+function validateMesh(input: unknown, path: string, boneIds: ReadonlySet<string>, errors: ValidationIssue[]): void {
+  if (!isRecord(input)) {
+    errors.push({ path, message: "Mesh parts must include a mesh object." });
+    return;
+  }
+  if (!Array.isArray(input.vertices)) {
+    errors.push({ path: `${path}.vertices`, message: "Mesh vertices must be an array." });
+  } else {
+    validateNumberArray(input.vertices, `${path}.vertices`, errors);
+  }
+  if (!Array.isArray(input.indices)) {
+    errors.push({ path: `${path}.indices`, message: "Mesh indices must be an array." });
+  } else {
+    input.indices.forEach((value, index) => {
+      if (!Number.isInteger(value) || value < 0) {
+        errors.push({ path: `${path}.indices[${index}]`, message: "Mesh indices must be non-negative integers." });
+      }
+    });
+  }
+  if (input.uvs !== undefined) {
+    if (!Array.isArray(input.uvs)) {
+      errors.push({ path: `${path}.uvs`, message: "Mesh uvs must be an array." });
+    } else {
+      validateNumberArray(input.uvs, `${path}.uvs`, errors);
+    }
+  }
+  if (input.texture !== undefined) {
+    expectNonEmptyString(input.texture, `${path}.texture`, errors);
+  }
+  if (input.skin !== undefined) {
+    if (!Array.isArray(input.skin)) {
+      errors.push({ path: `${path}.skin`, message: "Mesh skin must be an array." });
+    } else {
+      input.skin.forEach((vertex, vertexIndex) => validateMeshVertexSkin(vertex, `${path}.skin[${vertexIndex}]`, boneIds, errors));
+    }
+  }
+}
+
+function validateMeshVertexSkin(input: unknown, path: string, boneIds: ReadonlySet<string>, errors: ValidationIssue[]): void {
+  if (!Array.isArray(input) || input.length === 0) {
+    errors.push({ path, message: "Mesh skin vertex must contain at least one influence." });
+    return;
+  }
+  input.forEach((influence, index) => {
+    const influencePath = `${path}[${index}]`;
+    if (!isRecord(influence)) {
+      errors.push({ path: influencePath, message: "Mesh skin influence must be an object." });
+      return;
+    }
+    expectNonEmptyString(influence.boneId, `${influencePath}.boneId`, errors);
+    if (typeof influence.boneId === "string" && !boneIds.has(influence.boneId)) {
+      errors.push({ path: `${influencePath}.boneId`, message: `Mesh skin bone '${influence.boneId}' does not exist.` });
+    }
+    expectNumber(influence.x, `${influencePath}.x`, errors);
+    expectNumber(influence.y, `${influencePath}.y`, errors);
+    expectNumber(influence.weight, `${influencePath}.weight`, errors, { min: 0 });
+  });
 }
 
 function validateFill(input: unknown, path: string, errors: ValidationIssue[]): void {
@@ -886,6 +945,10 @@ function expectNumber(
   if (options.minExclusive !== undefined && value <= options.minExclusive) {
     errors.push({ path, message: `Expected a number greater than ${options.minExclusive}.` });
   }
+}
+
+function validateNumberArray(input: readonly unknown[], path: string, errors: ValidationIssue[]): void {
+  input.forEach((value, index) => expectNumber(value, `${path}[${index}]`, errors));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
