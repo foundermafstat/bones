@@ -8,7 +8,11 @@ import type { BoneDefinition, MeshShape, PartDefinition, PathCommand, RigProject
 export const EDITOR_DRAFT_KEY = "bones:editor:draft:v1";
 export const EDITOR_DRAFT_META_KEY = "bones:editor:draft-meta:v1";
 export const CURRENT_EDITOR_SCHEMA_VERSION = "1.0.0";
-export const DEFAULT_RUNTIME_BUNDLE_FILE = "hero.path-runtime.bundle.json";
+export const EXPORT_BUNDLE_ROOT_DIR = "hero-hybrid-bundle";
+export const DEFAULT_PATH_RUNTIME_BUNDLE_FILE = "hero.path-runtime.bundle.json";
+export const DEFAULT_HYBRID_RUNTIME_BUNDLE_FILE = "hero.hybrid-runtime.bundle.json";
+export const DEFAULT_RUNTIME_BUNDLE_FILE = DEFAULT_HYBRID_RUNTIME_BUNDLE_FILE;
+export const DEFAULT_RUNTIME_ZIP_FILE = "hero.hybrid-runtime-bundle.zip";
 
 export interface SerializedEditorProject {
   readonly schemaVersion: string;
@@ -19,9 +23,17 @@ export interface SerializedEditorProject {
 export interface ProjectExportBundle {
   readonly profile: ExportProfile;
   readonly files: Readonly<Record<string, string>>;
+  readonly assetFiles: readonly ProjectExportAsset[];
   readonly manifest: ProjectReleaseManifest | null;
   readonly summary: ProjectExportSummary | null;
   readonly validation: { readonly ok: boolean; readonly errors: readonly string[]; readonly warnings: readonly string[] };
+}
+
+export interface ProjectExportAsset {
+  readonly sourcePath: string;
+  readonly zipPath: string;
+  readonly runtimePath: string;
+  readonly contentType: string;
 }
 
 export type ExportProfile = "development" | "production" | "debug";
@@ -196,6 +208,8 @@ export async function createProjectExportBundle(project: EditorProjectState, loa
     if (validation.errors.length) {
       throw new Error(validation.errors.join("; "));
     }
+    const assetFiles = createTextureAssetEntries(compiled);
+    const visualCompiled = createCompiledWithRuntimeTexturePaths(compiled, assetFiles);
     const pathSource = createPathRuntimeSourceProject(source);
     const pathCompiled = compileRig(pathSource);
     const pathValidation = validateProductionExport(pathSource, pathCompiled, profile);
@@ -208,12 +222,15 @@ export async function createProjectExportBundle(project: EditorProjectState, loa
       "hero.animations.json": JSON.stringify({ schemaVersion: source.schemaVersion, animations: source.animations, poses: source.poses }, null, 2),
       "hero.state-machine.json": JSON.stringify({ schemaVersion: source.schemaVersion, stateMachines: source.stateMachines, proceduralPresets: source.proceduralPresets }, null, 2),
       "hero.compiled.json": JSON.stringify(compiled, null, 2),
+      "hero.visual.compiled.json": JSON.stringify(visualCompiled, null, 2),
       "hero.path.source.rig.json": JSON.stringify(pathSource, null, 2),
       "hero.path.compiled.json": JSON.stringify(pathCompiled, null, 2),
       "hero.path.runtime.rig.json": JSON.stringify({ compiledFormatVersion: pathCompiled.compiledFormatVersion, schemaVersion: pathCompiled.schemaVersion, runtimeTarget: pathCompiled.runtimeTarget, sourceProjectId: pathCompiled.sourceProjectId, name: pathCompiled.name, rig: pathCompiled.rig, lookups: pathCompiled.lookups }, null, 2),
       "hero.path.runtime.animations.json": JSON.stringify({ compiledFormatVersion: pathCompiled.compiledFormatVersion, animations: pathCompiled.animations, lookups: pathCompiled.lookups.animations }, null, 2),
       "hero.path.runtime.state-machines.json": JSON.stringify({ compiledFormatVersion: pathCompiled.compiledFormatVersion, stateMachines: pathCompiled.stateMachines, lookups: pathCompiled.lookups.stateMachines }, null, 2),
-      [DEFAULT_RUNTIME_BUNDLE_FILE]: JSON.stringify(createRuntimeDownloadBundle(pathSource, pathCompiled), null, 2)
+      [DEFAULT_PATH_RUNTIME_BUNDLE_FILE]: JSON.stringify(createPathRuntimeDownloadBundle(pathSource, pathCompiled), null, 2),
+      [DEFAULT_HYBRID_RUNTIME_BUNDLE_FILE]: JSON.stringify(createHybridRuntimeDownloadBundle(source, visualCompiled, pathCompiled, assetFiles), null, 2),
+      "manifest.json": JSON.stringify(createHybridPackageManifest(source, visualCompiled, pathCompiled, assetFiles), null, 2)
     };
     const compressedCompiled = profile !== "development" ? await gzipBase64(files["hero.compiled.json"]!) : undefined;
     if (compressedCompiled) {
@@ -225,6 +242,7 @@ export async function createProjectExportBundle(project: EditorProjectState, loa
     return {
       profile,
       files,
+      assetFiles,
       manifest,
       summary,
       validation: {
@@ -234,7 +252,8 @@ export async function createProjectExportBundle(project: EditorProjectState, loa
           ...validation.warnings,
           ...pathValidation.warnings,
           ...(inputSvgParts.length ? [`SVG parts vectorized to path parts for production export: ${inputSvgParts.join(", ")}.`] : []),
-          [`Path runtime download artifact added: ${DEFAULT_RUNTIME_BUNDLE_FILE}.`],
+          [`Hybrid runtime bundle added: ${DEFAULT_HYBRID_RUNTIME_BUNDLE_FILE}.`],
+          [`PNG texture assets queued for zip: ${assetFiles.length}.`],
           ...(compressedCompiled ? ["Compiled runtime artifact added as base64-encoded gzip: hero.compiled.json.gz."] : ["Gzip compression unavailable in this environment; use pnpm export:sample for release packaging."])
         ].flat()
       }
@@ -243,6 +262,7 @@ export async function createProjectExportBundle(project: EditorProjectState, loa
     return {
       profile,
       files: {},
+      assetFiles: [],
       manifest: null,
       summary: null,
       validation: { ok: false, errors: [error instanceof Error ? error.message : "Unknown export error"], warnings: [] }
@@ -311,7 +331,7 @@ function toPathRuntimePart(part: PartDefinition, boneWorldMatrices: ReadonlyMap<
   };
 }
 
-function createRuntimeDownloadBundle(source: RigProject, compiled: CompiledRigProjectV1): Record<string, unknown> {
+function createPathRuntimeDownloadBundle(source: RigProject, compiled: CompiledRigProjectV1): Record<string, unknown> {
   return {
     artifactVersion: "1.0.0",
     kind: "bones-path-runtime-bundle",
@@ -338,6 +358,140 @@ function createRuntimeDownloadBundle(source: RigProject, compiled: CompiledRigPr
       lookups: compiled.lookups
     }
   };
+}
+
+function createHybridRuntimeDownloadBundle(source: RigProject, visualCompiled: CompiledRigProjectV1, pathCompiled: CompiledRigProjectV1, assetFiles: readonly ProjectExportAsset[]): Record<string, unknown> {
+  return {
+    artifactVersion: "1.0.0",
+    kind: "bones-hybrid-runtime-bundle",
+    entry: {
+      visual: "hero.visual.compiled.json",
+      physics: "hero.path.compiled.json",
+      assetsDir: "assets/"
+    },
+    sourceProject: {
+      id: source.id,
+      name: source.name,
+      runtimeTarget: source.runtimeTarget
+    },
+    counts: {
+      bones: visualCompiled.rig.bones.length,
+      visualParts: visualCompiled.rig.parts.length,
+      meshParts: visualCompiled.rig.parts.filter((part) => Boolean(part.mesh)).length,
+      pathParts: pathCompiled.rig.parts.filter((part) => Boolean(part.path)).length,
+      animations: visualCompiled.animations.length,
+      states: visualCompiled.stateMachines.reduce((count, machine) => count + machine.states.length, 0),
+      pngAssets: assetFiles.length
+    },
+    assets: assetFiles.map((asset) => ({
+      path: asset.runtimePath,
+      sourcePath: asset.sourcePath,
+      contentType: asset.contentType
+    })),
+    runtimeFiles: {
+      visual: "hero.visual.compiled.json",
+      physics: "hero.path.compiled.json",
+      assetBase: "assets/"
+    }
+  };
+}
+
+function createHybridPackageManifest(source: RigProject, visualCompiled: CompiledRigProjectV1, pathCompiled: CompiledRigProjectV1, assetFiles: readonly ProjectExportAsset[]): Record<string, unknown> {
+  return {
+    artifactVersion: "1.0.0",
+    kind: "bones-hybrid-package-manifest",
+    rootDir: EXPORT_BUNDLE_ROOT_DIR,
+    files: {
+      hybridBundle: DEFAULT_HYBRID_RUNTIME_BUNDLE_FILE,
+      visualCompiled: "hero.visual.compiled.json",
+      pathCompiled: "hero.path.compiled.json",
+      source: "hero.source.rig.json"
+    },
+    sourceProject: {
+      id: source.id,
+      name: source.name,
+      runtimeTarget: source.runtimeTarget
+    },
+    counts: {
+      bones: visualCompiled.rig.bones.length,
+      visualParts: visualCompiled.rig.parts.length,
+      meshParts: visualCompiled.rig.parts.filter((part) => Boolean(part.mesh)).length,
+      pathParts: pathCompiled.rig.parts.filter((part) => Boolean(part.path)).length,
+      animations: visualCompiled.animations.length,
+      pngAssets: assetFiles.length
+    },
+    assets: assetFiles.map((asset) => ({
+      sourcePath: asset.sourcePath,
+      zipPath: asset.zipPath,
+      runtimePath: asset.runtimePath,
+      contentType: asset.contentType
+    }))
+  };
+}
+
+function createTextureAssetEntries(compiled: CompiledRigProjectV1): readonly ProjectExportAsset[] {
+  const usedNames = new Map<string, number>();
+  const assets = new Map<string, ProjectExportAsset>();
+  for (const texturePath of compiled.rig.parts.flatMap((part) => (part.mesh?.texture ? [part.mesh.texture] : []))) {
+    if (assets.has(texturePath)) {
+      continue;
+    }
+    const fileName = uniqueAssetFileName(texturePath, usedNames);
+    assets.set(texturePath, {
+      sourcePath: texturePath,
+      zipPath: `${EXPORT_BUNDLE_ROOT_DIR}/assets/${fileName}`,
+      runtimePath: `assets/${fileName}`,
+      contentType: contentTypeForAsset(texturePath)
+    });
+  }
+  return [...assets.values()];
+}
+
+function createCompiledWithRuntimeTexturePaths(compiled: CompiledRigProjectV1, assetFiles: readonly ProjectExportAsset[]): CompiledRigProjectV1 {
+  const runtimePathBySource = new Map(assetFiles.map((asset) => [asset.sourcePath, asset.runtimePath]));
+  return {
+    ...compiled,
+    rig: {
+      ...compiled.rig,
+      parts: compiled.rig.parts.map((part) => {
+        const texture = part.mesh?.texture;
+        const runtimePath = texture ? runtimePathBySource.get(texture) : undefined;
+        if (!texture || !runtimePath || !part.mesh) {
+          return part;
+        }
+        return {
+          ...part,
+          mesh: {
+            ...part.mesh,
+            texture: runtimePath
+          }
+        };
+      })
+    }
+  };
+}
+
+function uniqueAssetFileName(assetPath: string, usedNames: Map<string, number>): string {
+  const urlPath = assetPath.split("?")[0] ?? assetPath;
+  const rawName = urlPath.split("/").filter(Boolean).at(-1) ?? "asset.png";
+  const safeName = rawName.replace(/[^a-zA-Z0-9._-]/g, "_") || "asset.png";
+  const dotIndex = safeName.lastIndexOf(".");
+  const baseName = dotIndex > 0 ? safeName.slice(0, dotIndex) : safeName;
+  const extension = dotIndex > 0 ? safeName.slice(dotIndex) : ".png";
+  const nextIndex = usedNames.get(safeName) ?? 0;
+  usedNames.set(safeName, nextIndex + 1);
+  return nextIndex === 0 ? safeName : `${baseName}-${nextIndex}${extension}`;
+}
+
+function contentTypeForAsset(assetPath: string): string {
+  const lower = assetPath.split("?")[0]?.toLowerCase() ?? assetPath.toLowerCase();
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
+    return "image/jpeg";
+  }
+  if (lower.endsWith(".webp")) {
+    return "image/webp";
+  }
+  return "image/png";
 }
 
 function selectDominantSkinBone(mesh: MeshShape): string | undefined {

@@ -120,7 +120,7 @@ import {
   type TimelineEvent
 } from "./editorState";
 import { defaultEditorProject } from "./defaultEditorProject";
-import { createProjectExportBundle, createRuntimeParityReport, DEFAULT_RUNTIME_BUNDLE_FILE, EDITOR_DRAFT_KEY, EDITOR_DRAFT_META_KEY, loadDraft, loadDraftMeta, parseImportedProject, saveDraft, serializeEditorProject, type DraftMetadata, type ProjectExportBundle, type ProjectImportResult, type RuntimeParityReport } from "./projectIo";
+import { createProjectExportBundle, createRuntimeParityReport, DEFAULT_RUNTIME_BUNDLE_FILE, DEFAULT_RUNTIME_ZIP_FILE, EXPORT_BUNDLE_ROOT_DIR, EDITOR_DRAFT_KEY, EDITOR_DRAFT_META_KEY, loadDraft, loadDraftMeta, parseImportedProject, saveDraft, serializeEditorProject, type DraftMetadata, type ProjectExportBundle, type ProjectImportResult, type RuntimeParityReport } from "./projectIo";
 import { PixiPreview } from "./PixiPreview";
 import { inspectSvgVector, vectorizeSvgPart } from "./editorVectorImport";
 import { parseLdtkLevel } from "@bones/ldtk-adapter";
@@ -254,12 +254,15 @@ function createEmptyRuntimeParityReport(errors: readonly string[]): RuntimeParit
   };
 }
 
-function getExportArtifactGroup(fileName: string): "source" | "split source" | "compiled" | "compressed" | "manifest" {
+function getExportArtifactGroup(fileName: string): "source" | "split source" | "compiled" | "bundle" | "compressed" | "manifest" {
   if (fileName.endsWith(".gz")) {
     return "compressed";
   }
-  if (fileName.includes("release-manifest")) {
+  if (fileName.includes("manifest")) {
     return "manifest";
+  }
+  if (fileName.includes("runtime.bundle")) {
+    return "bundle";
   }
   if (fileName.includes("compiled")) {
     return "compiled";
@@ -301,6 +304,121 @@ function keysToPlatformerInput(keys: ReadonlySet<string>) {
 
 function clipIdForControllerState(state: PlatformerControllerState): string {
   return state.animationState === "wallSlide" ? "fall" : state.animationState;
+}
+
+interface ZipSourceEntry {
+  readonly path: string;
+  readonly data: string | Uint8Array;
+}
+
+const hybridZipFileNames = new Set(["manifest.json", DEFAULT_RUNTIME_BUNDLE_FILE, "hero.visual.compiled.json", "hero.path.compiled.json"]);
+const zipTextEncoder = new TextEncoder();
+const zipCrcTable = createCrc32Table();
+
+function createZipBlob(entries: readonly ZipSourceEntry[]): Blob {
+  const chunks: Uint8Array[] = [];
+  const centralDirectory: Uint8Array[] = [];
+  const { dosTime, dosDate } = getZipDosDateTime(new Date());
+  let offset = 0;
+
+  for (const entry of entries) {
+    const path = normalizeZipPath(entry.path);
+    const nameBytes = zipTextEncoder.encode(path);
+    const data = typeof entry.data === "string" ? zipTextEncoder.encode(entry.data) : entry.data;
+    const crc = crc32(data);
+    const localHeader = new Uint8Array(30 + nameBytes.length);
+    const local = new DataView(localHeader.buffer);
+    local.setUint32(0, 0x04034b50, true);
+    local.setUint16(4, 20, true);
+    local.setUint16(6, 0x0800, true);
+    local.setUint16(8, 0, true);
+    local.setUint16(10, dosTime, true);
+    local.setUint16(12, dosDate, true);
+    local.setUint32(14, crc, true);
+    local.setUint32(18, data.length, true);
+    local.setUint32(22, data.length, true);
+    local.setUint16(26, nameBytes.length, true);
+    local.setUint16(28, 0, true);
+    localHeader.set(nameBytes, 30);
+    chunks.push(localHeader, data);
+
+    const centralHeader = new Uint8Array(46 + nameBytes.length);
+    const central = new DataView(centralHeader.buffer);
+    central.setUint32(0, 0x02014b50, true);
+    central.setUint16(4, 20, true);
+    central.setUint16(6, 20, true);
+    central.setUint16(8, 0x0800, true);
+    central.setUint16(10, 0, true);
+    central.setUint16(12, dosTime, true);
+    central.setUint16(14, dosDate, true);
+    central.setUint32(16, crc, true);
+    central.setUint32(20, data.length, true);
+    central.setUint32(24, data.length, true);
+    central.setUint16(28, nameBytes.length, true);
+    central.setUint16(30, 0, true);
+    central.setUint16(32, 0, true);
+    central.setUint16(34, 0, true);
+    central.setUint16(36, 0, true);
+    central.setUint32(38, 0, true);
+    central.setUint32(42, offset, true);
+    centralHeader.set(nameBytes, 46);
+    centralDirectory.push(centralHeader);
+    offset += localHeader.length + data.length;
+  }
+
+  const centralDirectoryOffset = offset;
+  const centralDirectorySize = centralDirectory.reduce((size, chunk) => size + chunk.length, 0);
+  chunks.push(...centralDirectory);
+  const end = new Uint8Array(22);
+  const endView = new DataView(end.buffer);
+  endView.setUint32(0, 0x06054b50, true);
+  endView.setUint16(4, 0, true);
+  endView.setUint16(6, 0, true);
+  endView.setUint16(8, entries.length, true);
+  endView.setUint16(10, entries.length, true);
+  endView.setUint32(12, centralDirectorySize, true);
+  endView.setUint32(16, centralDirectoryOffset, true);
+  endView.setUint16(20, 0, true);
+  chunks.push(end);
+  return new Blob(chunks.map(uint8ToArrayBuffer), { type: "application/zip" });
+}
+
+function uint8ToArrayBuffer(chunk: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(chunk.byteLength);
+  new Uint8Array(buffer).set(chunk);
+  return buffer;
+}
+
+function normalizeZipPath(path: string): string {
+  return path.replace(/^\/+/, "").replaceAll("\\", "/");
+}
+
+function getZipDosDateTime(date: Date): { readonly dosTime: number; readonly dosDate: number } {
+  const year = Math.max(1980, date.getFullYear());
+  return {
+    dosTime: (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2),
+    dosDate: ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate()
+  };
+}
+
+function createCrc32Table(): Uint32Array {
+  const table = new Uint32Array(256);
+  for (let index = 0; index < table.length; index += 1) {
+    let value = index;
+    for (let bit = 0; bit < 8; bit += 1) {
+      value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+    }
+    table[index] = value >>> 0;
+  }
+  return table;
+}
+
+function crc32(data: Uint8Array): number {
+  let crc = 0xffffffff;
+  for (const byte of data) {
+    crc = zipCrcTable[(crc ^ byte) & 0xff]! ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
 }
 
 export default function EditorPage() {
@@ -874,8 +992,8 @@ export default function EditorPage() {
     replaceProject(createEmptyEditorProject(), "empty");
     setIoStatus("new empty project");
   };
-  const downloadExportContents = (fileName: string, contents: string, status?: string) => {
-    const url = URL.createObjectURL(new Blob([contents], { type: "application/json" }));
+  const downloadBlob = (fileName: string, blob: Blob, status?: string) => {
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
     link.download = fileName;
@@ -886,6 +1004,40 @@ export default function EditorPage() {
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
     setIoStatus(status ?? `downloaded ${fileName}`);
   };
+  const downloadExportContents = (fileName: string, contents: string, status?: string) => {
+    downloadBlob(fileName, new Blob([contents], { type: "application/json" }), status);
+  };
+  const downloadHybridExportZip = async (bundle: ProjectExportBundle) => {
+    if (!bundle.validation.ok) {
+      setIoStatus("run Export Bundle first");
+      return;
+    }
+    setIoStatus(`building ${DEFAULT_RUNTIME_ZIP_FILE} (${bundle.assetFiles.length} png assets)`);
+    try {
+      const assetEntries = await Promise.all(
+        bundle.assetFiles.map(async (asset) => {
+          const response = await fetch(asset.sourcePath);
+          if (!response.ok) {
+            throw new Error(`missing asset ${asset.sourcePath} (${response.status})`);
+          }
+          return {
+            path: asset.zipPath,
+            data: new Uint8Array(await response.arrayBuffer())
+          } satisfies ZipSourceEntry;
+        })
+      );
+      const jsonEntries = Object.entries(bundle.files)
+        .filter(([fileName]) => hybridZipFileNames.has(fileName))
+        .map(([fileName, contents]) => ({
+          path: `${EXPORT_BUNDLE_ROOT_DIR}/${fileName}`,
+          data: contents
+        }) satisfies ZipSourceEntry);
+      const zip = createZipBlob([...jsonEntries, ...assetEntries]);
+      downloadBlob(DEFAULT_RUNTIME_ZIP_FILE, zip, `downloaded ${DEFAULT_RUNTIME_ZIP_FILE} / ${jsonEntries.length} json + ${bundle.assetFiles.length} png`);
+    } catch (error) {
+      setIoStatus(error instanceof Error ? error.message : "hybrid zip export failed");
+    }
+  };
   const exportBundle = async () => {
     const bundle = await createProjectExportBundle(editorState.project);
     setLastExportBundle(bundle);
@@ -894,13 +1046,7 @@ export default function EditorPage() {
       setIoStatus(bundle.validation.errors.join("; "));
       return;
     }
-    const downloadFileName = bundle.files[DEFAULT_RUNTIME_BUNDLE_FILE] ? DEFAULT_RUNTIME_BUNDLE_FILE : "hero.compiled.json";
-    const contents = bundle.files[downloadFileName];
-    if (!contents) {
-      setIoStatus("export built, but runtime bundle is missing");
-      return;
-    }
-    downloadExportContents(downloadFileName, contents, `downloaded ${downloadFileName} / ${Object.keys(bundle.files).length} files built`);
+    await downloadHybridExportZip(bundle);
   };
   const runRuntimeParityCheck = async () => {
     const bundle = lastExportBundle?.validation.ok ? lastExportBundle : await createProjectExportBundle(editorState.project);
@@ -1018,13 +1164,12 @@ export default function EditorPage() {
     }
     downloadExportContents(fileName, contents);
   };
-  const downloadExportBundle = () => {
+  const downloadExportBundle = async () => {
     if (!lastExportBundle?.validation.ok) {
       setIoStatus("run Export Bundle first");
       return;
     }
-    const contents = JSON.stringify(lastExportBundle.files, null, 2);
-    downloadExportContents("hero.export-bundle.json", contents, `downloaded export bundle (${Object.keys(lastExportBundle.files).length} files)`);
+    await downloadHybridExportZip(lastExportBundle);
   };
   const copySourceJson = async () => {
     try {
@@ -2033,15 +2178,15 @@ export default function EditorPage() {
                     <Button size="sm" type="button" variant="outline" onClick={() => void copyExportFile(DEFAULT_RUNTIME_BUNDLE_FILE)} disabled={!lastExportBundle?.files[DEFAULT_RUNTIME_BUNDLE_FILE]}>
                       Copy Runtime Bundle
                     </Button>
-                    <Button size="sm" type="button" variant="outline" onClick={downloadExportBundle} disabled={!lastExportBundle?.validation.ok}>
-                      Download All
+                    <Button size="sm" type="button" variant="outline" onClick={() => void downloadExportBundle()} disabled={!lastExportBundle?.validation.ok}>
+                      Download Zip
                     </Button>
                     <Button size="sm" type="button" variant="outline" onClick={() => void runRuntimeParityCheck()}>
                       Runtime Parity
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {lastExportBundle ? (lastExportBundle.validation.ok ? `${exportFileEntries.length} files ready` : "validation failed") : "not built"}
+                    {lastExportBundle ? (lastExportBundle.validation.ok ? `${exportFileEntries.length} json + ${lastExportBundle.assetFiles.length} png ready` : "validation failed") : "not built"}
                   </p>
                   {runtimeParityReport ? (
                     <div className={`grid gap-1 rounded-md px-2 py-1 text-xs ${runtimeParityReport.ok ? "bg-emerald-50 text-emerald-700" : "bg-destructive/10 text-destructive"}`}>
