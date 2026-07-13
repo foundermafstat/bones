@@ -19,6 +19,7 @@ import type {
   AutosaveState,
   BoneMetadata,
   BoneTransform,
+  CharacterKind,
   DirtyScopes,
   EditorProjectState,
   EditorTransition,
@@ -85,6 +86,7 @@ export function toSourceProject(project: EditorProjectState): RigProject {
     editor: {
       custom: {
         savedFrom: "bones-editor",
+        characterKind: project.characterKind,
         procedural: proceduralToJson(project.procedural)
       }
     }
@@ -123,6 +125,7 @@ export function fromSourceProject(sourceInput: unknown): EditorProjectState {
   return {
     ...initialEditorProject,
     name: source.name,
+    characterKind: readCharacterKind(source.editor?.custom?.characterKind),
     selectedBoneId: stringValue(rig.editor?.custom?.selectedBoneId) ?? rig.rootBoneId,
     hierarchy,
     parents,
@@ -480,31 +483,53 @@ function partLocalTransform(part: ShapePart): Transform2D {
 
 function proceduralToJson(procedural: ProceduralPresetState) {
   return {
+    inputs: { ...procedural.inputs },
     breathing: {
       enabled: procedural.breathing.enabled,
       frequency: procedural.breathing.frequency,
       amplitude: procedural.breathing.amplitude,
-      affectedBones: [...procedural.breathing.affectedBones]
+      affectedBones: [...procedural.breathing.affectedBones],
+      affectedBoneTransforms: boneTransformPatchesToJson(procedural.breathing.affectedBoneTransforms)
     },
     secondaryMotion: {
       enabled: procedural.secondaryMotion.enabled,
       target: procedural.secondaryMotion.target,
       stiffness: procedural.secondaryMotion.stiffness,
       damping: procedural.secondaryMotion.damping,
-      velocityInfluence: procedural.secondaryMotion.velocityInfluence
+      velocityInfluence: procedural.secondaryMotion.velocityInfluence,
+      gravityInfluence: procedural.secondaryMotion.gravityInfluence,
+      windInfluence: procedural.secondaryMotion.windInfluence,
+      maxOffset: procedural.secondaryMotion.maxOffset
     },
     squashStretch: {
       enabled: procedural.squashStretch.enabled,
       targetBone: procedural.squashStretch.targetBone,
-      landingImpactScale: procedural.squashStretch.landingImpactScale
+      landingImpactScale: procedural.squashStretch.landingImpactScale,
+      rules: procedural.squashStretch.rules.map((rule) => ({ ...rule }))
     },
     footIk: {
       enabled: procedural.footIk.enabled,
       feet: [...procedural.footIk.feet],
+      footChains: procedural.footIk.footChains.map((chain) => ({
+        footBone: chain.footBone,
+        ...(chain.shinBone ? { shinBone: chain.shinBone } : {}),
+        ...(chain.thighBone ? { thighBone: chain.thighBone } : {}),
+        raycastOffsetX: chain.raycastOffsetX,
+        raycastHeight: chain.raycastHeight
+      })),
       maxCorrection: procedural.footIk.maxCorrection,
       blend: procedural.footIk.blend
     }
   };
+}
+
+function boneTransformPatchesToJson(transforms: ProceduralPresetState["breathing"]["affectedBoneTransforms"]): Record<string, Record<string, number>> {
+  return Object.fromEntries(
+    Object.entries(transforms).map(([boneId, transform]) => [
+      boneId,
+      Object.fromEntries(Object.entries(transform).filter((entry): entry is [string, number] => typeof entry[1] === "number"))
+    ])
+  );
 }
 
 function proceduralPresetsToSource(procedural: ProceduralPresetState) {
@@ -736,6 +761,10 @@ function readViewBox(value: unknown): readonly [number, number, number, number] 
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function readCharacterKind(value: unknown): CharacterKind {
+  return value === "dog" ? "dog" : "human";
 }
 
 function numberValue(value: unknown): number | undefined {

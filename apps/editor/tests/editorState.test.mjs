@@ -76,6 +76,8 @@ import {
 } from "../app/editorState.ts";
 import { createProjectExportBundle, createRuntimeParityReport, EDITOR_DRAFT_KEY, EDITOR_DRAFT_META_KEY, loadDraftMeta, saveDraft, serializeEditorProject } from "../app/projectIo.ts";
 import { vectorizeSvgPart } from "../app/editorVectorImport.ts";
+import { createDogCharacterProject, createHumanCharacterProject } from "../app/characterTemplates.ts";
+import { fromSourceProject, toSourceProject } from "../app/editorSourceProject.ts";
 import { classifyBrowserConsoleEntries } from "../../../scripts/editor-console-classifier.mjs";
 
 function freshContainer(project = structuredClone(initialEditorProject)) {
@@ -96,6 +98,47 @@ function memoryStorage() {
     }
   };
 }
+
+test("character templates create independent human and complete native dog projects", () => {
+  const humanA = createHumanCharacterProject("Alex");
+  const humanB = createHumanCharacterProject("Sam");
+  const dog = createDogCharacterProject("Scout");
+
+  assert.equal(humanA.name, "Alex");
+  assert.equal(humanA.characterKind, "human");
+  assert.notEqual(humanA, humanB);
+  assert.notEqual(humanA.bones, humanB.bones);
+
+  assert.equal(dog.name, "Scout");
+  assert.equal(dog.characterKind, "dog");
+  assert.ok(dog.hierarchy.includes("tailTip"));
+  assert.ok(dog.hierarchy.includes("forePawFront"));
+  assert.ok(Object.values(dog.parts).some((part) => part.type === "path"));
+  assert.ok(Object.values(dog.parts).some((part) => part.type === "procedural"));
+  assert.equal(Object.values(dog.parts).some((part) => part.type === "svg" || part.type === "mesh"), false);
+  assert.deepEqual(Object.keys(dog.animations).sort(), ["fall", "idle", "jump", "land", "run", "walk"]);
+  assert.ok(Object.values(dog.animations).every((clip) => Object.keys(clip.tracks).length > 0));
+  assert.ok(dog.stateMachine.states.every((state) => dog.animations[state.clipId]));
+  assert.ok(dog.stateMachine.transitions.some((transition) => transition.id === "walk-fall"));
+  assert.equal(dog.procedural.secondaryMotion.target, "tailTip");
+  assert.equal(dog.procedural.footIk.footChains.length, 4);
+});
+
+test("character kind survives source round-trip and legacy projects default to human", () => {
+  const dog = createDogCharacterProject("Scout");
+  const source = toSourceProject(dog);
+  const restored = fromSourceProject(source);
+
+  assert.equal(source.editor.custom.characterKind, "dog");
+  assert.equal(restored.characterKind, "dog");
+  assert.deepEqual(restored.hierarchy, dog.hierarchy);
+  assert.deepEqual(Object.keys(restored.animations).sort(), Object.keys(dog.animations).sort());
+  assert.deepEqual(restored.procedural, dog.procedural);
+
+  const legacySource = structuredClone(source);
+  delete legacySource.editor.custom.characterKind;
+  assert.equal(fromSourceProject(legacySource).characterKind, "human");
+});
 
 test("bone commands update dirty scopes and autosave state", () => {
   const beforeX = initialEditorProject.bones.body.x;

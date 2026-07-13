@@ -52,6 +52,19 @@ PlayerRig
     horns / hood / scarf / tail
 ```
 
+## 1.1. Тип персонажа и стартовые шаблоны
+
+Создание проекта начинается с обязательного выбора типа персонажа:
+
+```txt
+Human — нативный 2D biped rig.
+Dog — нативный 2D quadruped rig с четырьмя лапами, корпусом, шеей, головой и хвостом.
+```
+
+Оба шаблона должны сразу давать редактируемый skeleton, визуальные части/texture slots и базовый набор `idle / walk / run / jump / fall / land`. Внешние CC0-модели, rig-файлы, анимации и PNG-наборы используются только как референсы анатомии и движения. Они не импортируются и не включаются в runtime: собака хранится в нативных source/runtime-форматах Bones.
+
+Референс собаки: [Quaternius Ultimate Animated Animal Pack](https://quaternius.com/packs/ultimateanimatedanimals.html), CC0, модели Husky/Shiba и набор locomotion-анимаций в `.blend / FBX / glTF`.
+
 Каждая часть — это либо:
 
 ```txt
@@ -276,6 +289,18 @@ hero.compiled.json
 ```
 
 В игре лучше использовать именно `compiled.json`, а не исходные редакторские JSON.
+
+## 5.3. Production export size budget
+
+Для одного production-персонажа бюджет сжатых runtime-данных без внешних текстур — **не более 200 KiB**.
+
+```txt
+- Runtime JSON сериализуется компактно и без форматирующих пробелов.
+- Editor metadata и другие runtime-неиспользуемые поля удаляются.
+- Анимации и state machine хранятся один раз в общем payload и переиспользуются всеми render/rig-вариантами без дублирования.
+- Финальный ZIP использует DEFLATE, а не несжатый STORE.
+- Export показывает compressed/uncompressed size и предупреждает о превышении бюджета.
+```
 
 ---
 
@@ -553,7 +578,26 @@ PixiJS действительно поддерживает SVG двумя спо
 
 # 11. Editor UI
 
-## 11.1. Главные режимы редактора
+## 11.1. Beginner guided workflow
+
+Новый пользователь по умолчанию работает в одном последовательном сценарии:
+
+```txt
+Character → Textures → Skeleton → Animations → Test → Export
+```
+
+1. **Character** — имя и выбор `Human / Dog`, после которого создаётся соответствующий стартовый template.
+2. **Textures** — добавление и привязка визуальных частей/текстур с понятным preview.
+3. **Skeleton** — проверка skeleton и привязок; шаблон уже содержит рабочую структуру.
+4. **Animations** — выбор и редактирование базовых клипов без обязательного доступа ко всем профессиональным параметрам.
+5. **Test** — интерактивная проверка персонажа и список конкретных проблем перед экспортом.
+6. **Export** — production package, отчёт о размере и готовый runtime-файл.
+
+На экране одновременно показывается только текущий шаг, его краткая цель и одно основное действие `Next`. Рекомендуемые значения берутся из template; заблокированный переход всегда объясняет, что именно нужно исправить. Прогресс по шести шагам остаётся видимым.
+
+## 11.2. Advanced mode
+
+Существующие восемь профессиональных режимов сохраняются, но доступны через отдельный переключатель **Advanced** и не перегружают начальную навигацию:
 
 ```txt
 1. Rig Mode
@@ -583,7 +627,7 @@ PixiJS действительно поддерживает SVG двумя спо
 
 ---
 
-## 11.2. Layout редактора
+## 11.3. Layout Advanced mode
 
 ```txt
 ┌───────────────────────────────────────────────────────────────┐
@@ -2000,7 +2044,8 @@ Land:
 
 ```txt
 - JSON schema validation.
-- Compiled JSON.
+- Compact minified compiled JSON with one shared animation/state-machine payload.
+- DEFLATE ZIP, compressed/uncompressed size report and 200 KiB runtime-data budget check.
 - Runtime package.
 - Example PixiJS platformer integration.
 - Performance profiler overlay.

@@ -17,8 +17,11 @@ export interface BoneTransform {
   readonly scaleY: number;
 }
 
+export type CharacterKind = "human" | "dog";
+
 export interface EditorProjectState {
   readonly name: string;
+  readonly characterKind: CharacterKind;
   readonly selectedBoneId: string;
   readonly hierarchy: readonly string[];
   readonly parents: Readonly<Record<string, string | null>>;
@@ -314,6 +317,7 @@ const emptyProceduralState: ProceduralPresetState = {
 export function createEmptyEditorProject(): EditorProjectState {
   return {
     name: "Untitled Rig",
+    characterKind: "human",
     selectedBoneId: "root",
     hierarchy: ["root"],
     parents: { root: null },
@@ -335,6 +339,7 @@ export function createEmptyEditorProject(): EditorProjectState {
 
 export const initialEditorProject: EditorProjectState = {
   name: "Shadow Hero",
+  characterKind: "human",
   selectedBoneId: "body",
   hierarchy: ["root", "body", "head", "upperArmBack", "forearmBack", "handBack", "upperArmFront", "forearmFront", "handFront", "pelvis", "thighBack", "shinBack", "footBack", "thighFront", "shinFront", "footFront"],
   parents: {

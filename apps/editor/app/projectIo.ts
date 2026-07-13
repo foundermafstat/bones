@@ -13,6 +13,8 @@ export const DEFAULT_PATH_RUNTIME_BUNDLE_FILE = "hero.path-runtime.bundle.json";
 export const DEFAULT_HYBRID_RUNTIME_BUNDLE_FILE = "hero.hybrid-runtime.bundle.json";
 export const DEFAULT_RUNTIME_BUNDLE_FILE = DEFAULT_HYBRID_RUNTIME_BUNDLE_FILE;
 export const DEFAULT_RUNTIME_ZIP_FILE = "hero.hybrid-runtime-bundle.zip";
+export const DEFAULT_VISUAL_RUNTIME_FILE = "hero.visual.compiled.json";
+export const DEFAULT_PATH_RUNTIME_RIG_FILE = "hero.path.runtime.rig.json";
 
 export interface SerializedEditorProject {
   readonly schemaVersion: string;
@@ -216,28 +218,30 @@ export async function createProjectExportBundle(project: EditorProjectState, loa
     if (pathValidation.errors.length) {
       throw new Error(pathValidation.errors.join("; "));
     }
+    const stringifyRuntime = (value: unknown): string => JSON.stringify(value, null, profile === "production" ? undefined : 2);
+    const pathRuntimeRig = createPathRuntimeRig(pathCompiled);
     const files: Record<string, string> = {
       "hero.source.rig.json": JSON.stringify(source, null, 2),
       "hero.rig.json": JSON.stringify({ schemaVersion: source.schemaVersion, runtimeTarget: source.runtimeTarget, rigs: source.rigs }, null, 2),
       "hero.animations.json": JSON.stringify({ schemaVersion: source.schemaVersion, animations: source.animations, poses: source.poses }, null, 2),
       "hero.state-machine.json": JSON.stringify({ schemaVersion: source.schemaVersion, stateMachines: source.stateMachines, proceduralPresets: source.proceduralPresets }, null, 2),
-      "hero.compiled.json": JSON.stringify(compiled, null, 2),
-      "hero.visual.compiled.json": JSON.stringify(visualCompiled, null, 2),
+      "hero.compiled.json": stringifyRuntime(compiled),
+      [DEFAULT_VISUAL_RUNTIME_FILE]: stringifyRuntime(visualCompiled),
       "hero.path.source.rig.json": JSON.stringify(pathSource, null, 2),
-      "hero.path.compiled.json": JSON.stringify(pathCompiled, null, 2),
-      "hero.path.runtime.rig.json": JSON.stringify({ compiledFormatVersion: pathCompiled.compiledFormatVersion, schemaVersion: pathCompiled.schemaVersion, runtimeTarget: pathCompiled.runtimeTarget, sourceProjectId: pathCompiled.sourceProjectId, name: pathCompiled.name, rig: pathCompiled.rig, lookups: pathCompiled.lookups }, null, 2),
-      "hero.path.runtime.animations.json": JSON.stringify({ compiledFormatVersion: pathCompiled.compiledFormatVersion, animations: pathCompiled.animations, lookups: pathCompiled.lookups.animations }, null, 2),
-      "hero.path.runtime.state-machines.json": JSON.stringify({ compiledFormatVersion: pathCompiled.compiledFormatVersion, stateMachines: pathCompiled.stateMachines, lookups: pathCompiled.lookups.stateMachines }, null, 2),
-      [DEFAULT_PATH_RUNTIME_BUNDLE_FILE]: JSON.stringify(createPathRuntimeDownloadBundle(pathSource, pathCompiled), null, 2),
-      [DEFAULT_HYBRID_RUNTIME_BUNDLE_FILE]: JSON.stringify(createHybridRuntimeDownloadBundle(source, visualCompiled, pathCompiled, assetFiles), null, 2),
-      "manifest.json": JSON.stringify(createHybridPackageManifest(source, visualCompiled, pathCompiled, assetFiles), null, 2)
+      "hero.path.compiled.json": stringifyRuntime(pathCompiled),
+      [DEFAULT_PATH_RUNTIME_RIG_FILE]: stringifyRuntime(pathRuntimeRig),
+      "hero.path.runtime.animations.json": stringifyRuntime({ compiledFormatVersion: pathCompiled.compiledFormatVersion, animations: pathCompiled.animations, lookups: pathCompiled.lookups.animations }),
+      "hero.path.runtime.state-machines.json": stringifyRuntime({ compiledFormatVersion: pathCompiled.compiledFormatVersion, stateMachines: pathCompiled.stateMachines, lookups: pathCompiled.lookups.stateMachines }),
+      [DEFAULT_PATH_RUNTIME_BUNDLE_FILE]: stringifyRuntime(createPathRuntimeDownloadBundle(pathSource, pathCompiled)),
+      [DEFAULT_HYBRID_RUNTIME_BUNDLE_FILE]: stringifyRuntime(createHybridRuntimeDownloadBundle(source, visualCompiled, pathCompiled, assetFiles)),
+      "manifest.json": stringifyRuntime(createHybridPackageManifest(source, visualCompiled, pathCompiled, assetFiles))
     };
     const compressedCompiled = profile !== "development" ? await gzipBase64(files["hero.compiled.json"]!) : undefined;
     if (compressedCompiled) {
       files["hero.compiled.json.gz"] = compressedCompiled;
     }
     const manifest = await createReleaseManifest(source, compiled, files, profile);
-    files["hero.release-manifest.json"] = JSON.stringify(manifest, null, 2);
+    files["hero.release-manifest.json"] = stringifyRuntime(manifest);
     const summary = createExportSummary(manifest);
     return {
       profile,
@@ -360,13 +364,32 @@ function createPathRuntimeDownloadBundle(source: RigProject, compiled: CompiledR
   };
 }
 
+function createPathRuntimeRig(compiled: CompiledRigProjectV1): Record<string, unknown> {
+  return {
+    artifactVersion: "1.0.0",
+    kind: "bones-path-runtime-rig",
+    compiledFormatVersion: compiled.compiledFormatVersion,
+    schemaVersion: compiled.schemaVersion,
+    runtimeTarget: compiled.runtimeTarget,
+    sourceProjectId: compiled.sourceProjectId,
+    name: compiled.name,
+    rig: compiled.rig,
+    lookups: {
+      rigs: compiled.lookups.rigs,
+      bones: compiled.lookups.bones,
+      parts: compiled.lookups.parts
+    }
+  };
+}
+
 function createHybridRuntimeDownloadBundle(source: RigProject, visualCompiled: CompiledRigProjectV1, pathCompiled: CompiledRigProjectV1, assetFiles: readonly ProjectExportAsset[]): Record<string, unknown> {
   return {
     artifactVersion: "1.0.0",
     kind: "bones-hybrid-runtime-bundle",
     entry: {
-      visual: "hero.visual.compiled.json",
-      physics: "hero.path.compiled.json",
+      runtime: DEFAULT_VISUAL_RUNTIME_FILE,
+      visual: DEFAULT_VISUAL_RUNTIME_FILE,
+      physics: DEFAULT_PATH_RUNTIME_RIG_FILE,
       assetsDir: "assets/"
     },
     sourceProject: {
@@ -389,8 +412,9 @@ function createHybridRuntimeDownloadBundle(source: RigProject, visualCompiled: C
       contentType: asset.contentType
     })),
     runtimeFiles: {
-      visual: "hero.visual.compiled.json",
-      physics: "hero.path.compiled.json",
+      canonical: DEFAULT_VISUAL_RUNTIME_FILE,
+      visual: DEFAULT_VISUAL_RUNTIME_FILE,
+      physics: DEFAULT_PATH_RUNTIME_RIG_FILE,
       assetBase: "assets/"
     }
   };
@@ -403,9 +427,9 @@ function createHybridPackageManifest(source: RigProject, visualCompiled: Compile
     rootDir: EXPORT_BUNDLE_ROOT_DIR,
     files: {
       hybridBundle: DEFAULT_HYBRID_RUNTIME_BUNDLE_FILE,
-      visualCompiled: "hero.visual.compiled.json",
-      pathCompiled: "hero.path.compiled.json",
-      source: "hero.source.rig.json"
+      canonicalRuntime: DEFAULT_VISUAL_RUNTIME_FILE,
+      visualCompiled: DEFAULT_VISUAL_RUNTIME_FILE,
+      pathRuntimeRig: DEFAULT_PATH_RUNTIME_RIG_FILE
     },
     sourceProject: {
       id: source.id,
@@ -472,6 +496,13 @@ function createCompiledWithRuntimeTexturePaths(compiled: CompiledRigProjectV1, a
 }
 
 function uniqueAssetFileName(assetPath: string, usedNames: Map<string, number>): string {
+  if (assetPath.startsWith("data:")) {
+    const contentType = assetPath.slice(5, assetPath.indexOf(";") > 0 ? assetPath.indexOf(";") : assetPath.indexOf(","));
+    const extension = contentType === "image/jpeg" ? "jpg" : contentType === "image/webp" ? "webp" : "png";
+    const fileName = `uploaded-${usedNames.size + 1}.${extension}`;
+    usedNames.set(fileName, 1);
+    return fileName;
+  }
   const urlPath = assetPath.split("?")[0] ?? assetPath;
   const rawName = urlPath.split("/").filter(Boolean).at(-1) ?? "asset.png";
   const safeName = rawName.replace(/[^a-zA-Z0-9._-]/g, "_") || "asset.png";
@@ -484,6 +515,9 @@ function uniqueAssetFileName(assetPath: string, usedNames: Map<string, number>):
 }
 
 function contentTypeForAsset(assetPath: string): string {
+  if (assetPath.startsWith("data:")) {
+    return assetPath.slice(5, assetPath.indexOf(";") > 0 ? assetPath.indexOf(";") : assetPath.indexOf(",")) || "image/png";
+  }
   const lower = assetPath.split("?")[0]?.toLowerCase() ?? assetPath.toLowerCase();
   if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
     return "image/jpeg";

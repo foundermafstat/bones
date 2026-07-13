@@ -212,7 +212,9 @@ export function PixiPreview({ clipId, compiledProject, playing, project, quality
 
           const fitScale = meshBounds
             ? Math.min(app.screen.width / (meshBounds.width + 80), app.screen.height / (meshBounds.height + 80)) * 0.84
-            : Math.min(app.screen.width / 460, app.screen.height / 560) * 0.92;
+            : project.characterKind === "dog"
+              ? Math.min(app.screen.width / 300, app.screen.height / 240) * 0.92
+              : Math.min(app.screen.width / 460, app.screen.height / 560) * 0.92;
           const scale = fitScale * viewState.zoom;
           const scene = current.sceneState;
           const sceneX = scene ? scene.x - scene.cameraX : 0;

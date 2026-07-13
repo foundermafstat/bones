@@ -111,17 +111,22 @@ import {
   undo,
   type CurvePreset,
   type BlendTree1D,
+  type CharacterKind,
   type EditorProjectState,
   type EditorTransition,
   type EditorTransitionCondition,
   type EditorStateContainer,
   type Keyframe,
+  type ShapePart,
   type StateMachineNodePosition,
   type TimelineEvent
 } from "./editorState";
 import { defaultEditorProject } from "./defaultEditorProject";
 import { createProjectExportBundle, createRuntimeParityReport, DEFAULT_RUNTIME_BUNDLE_FILE, DEFAULT_RUNTIME_ZIP_FILE, EXPORT_BUNDLE_ROOT_DIR, EDITOR_DRAFT_KEY, EDITOR_DRAFT_META_KEY, loadDraft, loadDraftMeta, parseImportedProject, saveDraft, serializeEditorProject, type DraftMetadata, type ProjectExportBundle, type ProjectImportResult, type RuntimeParityReport } from "./projectIo";
 import { PixiPreview } from "./PixiPreview";
+import { GuidedEditor, type GuidedStep } from "./GuidedEditor";
+import { createDogCharacterProject, createHumanCharacterProject } from "./characterTemplates";
+import { createDeflateZipBlob, type RuntimeArchiveEntry } from "./runtimeArchive";
 import { inspectSvgVector, vectorizeSvgPart } from "./editorVectorImport";
 import { parseLdtkLevel } from "@bones/ldtk-adapter";
 import { createInitialControllerState, toAnimationParameters, updatePlatformerController, type PlatformerControllerState } from "@bones/platformer-preview";
@@ -132,7 +137,7 @@ import { evaluateRuntimeBudget, runtimePerformanceBudgets, type QualityPresetNam
 const modes = ["Rig", "Shape", "Pose", "Timeline", "Curve", "State Machine", "Procedural", "Preview"] as const;
 const stateMachineViewBox = { x: 0, y: 0, width: 640, height: 360 } as const;
 const curveEditorViewBox = { x: 0, y: 0, width: 120, height: 100 } as const;
-type ProjectOrigin = "sample" | "empty" | "draft" | "imported";
+type ProjectOrigin = "sample" | "empty" | "draft" | "imported" | "created";
 
 const sampleProject = {
   tracks: ["body.scaleY", "head.y", "upperArmFront.rotation", "thighFront.rotation", "thighBack.rotation"]
@@ -306,123 +311,93 @@ function clipIdForControllerState(state: PlatformerControllerState): string {
   return state.animationState === "wallSlide" ? "fall" : state.animationState;
 }
 
-interface ZipSourceEntry {
-  readonly path: string;
-  readonly data: string | Uint8Array;
-}
+const hybridZipFileNames = new Set(["manifest.json", DEFAULT_RUNTIME_BUNDLE_FILE, "hero.visual.compiled.json", "hero.path.runtime.rig.json"]);
+const guidedAssetByteLimit = 2 * 1024 * 1024;
 
-const hybridZipFileNames = new Set(["manifest.json", DEFAULT_RUNTIME_BUNDLE_FILE, "hero.visual.compiled.json", "hero.path.compiled.json"]);
-const zipTextEncoder = new TextEncoder();
-const zipCrcTable = createCrc32Table();
-
-function createZipBlob(entries: readonly ZipSourceEntry[]): Blob {
-  const chunks: Uint8Array[] = [];
-  const centralDirectory: Uint8Array[] = [];
-  const { dosTime, dosDate } = getZipDosDateTime(new Date());
-  let offset = 0;
-
-  for (const entry of entries) {
-    const path = normalizeZipPath(entry.path);
-    const nameBytes = zipTextEncoder.encode(path);
-    const data = typeof entry.data === "string" ? zipTextEncoder.encode(entry.data) : entry.data;
-    const crc = crc32(data);
-    const localHeader = new Uint8Array(30 + nameBytes.length);
-    const local = new DataView(localHeader.buffer);
-    local.setUint32(0, 0x04034b50, true);
-    local.setUint16(4, 20, true);
-    local.setUint16(6, 0x0800, true);
-    local.setUint16(8, 0, true);
-    local.setUint16(10, dosTime, true);
-    local.setUint16(12, dosDate, true);
-    local.setUint32(14, crc, true);
-    local.setUint32(18, data.length, true);
-    local.setUint32(22, data.length, true);
-    local.setUint16(26, nameBytes.length, true);
-    local.setUint16(28, 0, true);
-    localHeader.set(nameBytes, 30);
-    chunks.push(localHeader, data);
-
-    const centralHeader = new Uint8Array(46 + nameBytes.length);
-    const central = new DataView(centralHeader.buffer);
-    central.setUint32(0, 0x02014b50, true);
-    central.setUint16(4, 20, true);
-    central.setUint16(6, 20, true);
-    central.setUint16(8, 0x0800, true);
-    central.setUint16(10, 0, true);
-    central.setUint16(12, dosTime, true);
-    central.setUint16(14, dosDate, true);
-    central.setUint32(16, crc, true);
-    central.setUint32(20, data.length, true);
-    central.setUint32(24, data.length, true);
-    central.setUint16(28, nameBytes.length, true);
-    central.setUint16(30, 0, true);
-    central.setUint16(32, 0, true);
-    central.setUint16(34, 0, true);
-    central.setUint16(36, 0, true);
-    central.setUint32(38, 0, true);
-    central.setUint32(42, offset, true);
-    centralHeader.set(nameBytes, 46);
-    centralDirectory.push(centralHeader);
-    offset += localHeader.length + data.length;
+async function createUploadedPart(project: EditorProjectState, file: File, index: number): Promise<ShapePart> {
+  const dataUrl = await readFileAsDataUrl(file);
+  const baseName = (file.name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9_-]/g, "-") || `part-${index + 1}`).toLowerCase();
+  let id = `uploaded-${baseName}${index ? `-${index + 1}` : ""}`;
+  let suffix = 2;
+  while (project.parts[id]) {
+    id = `uploaded-${baseName}-${suffix}`;
+    suffix += 1;
+  }
+  const boneId = inferUploadBone(project, file.name);
+  const zIndex = Math.max(0, ...Object.values(project.parts).map((part) => part.zIndex ?? 0)) + index + 1;
+  if (file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg")) {
+    return { id, boneId, type: "svg", pivot: [0, 0], points: [], preset: undefined, assetPath: dataUrl, zIndex };
   }
 
-  const centralDirectoryOffset = offset;
-  const centralDirectorySize = centralDirectory.reduce((size, chunk) => size + chunk.length, 0);
-  chunks.push(...centralDirectory);
-  const end = new Uint8Array(22);
-  const endView = new DataView(end.buffer);
-  endView.setUint32(0, 0x06054b50, true);
-  endView.setUint16(4, 0, true);
-  endView.setUint16(6, 0, true);
-  endView.setUint16(8, entries.length, true);
-  endView.setUint16(10, entries.length, true);
-  endView.setUint32(12, centralDirectorySize, true);
-  endView.setUint32(16, centralDirectoryOffset, true);
-  endView.setUint16(20, 0, true);
-  chunks.push(end);
-  return new Blob(chunks.map(uint8ToArrayBuffer), { type: "application/zip" });
-}
-
-function uint8ToArrayBuffer(chunk: Uint8Array): ArrayBuffer {
-  const buffer = new ArrayBuffer(chunk.byteLength);
-  new Uint8Array(buffer).set(chunk);
-  return buffer;
-}
-
-function normalizeZipPath(path: string): string {
-  return path.replace(/^\/+/, "").replaceAll("\\", "/");
-}
-
-function getZipDosDateTime(date: Date): { readonly dosTime: number; readonly dosDate: number } {
-  const year = Math.max(1980, date.getFullYear());
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, 240 / Math.max(bitmap.width, bitmap.height));
+  const width = Math.max(1, Math.round(bitmap.width * scale));
+  const height = Math.max(1, Math.round(bitmap.height * scale));
+  bitmap.close();
   return {
-    dosTime: (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2),
-    dosDate: ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate()
+    id,
+    boneId,
+    type: "mesh",
+    pivot: [0, 0],
+    points: [],
+    preset: undefined,
+    assetPath: dataUrl,
+    zIndex,
+    mesh: {
+      vertices: [-width / 2, -height / 2, width / 2, -height / 2, width / 2, height / 2, -width / 2, height / 2],
+      indices: [0, 1, 2, 0, 2, 3],
+      uvs: [0, 0, 1, 0, 1, 1, 0, 1],
+      texture: dataUrl
+    }
   };
 }
 
-function createCrc32Table(): Uint32Array {
-  const table = new Uint32Array(256);
-  for (let index = 0; index < table.length; index += 1) {
-    let value = index;
-    for (let bit = 0; bit < 8; bit += 1) {
-      value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
-    }
-    table[index] = value >>> 0;
+function inferUploadBone(project: EditorProjectState, fileName: string): string {
+  const name = fileName.toLowerCase();
+  const direct = [...project.hierarchy]
+    .sort((left, right) => right.length - left.length)
+    .find((boneId) => boneId !== "root" && name.includes(boneId.toLowerCase()));
+  if (direct) {
+    return direct;
   }
-  return table;
+  const hints: readonly [readonly string[], readonly string[]][] = [
+    [["tail"], ["tailBase", "tailTip"]],
+    [["ear"], ["ear", "head"]],
+    [["head", "face", "muzzle"], ["head"]],
+    [["front", "fore"], ["foreUpperFront", "upperArmFront", "foreUpperBack"]],
+    [["back", "hind"], ["hindUpperFront", "thighFront", "hindUpperBack"]],
+    [["foot", "paw", "boot"], ["forePawFront", "hindPawFront", "footFront"]],
+    [["body", "torso", "chest"], ["torso", "body", "chest"]]
+  ];
+  for (const [terms, candidates] of hints) {
+    if (terms.some((term) => name.includes(term))) {
+      const candidate = candidates.find((boneId) => Boolean(project.bones[boneId]));
+      if (candidate) {
+        return candidate;
+      }
+    }
+  }
+  return project.bones[project.selectedBoneId] ? project.selectedBoneId : project.hierarchy[1] ?? "root";
 }
 
-function crc32(data: Uint8Array): number {
-  let crc = 0xffffffff;
-  for (const byte of data) {
-    crc = zipCrcTable[(crc ^ byte) & 0xff]! ^ (crc >>> 8);
-  }
-  return (crc ^ 0xffffffff) >>> 0;
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error(`Could not read ${file.name}.`));
+    reader.onerror = () => reject(reader.error ?? new Error(`Could not read ${file.name}.`));
+    reader.readAsDataURL(file);
+  });
 }
 
 export default function EditorPage() {
   const [mode, setMode] = useState<EditorMode>("Rig");
+  const [advancedMode, setAdvancedMode] = useState(false);
+  const [guidedStep, setGuidedStep] = useState<GuidedStep>("character");
+  const [creatingCharacter, setCreatingCharacter] = useState(true);
+  const [createName, setCreateName] = useState("Milo");
+  const [createKind, setCreateKind] = useState<CharacterKind>("dog");
+  const [runtimeZipBytes, setRuntimeZipBytes] = useState<number | null>(null);
+  const [packageZipBytes, setPackageZipBytes] = useState<number | null>(null);
   const [leftPanelWidth, setLeftPanelWidth] = useState(220);
   const [rightPanelWidth, setRightPanelWidth] = useState(420);
   const [timelineHeight, setTimelineHeight] = useState(178);
@@ -501,6 +476,10 @@ export default function EditorPage() {
     project: defaultEditorProject,
     history: { past: [], future: [] }
   });
+  const creationPreviewProject = useMemo(
+    () => createKind === "dog" ? createDogCharacterProject(createName) : createHumanCharacterProject(createName),
+    [createKind, createName]
+  );
   const selectedBone = editorState.project.selectedBoneId;
   const selectedTransform = editorState.project.bones[selectedBone] ?? editorState.project.bones.root ?? defaultEditorProject.bones.root!;
   const selectedBoneMetadata = editorState.project.boneMetadata[selectedBone] ?? {};
@@ -720,6 +699,9 @@ export default function EditorPage() {
   };
   const runCommand = (command: Parameters<typeof executeCommand>[1]) => {
     setLastCommand(command.label);
+    setLastExportBundle(null);
+    setRuntimeZipBytes(null);
+    setPackageZipBytes(null);
     setCompiledPreviewProject(null);
     setPreviewRuntimeMode("source");
     setEditorState((state) => executeCommand(state, command));
@@ -958,8 +940,12 @@ export default function EditorPage() {
   }, []);
   const replaceProject = (project: EditorProjectState, origin: ProjectOrigin, poseId = "") => {
     setEditorState({ project, history: { past: [], future: [] } });
+    setLastExportBundle(null);
+    setRuntimeZipBytes(null);
+    setPackageZipBytes(null);
     setCompiledPreviewProject(null);
     setPreviewRuntimeMode("source");
+    setPreviewClipId(project.animations.idle ? "idle" : Object.keys(project.animations)[0] ?? "idle");
     setProjectOrigin(origin);
     setSelectedPoseId(poseId);
     setSelectedPartId(Object.keys(project.parts)[0] ?? "");
@@ -992,6 +978,63 @@ export default function EditorPage() {
     replaceProject(createEmptyEditorProject(), "empty");
     setIoStatus("new empty project");
   };
+  const createSelectedCharacter = () => {
+    const project = createKind === "dog" ? createDogCharacterProject(createName) : createHumanCharacterProject(createName);
+    replaceProject(project, "created", Object.keys(project.poses)[0] ?? "");
+    setCreatingCharacter(false);
+    setGuidedStep("textures");
+    setPreviewPlaying(true);
+    setIoStatus(`${createKind} character created`);
+  };
+  const openSampleInGuide = () => {
+    resetToSampleProject();
+    setCreatingCharacter(false);
+    setGuidedStep("character");
+  };
+  const importProjectFile = async (file: File) => {
+    try {
+      const result = parseImportedProject(await file.text());
+      if (!result.project || result.errors.length) {
+        setIoStatus(result.errors.join("; ") || "project file is invalid");
+        return;
+      }
+      replaceProject(result.project, "imported", Object.keys(result.project.poses)[0] ?? "");
+      setCreatingCharacter(false);
+      setGuidedStep("character");
+      setIoStatus(`imported ${result.kind ?? "project"}`);
+    } catch (error) {
+      setIoStatus(error instanceof Error ? error.message : "project import failed");
+    }
+  };
+  const addGuidedArtwork = async (files: readonly File[]) => {
+    const accepted = files.filter((file) => file.type === "image/png" || file.type === "image/svg+xml" || /\.(png|svg)$/i.test(file.name));
+    if (accepted.length !== files.length) {
+      setIoStatus("only PNG and SVG files are supported");
+      return;
+    }
+    const oversized = accepted.find((file) => file.size > guidedAssetByteLimit);
+    if (oversized) {
+      setIoStatus(`${oversized.name} is larger than 2 MB`);
+      return;
+    }
+    try {
+      const parts = await Promise.all(accepted.map((file, index) => createUploadedPart(editorState.project, file, index)));
+      if (!parts.length) {
+        return;
+      }
+      runCommand(createGroupedCommand(`Add ${parts.length} artwork part${parts.length === 1 ? "" : "s"}`, parts.map(createAddSvgPartCommand)));
+      setSelectedPartId(parts[0]!.id);
+      setIoStatus(`added ${parts.length} artwork part${parts.length === 1 ? "" : "s"}`);
+    } catch (error) {
+      setIoStatus(error instanceof Error ? error.message : "artwork import failed");
+    }
+  };
+  const saveCurrentDraft = () => {
+    saveDraft(editorState.project);
+    setAvailableDraft(loadDraftMeta());
+    setProjectOrigin("draft");
+    setIoStatus("draft saved");
+  };
   const downloadBlob = (fileName: string, blob: Blob, status?: string) => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -1023,7 +1066,7 @@ export default function EditorPage() {
           return {
             path: asset.zipPath,
             data: new Uint8Array(await response.arrayBuffer())
-          } satisfies ZipSourceEntry;
+          } satisfies RuntimeArchiveEntry;
         })
       );
       const jsonEntries = Object.entries(bundle.files)
@@ -1031,14 +1074,21 @@ export default function EditorPage() {
         .map(([fileName, contents]) => ({
           path: `${EXPORT_BUNDLE_ROOT_DIR}/${fileName}`,
           data: contents
-        }) satisfies ZipSourceEntry);
-      const zip = createZipBlob([...jsonEntries, ...assetEntries]);
+        }) satisfies RuntimeArchiveEntry);
+      const runtimeZip = createDeflateZipBlob(jsonEntries);
+      const zip = createDeflateZipBlob([...jsonEntries, ...assetEntries]);
+      setRuntimeZipBytes(runtimeZip.size);
+      setPackageZipBytes(zip.size);
       downloadBlob(DEFAULT_RUNTIME_ZIP_FILE, zip, `downloaded ${DEFAULT_RUNTIME_ZIP_FILE} / ${jsonEntries.length} json + ${bundle.assetFiles.length} png`);
     } catch (error) {
+      setRuntimeZipBytes(null);
+      setPackageZipBytes(null);
       setIoStatus(error instanceof Error ? error.message : "hybrid zip export failed");
     }
   };
   const exportBundle = async () => {
+    setRuntimeZipBytes(null);
+    setPackageZipBytes(null);
     const bundle = await createProjectExportBundle(editorState.project);
     setLastExportBundle(bundle);
     setRuntimeParityReport(null);
@@ -1326,7 +1376,7 @@ export default function EditorPage() {
         { label: "New Project", onClick: startEmptyProject },
         { label: "Load Sample", onClick: resetToSampleProject },
         { label: "Reset Draft", onClick: resetToSampleProject },
-        { label: "Save Draft", onClick: () => { saveDraft(editorState.project); setAvailableDraft(loadDraftMeta()); setProjectOrigin("draft"); setIoStatus("draft saved"); } },
+        { label: "Save Draft", onClick: saveCurrentDraft },
         { label: "Load", onClick: loadDraftProject },
         { label: "Copy Source JSON", onClick: () => void copySourceJson() },
         { label: "Export Bundle", onClick: () => void exportBundle() },
@@ -1363,6 +1413,44 @@ export default function EditorPage() {
   );
   const showDraftBanner = availableDraft !== null && projectOrigin !== "draft";
 
+  if (!advancedMode) {
+    return (
+      <GuidedEditor
+        creating={creatingCharacter}
+        createName={createName}
+        createKind={createKind}
+        creationPreviewProject={creationPreviewProject}
+        project={editorState.project}
+        step={guidedStep}
+        playing={previewPlaying}
+        clipId={previewClipId}
+        quality={previewQuality}
+        ioStatus={ioStatus}
+        lastExportBundle={lastExportBundle}
+        runtimeZipBytes={runtimeZipBytes}
+        packageZipBytes={packageZipBytes}
+        onCreateNameChange={setCreateName}
+        onCreateKindChange={setCreateKind}
+        onCreate={createSelectedCharacter}
+        onOpenSample={openSampleInGuide}
+        onImportProject={importProjectFile}
+        onNewCharacter={() => setCreatingCharacter(true)}
+        onStepChange={setGuidedStep}
+        onPlayingChange={setPreviewPlaying}
+        onClipChange={setPreviewClipId}
+        onSaveDraft={saveCurrentDraft}
+        onOpenAdvanced={(nextMode) => {
+          if (nextMode) {
+            setMode(nextMode);
+          }
+          setAdvancedMode(true);
+        }}
+        onFilesSelected={addGuidedArtwork}
+        onExport={exportBundle}
+      />
+    );
+  }
+
   return (
     <main
       className="grid h-dvh w-screen min-w-0 overflow-hidden bg-background text-foreground"
@@ -1396,6 +1484,9 @@ export default function EditorPage() {
             ))}
           </ToggleGroup>
           <div className="flex items-center justify-end gap-1.5">
+            <Button size="sm" variant="outline" type="button" onClick={() => setAdvancedMode(false)}>
+              Guided
+            </Button>
             <Button size="sm" variant={previewPlaying ? "default" : "outline"} type="button" onClick={() => setPreviewPlaying(true)}>
               Play
             </Button>
@@ -2186,7 +2277,7 @@ export default function EditorPage() {
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {lastExportBundle ? (lastExportBundle.validation.ok ? `${exportFileEntries.length} json + ${lastExportBundle.assetFiles.length} png ready` : "validation failed") : "not built"}
+                    {lastExportBundle ? (lastExportBundle.validation.ok ? `Shipping: 4 runtime JSON + ${lastExportBundle.assetFiles.length} textures · ${exportFileEntries.length} debug artifacts available` : "validation failed") : "not built"}
                   </p>
                   {runtimeParityReport ? (
                     <div className={`grid gap-1 rounded-md px-2 py-1 text-xs ${runtimeParityReport.ok ? "bg-emerald-50 text-emerald-700" : "bg-destructive/10 text-destructive"}`}>
@@ -2199,7 +2290,8 @@ export default function EditorPage() {
                       <span>Profile: {lastExportBundle.summary.profile}</span>
                       <span>Schema: {lastExportBundle.manifest?.migration.sourceSchemaVersion ?? "n/a"} / Compiler: {lastExportBundle.manifest?.migration.compiledFormatVersion ?? "n/a"}</span>
                       <span>Counts: {lastExportBundle.summary.bones} bones / {lastExportBundle.summary.parts} parts / {lastExportBundle.summary.animations} clips / {lastExportBundle.summary.states} states</span>
-                      <span>Size: {lastExportBundle.summary.totalBytes}b{lastExportBundle.summary.compressedBytes ? ` / gzip ${lastExportBundle.summary.compressedBytes}b` : ""}</span>
+                      <span>Debug artifacts: {lastExportBundle.summary.totalBytes}b{lastExportBundle.summary.compressedBytes ? ` / compiled gzip ${lastExportBundle.summary.compressedBytes}b` : ""}</span>
+                      <span>Shipping ZIP: {runtimeZipBytes === null ? "not built" : `${(runtimeZipBytes / 1024).toFixed(1)} KB runtime`}{packageZipBytes === null ? "" : ` / ${(packageZipBytes / 1024).toFixed(1)} KB package`}</span>
                       <span className="truncate" title={lastExportBundle.summary.sourceHash}>Source SHA-256: {lastExportBundle.summary.sourceHash.slice(0, 16)}...</span>
                       <span className="truncate" title={lastExportBundle.summary.compiledHash}>Compiled SHA-256: {lastExportBundle.summary.compiledHash.slice(0, 16)}...</span>
                     </div>
