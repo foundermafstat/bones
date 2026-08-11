@@ -1,0 +1,258 @@
+{
+  "id": "pulse",
+  "name": "Pulse",
+  "gender": "male",
+  "archetype": "balanced",
+  "palette": [
+    "#145CFF",
+    "#16D9FF",
+    "#FFD21C",
+    "#101A35"
+  ],
+  "sourceRig": "pulse.source.rig.json",
+  "compiledRig": "pulse.compiled.json",
+  "combatProfile": "pulse.combat.json",
+  "compiledCombatProfile": "pulse.combat.compiled.json",
+  "partsDirectory": "parts/",
+  "identityAnchor": "source-art/identity-anchor.png",
+  "partCount": 21,
+  "clipCount": 50,
+  "visualParts": [
+    {
+      "id": "accessory_back",
+      "file": "parts/accessory_back.png",
+      "boneBinding": "bone11",
+      "drawOrder": 0,
+      "pivot": [
+        78,
+        0
+      ],
+      "prompt": "Technical orthographic three-quarter-right face sheet: blank head base, four interchangeable same-angle face plates, two isolated hood accessories, flat #00FF00 background."
+    },
+    {
+      "id": "thigh_back",
+      "file": "parts/thigh_back.png",
+      "boneBinding": "bone2",
+      "drawOrder": 1,
+      "pivot": [
+        -15,
+        0
+      ],
+      "prompt": "Technical orthographic three-quarter-right cutout sheet: 14 isolated Pulse body parts, clean joint cuts, hands/forearms and feet/shins separated, flat #00FF00 background."
+    },
+    {
+      "id": "shin_back",
+      "file": "parts/shin_back.png",
+      "boneBinding": "bone3",
+      "drawOrder": 2,
+      "pivot": [
+        -10,
+        0
+      ],
+      "prompt": "Technical orthographic three-quarter-right cutout sheet: 14 isolated Pulse body parts, clean joint cuts, hands/forearms and feet/shins separated, flat #00FF00 background."
+    },
+    {
+      "id": "foot_back",
+      "file": "parts/foot_back.png",
+      "boneBinding": "bone4",
+      "drawOrder": 3,
+      "pivot": [
+        -6,
+        0
+      ],
+      "prompt": "Technical orthographic three-quarter-right cutout sheet: 14 isolated Pulse body parts, clean joint cuts, hands/forearms and feet/shins separated, flat #00FF00 background."
+    },
+    {
+      "id": "upper_arm_back",
+      "file": "parts/upper_arm_back.png",
+      "boneBinding": "bone13",
+      "drawOrder": 4,
+      "pivot": [
+        -4,
+        0
+      ],
+      "prompt": "Technical orthographic three-quarter-right cutout sheet: 14 isolated Pulse body parts, clean joint cuts, hands/forearms and feet/shins separated, flat #00FF00 background."
+    },
+    {
+      "id": "forearm_back",
+      "file": "parts/forearm_back.png",
+      "boneBinding": "bone18",
+      "drawOrder": 5,
+      "pivot": [
+        -4,
+        0
+      ],
+      "prompt": "Technical orthographic three-quarter-right cutout sheet: 14 isolated Pulse body parts, clean joint cuts, hands/forearms and feet/shins separated, flat #00FF00 background."
+    },
+    {
+      "id": "hand_back",
+      "file": "parts/hand_back.png",
+      "boneBinding": "bone19",
+      "drawOrder": 6,
+      "pivot": [
+        -4,
+        0
+      ],
+      "prompt": "Technical orthographic three-quarter-right cutout sheet: 14 isolated Pulse body parts, clean joint cuts, hands/forearms and feet/shins separated, flat #00FF00 background."
+    },
+    {
+      "id": "pelvis",
+      "file": "parts/pelvis.png",
+      "boneBinding": "bone10",
+      "drawOrder": 7,
+      "pivot": [
+        0,
+        0
+      ],
+      "prompt": "Technical orthographic three-quarter-right cutout sheet: 14 isolated Pulse body parts, clean joint cuts, hands/forearms and feet/shins separated, flat #00FF00 background."
+    },
+    {
+      "id": "torso",
+      "file": "parts/torso.png",
+      "boneBinding": "bone11",
+      "drawOrder": 8,
+      "pivot": [
+        0,
+        0
+      ],
+      "prompt": "Technical orthographic three-quarter-right cutout sheet: 14 isolated Pulse body parts, clean joint cuts, hands/forearms and feet/shins separated, flat #00FF00 background."
+    },
+    {
+      "id": "head_base",
+      "file": "parts/head_base.png",
+      "boneBinding": "bone12",
+      "drawOrder": 9,
+      "pivot": [
+        0,
+        0
+      ],
+      "prompt": "Technical orthographic three-quarter-right face sheet: blank head base, four interchangeable same-angle face plates, two isolated hood accessories, flat #00FF00 background."
+    },
+    {
+      "id": "face_neutral",
+      "file": "parts/face_neutral.png",
+      "boneBinding": "bone12",
+      "drawOrder": 10,
+      "pivot": [
+        35,
+        25
+      ],
+      "prompt": "Technical orthographic three-quarter-right face sheet: blank head base, four interchangeable same-angle face plates, two isolated hood accessories, flat #00FF00 background."
+    },
+    {
+      "id": "face_attack",
+      "file": "parts/face_attack.png",
+      "boneBinding": "bone12",
+      "drawOrder": 11,
+      "pivot": [
+        35,
+        25
+      ],
+      "prompt": "Technical orthographic three-quarter-right face sheet: blank head base, four interchangeable same-angle face plates, two isolated hood accessories, flat #00FF00 background."
+    },
+    {
+      "id": "face_hurt",
+      "file": "parts/face_hurt.png",
+      "boneBinding": "bone12",
+      "drawOrder": 12,
+      "pivot": [
+        35,
+        25
+      ],
+      "prompt": "Technical orthographic three-quarter-right face sheet: blank head base, four interchangeable same-angle face plates, two isolated hood accessories, flat #00FF00 background."
+    },
+    {
+      "id": "face_victory",
+      "file": "parts/face_victory.png",
+      "boneBinding": "bone12",
+      "drawOrder": 13,
+      "pivot": [
+        35,
+        25
+      ],
+      "prompt": "Technical orthographic three-quarter-right face sheet: blank head base, four interchangeable same-angle face plates, two isolated hood accessories, flat #00FF00 background."
+    },
+    {
+      "id": "thigh_front",
+      "file": "parts/thigh_front.png",
+      "boneBinding": "bone6",
+      "drawOrder": 14,
+      "pivot": [
+        -15,
+        0
+      ],
+      "prompt": "Technical orthographic three-quarter-right cutout sheet: 14 isolated Pulse body parts, clean joint cuts, hands/forearms and feet/shins separated, flat #00FF00 background."
+    },
+    {
+      "id": "shin_front",
+      "file": "parts/shin_front.png",
+      "boneBinding": "bone7",
+      "drawOrder": 15,
+      "pivot": [
+        -10,
+        0
+      ],
+      "prompt": "Technical orthographic three-quarter-right cutout sheet: 14 isolated Pulse body parts, clean joint cuts, hands/forearms and feet/shins separated, flat #00FF00 background."
+    },
+    {
+      "id": "foot_front",
+      "file": "parts/foot_front.png",
+      "boneBinding": "bone8",
+      "drawOrder": 16,
+      "pivot": [
+        -6,
+        0
+      ],
+      "prompt": "Technical orthographic three-quarter-right cutout sheet: 14 isolated Pulse body parts, clean joint cuts, hands/forearms and feet/shins separated, flat #00FF00 background."
+    },
+    {
+      "id": "upper_arm_front",
+      "file": "parts/upper_arm_front.png",
+      "boneBinding": "bone14",
+      "drawOrder": 17,
+      "pivot": [
+        -4,
+        0
+      ],
+      "prompt": "Technical orthographic three-quarter-right cutout sheet: 14 isolated Pulse body parts, clean joint cuts, hands/forearms and feet/shins separated, flat #00FF00 background."
+    },
+    {
+      "id": "forearm_front",
+      "file": "parts/forearm_front.png",
+      "boneBinding": "bone15",
+      "drawOrder": 18,
+      "pivot": [
+        -4,
+        0
+      ],
+      "prompt": "Technical orthographic three-quarter-right cutout sheet: 14 isolated Pulse body parts, clean joint cuts, hands/forearms and feet/shins separated, flat #00FF00 background."
+    },
+    {
+      "id": "hand_front",
+      "file": "parts/hand_front.png",
+      "boneBinding": "bone16",
+      "drawOrder": 19,
+      "pivot": [
+        -4,
+        0
+      ],
+      "prompt": "Technical orthographic three-quarter-right cutout sheet: 14 isolated Pulse body parts, clean joint cuts, hands/forearms and feet/shins separated, flat #00FF00 background."
+    },
+    {
+      "id": "accessory_front",
+      "file": "parts/accessory_front.png",
+      "boneBinding": "bone11",
+      "drawOrder": 20,
+      "pivot": [
+        80,
+        0
+      ],
+      "prompt": "Technical orthographic three-quarter-right face sheet: blank head base, four interchangeable same-angle face plates, two isolated hood accessories, flat #00FF00 background."
+    }
+  ],
+  "prompts": {
+    "identityAnchor": "Production cutout-rig identity anchor for a side-view 2D fighter, orthographic three-quarter-right camera, tall athletic Pulse in cobalt/cyan/yellow streetwear.",
+    "bodyPartsSheet": "Technical orthographic three-quarter-right cutout sheet: 14 isolated Pulse body parts, clean joint cuts, hands/forearms and feet/shins separated, flat #00FF00 background.",
+    "faceAccessorySheet": "Technical orthographic three-quarter-right face sheet: blank head base, four interchangeable same-angle face plates, two isolated hood accessories, flat #00FF00 background."
+  }
+}

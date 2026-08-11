@@ -1,13 +1,20 @@
 import type { PathCommand } from "@bones/schema";
+import pulseFighterSource from "../public/assets/fighters/pulse/pulse.source.rig.json" with { type: "json" };
+import { fromSourceProject } from "./editorSourceProject.ts";
 import {
   cleanDirtyScopes,
   initialAutosaveState,
   initialEditorProject,
   type AnimationClip,
+  type CharacterKind,
   type EditorProjectState,
   type Keyframe,
   type ShapePart
 } from "./editorState.ts";
+
+export type CreationTemplate = CharacterKind | "pulse";
+
+export const FIGHTER_PRESETS = [{ id: "pulse", name: "Pulse", archetype: "Balanced fighter" }] as const;
 
 /**
  * Anatomy and motion reference only. The template below is original Bones 2D data;
@@ -26,6 +33,23 @@ export function createHumanCharacterProject(name: string): EditorProjectState {
     name: characterName(name, "New Human"),
     characterKind: "human"
   };
+}
+
+export function createFighterCharacterProject(preset: "pulse", name: string): EditorProjectState {
+  if (preset !== "pulse") {
+    throw new Error(`Unknown fighter preset '${preset}'.`);
+  }
+  const project = fromSourceProject(pulseFighterSource);
+  return {
+    ...project,
+    name: characterName(name, "Pulse"),
+    characterKind: "human"
+  };
+}
+
+export function createCharacterProject(template: CreationTemplate, name: string): EditorProjectState {
+  if (template === "pulse") return createFighterCharacterProject(template, name);
+  return template === "dog" ? createDogCharacterProject(name) : createHumanCharacterProject(name);
 }
 
 export function createDogCharacterProject(name: string): EditorProjectState {

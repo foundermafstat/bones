@@ -1,0 +1,2339 @@
+{
+  "compiledFormatVersion": "1.0.0",
+  "sourceFormatVersion": "1.0.0",
+  "fighterId": "pulse",
+  "rig": 0,
+  "tickRate": 60,
+  "stats": {
+    "maxHealth": 1000,
+    "walkForward": 4.2,
+    "walkBackward": 3.5,
+    "dashForward": 9,
+    "dashBackward": 7.5,
+    "jumpVelocityY": -15,
+    "gravity": 0.85,
+    "weight": 1
+  },
+  "moves": [
+    {
+      "id": 0,
+      "clip": 0,
+      "stance": "airborne",
+      "command": {
+        "motion": [
+          8
+        ],
+        "buttons": [
+          "HK"
+        ]
+      },
+      "startupFrames": 11,
+      "activeWindows": [
+        [
+          11,
+          15
+        ]
+      ],
+      "recoveryFrames": 20,
+      "damage": 100,
+      "hitLevel": "overhead",
+      "hitstopFrames": 9,
+      "hitstunFrames": 24,
+      "blockstunFrames": 15,
+      "knockback": {
+        "x": 5,
+        "y": -1
+      },
+      "meterGain": 35,
+      "meterCost": 0,
+      "knockdown": false,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            35
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "hit",
+          "frames": [
+            11,
+            15
+          ],
+          "bone": 32,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 96,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [
+        {
+          "frames": [
+            15,
+            21
+          ],
+          "into": [
+            16,
+            19,
+            7,
+            29
+          ],
+          "condition": "hit-or-block"
+        }
+      ],
+      "tags": [
+        "normal"
+      ]
+    },
+    {
+      "id": 1,
+      "clip": 1,
+      "stance": "airborne",
+      "command": {
+        "motion": [
+          8
+        ],
+        "buttons": [
+          "HP"
+        ]
+      },
+      "startupFrames": 9,
+      "activeWindows": [
+        [
+          9,
+          13
+        ]
+      ],
+      "recoveryFrames": 18,
+      "damage": 90,
+      "hitLevel": "overhead",
+      "hitstopFrames": 9,
+      "hitstunFrames": 22,
+      "blockstunFrames": 14,
+      "knockback": {
+        "x": 5,
+        "y": -1
+      },
+      "meterGain": 31,
+      "meterCost": 0,
+      "knockdown": false,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            31
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "hit",
+          "frames": [
+            9,
+            13
+          ],
+          "bone": 16,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 94,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [
+        {
+          "frames": [
+            13,
+            19
+          ],
+          "into": [
+            16,
+            19,
+            7,
+            29
+          ],
+          "condition": "hit-or-block"
+        }
+      ],
+      "tags": [
+        "normal"
+      ]
+    },
+    {
+      "id": 2,
+      "clip": 2,
+      "stance": "airborne",
+      "command": {
+        "motion": [
+          8
+        ],
+        "buttons": [
+          "LK"
+        ]
+      },
+      "startupFrames": 5,
+      "activeWindows": [
+        [
+          5,
+          8
+        ]
+      ],
+      "recoveryFrames": 10,
+      "damage": 35,
+      "hitLevel": "overhead",
+      "hitstopFrames": 6,
+      "hitstunFrames": 12,
+      "blockstunFrames": 8,
+      "knockback": {
+        "x": 5,
+        "y": -1
+      },
+      "meterGain": 12,
+      "meterCost": 0,
+      "knockdown": false,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            18
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "hit",
+          "frames": [
+            5,
+            8
+          ],
+          "bone": 32,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 96,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [
+        {
+          "frames": [
+            8,
+            14
+          ],
+          "into": [
+            16,
+            19,
+            7,
+            29
+          ],
+          "condition": "hit-or-block"
+        }
+      ],
+      "tags": [
+        "normal"
+      ]
+    },
+    {
+      "id": 3,
+      "clip": 3,
+      "stance": "airborne",
+      "command": {
+        "motion": [
+          8
+        ],
+        "buttons": [
+          "LP"
+        ]
+      },
+      "startupFrames": 4,
+      "activeWindows": [
+        [
+          4,
+          7
+        ]
+      ],
+      "recoveryFrames": 8,
+      "damage": 30,
+      "hitLevel": "overhead",
+      "hitstopFrames": 6,
+      "hitstunFrames": 12,
+      "blockstunFrames": 8,
+      "knockback": {
+        "x": 5,
+        "y": -1
+      },
+      "meterGain": 11,
+      "meterCost": 0,
+      "knockdown": false,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            15
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "hit",
+          "frames": [
+            4,
+            7
+          ],
+          "bone": 16,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 94,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [
+        {
+          "frames": [
+            7,
+            13
+          ],
+          "into": [
+            16,
+            19,
+            7,
+            29
+          ],
+          "condition": "hit-or-block"
+        }
+      ],
+      "tags": [
+        "normal"
+      ]
+    },
+    {
+      "id": 4,
+      "clip": 4,
+      "stance": "airborne",
+      "command": {
+        "motion": [
+          8
+        ],
+        "buttons": [
+          "MK"
+        ]
+      },
+      "startupFrames": 7,
+      "activeWindows": [
+        [
+          7,
+          11
+        ]
+      ],
+      "recoveryFrames": 14,
+      "damage": 65,
+      "hitLevel": "overhead",
+      "hitstopFrames": 6,
+      "hitstunFrames": 16,
+      "blockstunFrames": 10,
+      "knockback": {
+        "x": 5,
+        "y": -1
+      },
+      "meterGain": 23,
+      "meterCost": 0,
+      "knockdown": false,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            25
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "hit",
+          "frames": [
+            7,
+            11
+          ],
+          "bone": 32,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 96,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [
+        {
+          "frames": [
+            11,
+            17
+          ],
+          "into": [
+            16,
+            19,
+            7,
+            29
+          ],
+          "condition": "hit-or-block"
+        }
+      ],
+      "tags": [
+        "normal"
+      ]
+    },
+    {
+      "id": 5,
+      "clip": 5,
+      "stance": "airborne",
+      "command": {
+        "motion": [
+          8
+        ],
+        "buttons": [
+          "MP"
+        ]
+      },
+      "startupFrames": 6,
+      "activeWindows": [
+        [
+          6,
+          9
+        ]
+      ],
+      "recoveryFrames": 12,
+      "damage": 60,
+      "hitLevel": "overhead",
+      "hitstopFrames": 6,
+      "hitstunFrames": 14,
+      "blockstunFrames": 9,
+      "knockback": {
+        "x": 5,
+        "y": -1
+      },
+      "meterGain": 21,
+      "meterCost": 0,
+      "knockdown": false,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            21
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "hit",
+          "frames": [
+            6,
+            9
+          ],
+          "bone": 16,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 94,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [
+        {
+          "frames": [
+            9,
+            15
+          ],
+          "into": [
+            16,
+            19,
+            7,
+            29
+          ],
+          "condition": "hit-or-block"
+        }
+      ],
+      "tags": [
+        "normal"
+      ]
+    },
+    {
+      "id": 6,
+      "clip": 11,
+      "stance": "standing",
+      "command": {
+        "motion": [
+          2,
+          1,
+          4
+        ],
+        "buttons": [
+          "HK"
+        ]
+      },
+      "startupFrames": 12,
+      "activeWindows": [
+        [
+          12,
+          17
+        ]
+      ],
+      "recoveryFrames": 23,
+      "damage": 135,
+      "hitLevel": "low",
+      "hitstopFrames": 12,
+      "hitstunFrames": 32,
+      "blockstunFrames": 20,
+      "knockback": {
+        "x": 9,
+        "y": -6
+      },
+      "meterGain": 47,
+      "meterCost": 0,
+      "knockdown": true,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            40
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "hit",
+          "frames": [
+            12,
+            17
+          ],
+          "bone": 32,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 96,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [],
+      "tags": [
+        "special"
+      ]
+    },
+    {
+      "id": 7,
+      "clip": 11,
+      "stance": "standing",
+      "command": {
+        "motion": [
+          2,
+          1,
+          4
+        ],
+        "buttons": [
+          "LK"
+        ]
+      },
+      "startupFrames": 7,
+      "activeWindows": [
+        [
+          7,
+          10
+        ]
+      ],
+      "recoveryFrames": 16,
+      "damage": 75,
+      "hitLevel": "low",
+      "hitstopFrames": 6,
+      "hitstunFrames": 18,
+      "blockstunFrames": 11,
+      "knockback": {
+        "x": 5,
+        "y": -1
+      },
+      "meterGain": 26,
+      "meterCost": 0,
+      "knockdown": false,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            26
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "hit",
+          "frames": [
+            7,
+            10
+          ],
+          "bone": 32,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 96,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [],
+      "tags": [
+        "special"
+      ]
+    },
+    {
+      "id": 8,
+      "clip": 11,
+      "stance": "standing",
+      "command": {
+        "motion": [
+          2,
+          1,
+          4
+        ],
+        "buttons": [
+          "MK"
+        ]
+      },
+      "startupFrames": 9,
+      "activeWindows": [
+        [
+          9,
+          13
+        ]
+      ],
+      "recoveryFrames": 19,
+      "damage": 105,
+      "hitLevel": "low",
+      "hitstopFrames": 9,
+      "hitstunFrames": 25,
+      "blockstunFrames": 16,
+      "knockback": {
+        "x": 5,
+        "y": -1
+      },
+      "meterGain": 37,
+      "meterCost": 0,
+      "knockdown": false,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            32
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "hit",
+          "frames": [
+            9,
+            13
+          ],
+          "bone": 32,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 96,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [],
+      "tags": [
+        "special"
+      ]
+    },
+    {
+      "id": 9,
+      "clip": 13,
+      "stance": "crouching",
+      "command": {
+        "motion": [
+          2
+        ],
+        "buttons": [
+          "HK"
+        ]
+      },
+      "startupFrames": 11,
+      "activeWindows": [
+        [
+          11,
+          15
+        ]
+      ],
+      "recoveryFrames": 20,
+      "damage": 100,
+      "hitLevel": "low",
+      "hitstopFrames": 9,
+      "hitstunFrames": 24,
+      "blockstunFrames": 15,
+      "knockback": {
+        "x": 5,
+        "y": -6
+      },
+      "meterGain": 35,
+      "meterCost": 0,
+      "knockdown": true,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            35
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "hit",
+          "frames": [
+            11,
+            15
+          ],
+          "bone": 32,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 96,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [
+        {
+          "frames": [
+            15,
+            21
+          ],
+          "into": [
+            16,
+            19,
+            7,
+            29
+          ],
+          "condition": "hit-or-block"
+        }
+      ],
+      "tags": [
+        "normal"
+      ]
+    },
+    {
+      "id": 10,
+      "clip": 14,
+      "stance": "crouching",
+      "command": {
+        "motion": [
+          2
+        ],
+        "buttons": [
+          "HP"
+        ]
+      },
+      "startupFrames": 9,
+      "activeWindows": [
+        [
+          9,
+          13
+        ]
+      ],
+      "recoveryFrames": 18,
+      "damage": 90,
+      "hitLevel": "mid",
+      "hitstopFrames": 9,
+      "hitstunFrames": 22,
+      "blockstunFrames": 14,
+      "knockback": {
+        "x": 5,
+        "y": -1
+      },
+      "meterGain": 31,
+      "meterCost": 0,
+      "knockdown": false,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            31
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "hit",
+          "frames": [
+            9,
+            13
+          ],
+          "bone": 16,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 94,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [
+        {
+          "frames": [
+            13,
+            19
+          ],
+          "into": [
+            16,
+            19,
+            7,
+            29
+          ],
+          "condition": "hit-or-block"
+        }
+      ],
+      "tags": [
+        "normal"
+      ]
+    },
+    {
+      "id": 11,
+      "clip": 15,
+      "stance": "crouching",
+      "command": {
+        "motion": [
+          2
+        ],
+        "buttons": [
+          "LK"
+        ]
+      },
+      "startupFrames": 5,
+      "activeWindows": [
+        [
+          5,
+          8
+        ]
+      ],
+      "recoveryFrames": 10,
+      "damage": 35,
+      "hitLevel": "low",
+      "hitstopFrames": 6,
+      "hitstunFrames": 12,
+      "blockstunFrames": 8,
+      "knockback": {
+        "x": 5,
+        "y": -1
+      },
+      "meterGain": 12,
+      "meterCost": 0,
+      "knockdown": false,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            18
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "hit",
+          "frames": [
+            5,
+            8
+          ],
+          "bone": 32,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 96,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [
+        {
+          "frames": [
+            8,
+            14
+          ],
+          "into": [
+            16,
+            19,
+            7,
+            29
+          ],
+          "condition": "hit-or-block"
+        }
+      ],
+      "tags": [
+        "normal"
+      ]
+    },
+    {
+      "id": 12,
+      "clip": 16,
+      "stance": "crouching",
+      "command": {
+        "motion": [
+          2
+        ],
+        "buttons": [
+          "LP"
+        ]
+      },
+      "startupFrames": 4,
+      "activeWindows": [
+        [
+          4,
+          7
+        ]
+      ],
+      "recoveryFrames": 8,
+      "damage": 30,
+      "hitLevel": "mid",
+      "hitstopFrames": 6,
+      "hitstunFrames": 12,
+      "blockstunFrames": 8,
+      "knockback": {
+        "x": 5,
+        "y": -1
+      },
+      "meterGain": 11,
+      "meterCost": 0,
+      "knockdown": false,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            15
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "hit",
+          "frames": [
+            4,
+            7
+          ],
+          "bone": 16,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 94,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [
+        {
+          "frames": [
+            7,
+            13
+          ],
+          "into": [
+            16,
+            19,
+            7,
+            29
+          ],
+          "condition": "hit-or-block"
+        }
+      ],
+      "tags": [
+        "normal"
+      ]
+    },
+    {
+      "id": 13,
+      "clip": 17,
+      "stance": "crouching",
+      "command": {
+        "motion": [
+          2
+        ],
+        "buttons": [
+          "MK"
+        ]
+      },
+      "startupFrames": 7,
+      "activeWindows": [
+        [
+          7,
+          11
+        ]
+      ],
+      "recoveryFrames": 14,
+      "damage": 65,
+      "hitLevel": "low",
+      "hitstopFrames": 6,
+      "hitstunFrames": 16,
+      "blockstunFrames": 10,
+      "knockback": {
+        "x": 5,
+        "y": -1
+      },
+      "meterGain": 23,
+      "meterCost": 0,
+      "knockdown": false,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            25
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "hit",
+          "frames": [
+            7,
+            11
+          ],
+          "bone": 32,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 96,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [
+        {
+          "frames": [
+            11,
+            17
+          ],
+          "into": [
+            16,
+            19,
+            7,
+            29
+          ],
+          "condition": "hit-or-block"
+        }
+      ],
+      "tags": [
+        "normal"
+      ]
+    },
+    {
+      "id": 14,
+      "clip": 18,
+      "stance": "crouching",
+      "command": {
+        "motion": [
+          2
+        ],
+        "buttons": [
+          "MP"
+        ]
+      },
+      "startupFrames": 6,
+      "activeWindows": [
+        [
+          6,
+          9
+        ]
+      ],
+      "recoveryFrames": 12,
+      "damage": 60,
+      "hitLevel": "mid",
+      "hitstopFrames": 6,
+      "hitstunFrames": 14,
+      "blockstunFrames": 9,
+      "knockback": {
+        "x": 5,
+        "y": -1
+      },
+      "meterGain": 21,
+      "meterCost": 0,
+      "knockdown": false,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            21
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "hit",
+          "frames": [
+            6,
+            9
+          ],
+          "bone": 16,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 94,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [
+        {
+          "frames": [
+            9,
+            15
+          ],
+          "into": [
+            16,
+            19,
+            7,
+            29
+          ],
+          "condition": "hit-or-block"
+        }
+      ],
+      "tags": [
+        "normal"
+      ]
+    },
+    {
+      "id": 15,
+      "clip": 22,
+      "stance": "standing",
+      "command": {
+        "motion": [
+          2,
+          3,
+          6
+        ],
+        "buttons": [
+          "HP"
+        ]
+      },
+      "startupFrames": 12,
+      "activeWindows": [
+        [
+          12,
+          17
+        ]
+      ],
+      "recoveryFrames": 23,
+      "damage": 135,
+      "hitLevel": "mid",
+      "hitstopFrames": 12,
+      "hitstunFrames": 32,
+      "blockstunFrames": 20,
+      "knockback": {
+        "x": 9,
+        "y": -6
+      },
+      "meterGain": 47,
+      "meterCost": 0,
+      "knockdown": true,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            40
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "hit",
+          "frames": [
+            12,
+            17
+          ],
+          "bone": 16,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 94,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [],
+      "tags": [
+        "special"
+      ]
+    },
+    {
+      "id": 16,
+      "clip": 22,
+      "stance": "standing",
+      "command": {
+        "motion": [
+          2,
+          3,
+          6
+        ],
+        "buttons": [
+          "LP"
+        ]
+      },
+      "startupFrames": 7,
+      "activeWindows": [
+        [
+          7,
+          10
+        ]
+      ],
+      "recoveryFrames": 16,
+      "damage": 75,
+      "hitLevel": "mid",
+      "hitstopFrames": 6,
+      "hitstunFrames": 18,
+      "blockstunFrames": 11,
+      "knockback": {
+        "x": 5,
+        "y": -1
+      },
+      "meterGain": 26,
+      "meterCost": 0,
+      "knockdown": false,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            26
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "hit",
+          "frames": [
+            7,
+            10
+          ],
+          "bone": 16,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 94,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [],
+      "tags": [
+        "special"
+      ]
+    },
+    {
+      "id": 17,
+      "clip": 22,
+      "stance": "standing",
+      "command": {
+        "motion": [
+          2,
+          3,
+          6
+        ],
+        "buttons": [
+          "MP"
+        ]
+      },
+      "startupFrames": 9,
+      "activeWindows": [
+        [
+          9,
+          13
+        ]
+      ],
+      "recoveryFrames": 19,
+      "damage": 105,
+      "hitLevel": "mid",
+      "hitstopFrames": 9,
+      "hitstunFrames": 25,
+      "blockstunFrames": 16,
+      "knockback": {
+        "x": 5,
+        "y": -1
+      },
+      "meterGain": 37,
+      "meterCost": 0,
+      "knockdown": false,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            32
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "hit",
+          "frames": [
+            9,
+            13
+          ],
+          "bone": 16,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 94,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [],
+      "tags": [
+        "special"
+      ]
+    },
+    {
+      "id": 18,
+      "clip": 35,
+      "stance": "standing",
+      "command": {
+        "motion": [
+          6,
+          2,
+          3
+        ],
+        "buttons": [
+          "HP"
+        ]
+      },
+      "startupFrames": 12,
+      "activeWindows": [
+        [
+          12,
+          17
+        ]
+      ],
+      "recoveryFrames": 23,
+      "damage": 135,
+      "hitLevel": "mid",
+      "hitstopFrames": 12,
+      "hitstunFrames": 32,
+      "blockstunFrames": 20,
+      "knockback": {
+        "x": 9,
+        "y": -6
+      },
+      "meterGain": 47,
+      "meterCost": 0,
+      "knockdown": true,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            40
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "hit",
+          "frames": [
+            12,
+            17
+          ],
+          "bone": 16,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 94,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [],
+      "tags": [
+        "special"
+      ]
+    },
+    {
+      "id": 19,
+      "clip": 35,
+      "stance": "standing",
+      "command": {
+        "motion": [
+          6,
+          2,
+          3
+        ],
+        "buttons": [
+          "LP"
+        ]
+      },
+      "startupFrames": 7,
+      "activeWindows": [
+        [
+          7,
+          10
+        ]
+      ],
+      "recoveryFrames": 16,
+      "damage": 75,
+      "hitLevel": "mid",
+      "hitstopFrames": 6,
+      "hitstunFrames": 18,
+      "blockstunFrames": 11,
+      "knockback": {
+        "x": 5,
+        "y": -1
+      },
+      "meterGain": 26,
+      "meterCost": 0,
+      "knockdown": false,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            26
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "hit",
+          "frames": [
+            7,
+            10
+          ],
+          "bone": 16,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 94,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [],
+      "tags": [
+        "special"
+      ]
+    },
+    {
+      "id": 20,
+      "clip": 35,
+      "stance": "standing",
+      "command": {
+        "motion": [
+          6,
+          2,
+          3
+        ],
+        "buttons": [
+          "MP"
+        ]
+      },
+      "startupFrames": 9,
+      "activeWindows": [
+        [
+          9,
+          13
+        ]
+      ],
+      "recoveryFrames": 19,
+      "damage": 105,
+      "hitLevel": "mid",
+      "hitstopFrames": 9,
+      "hitstunFrames": 25,
+      "blockstunFrames": 16,
+      "knockback": {
+        "x": 5,
+        "y": -1
+      },
+      "meterGain": 37,
+      "meterCost": 0,
+      "knockdown": false,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            32
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "hit",
+          "frames": [
+            9,
+            13
+          ],
+          "bone": 16,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 94,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [],
+      "tags": [
+        "special"
+      ]
+    },
+    {
+      "id": 21,
+      "clip": 36,
+      "stance": "standing",
+      "command": {
+        "motion": [
+          5
+        ],
+        "buttons": [
+          "HK"
+        ]
+      },
+      "startupFrames": 11,
+      "activeWindows": [
+        [
+          11,
+          15
+        ]
+      ],
+      "recoveryFrames": 20,
+      "damage": 100,
+      "hitLevel": "mid",
+      "hitstopFrames": 9,
+      "hitstunFrames": 24,
+      "blockstunFrames": 15,
+      "knockback": {
+        "x": 5,
+        "y": -1
+      },
+      "meterGain": 35,
+      "meterCost": 0,
+      "knockdown": false,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            35
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "hit",
+          "frames": [
+            11,
+            15
+          ],
+          "bone": 32,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 96,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [
+        {
+          "frames": [
+            15,
+            21
+          ],
+          "into": [
+            16,
+            19,
+            7,
+            29
+          ],
+          "condition": "hit-or-block"
+        }
+      ],
+      "tags": [
+        "normal"
+      ]
+    },
+    {
+      "id": 22,
+      "clip": 37,
+      "stance": "standing",
+      "command": {
+        "motion": [
+          5
+        ],
+        "buttons": [
+          "HP"
+        ]
+      },
+      "startupFrames": 9,
+      "activeWindows": [
+        [
+          9,
+          13
+        ]
+      ],
+      "recoveryFrames": 18,
+      "damage": 90,
+      "hitLevel": "mid",
+      "hitstopFrames": 9,
+      "hitstunFrames": 22,
+      "blockstunFrames": 14,
+      "knockback": {
+        "x": 5,
+        "y": -1
+      },
+      "meterGain": 31,
+      "meterCost": 0,
+      "knockdown": false,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            31
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "hit",
+          "frames": [
+            9,
+            13
+          ],
+          "bone": 16,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 94,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [
+        {
+          "frames": [
+            13,
+            19
+          ],
+          "into": [
+            16,
+            19,
+            7,
+            29
+          ],
+          "condition": "hit-or-block"
+        }
+      ],
+      "tags": [
+        "normal"
+      ]
+    },
+    {
+      "id": 23,
+      "clip": 38,
+      "stance": "standing",
+      "command": {
+        "motion": [
+          5
+        ],
+        "buttons": [
+          "LK"
+        ]
+      },
+      "startupFrames": 5,
+      "activeWindows": [
+        [
+          5,
+          8
+        ]
+      ],
+      "recoveryFrames": 10,
+      "damage": 35,
+      "hitLevel": "mid",
+      "hitstopFrames": 6,
+      "hitstunFrames": 12,
+      "blockstunFrames": 8,
+      "knockback": {
+        "x": 5,
+        "y": -1
+      },
+      "meterGain": 12,
+      "meterCost": 0,
+      "knockdown": false,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            18
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "hit",
+          "frames": [
+            5,
+            8
+          ],
+          "bone": 32,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 96,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [
+        {
+          "frames": [
+            8,
+            14
+          ],
+          "into": [
+            16,
+            19,
+            7,
+            29
+          ],
+          "condition": "hit-or-block"
+        }
+      ],
+      "tags": [
+        "normal"
+      ]
+    },
+    {
+      "id": 24,
+      "clip": 39,
+      "stance": "standing",
+      "command": {
+        "motion": [
+          5
+        ],
+        "buttons": [
+          "LP"
+        ]
+      },
+      "startupFrames": 4,
+      "activeWindows": [
+        [
+          4,
+          7
+        ]
+      ],
+      "recoveryFrames": 8,
+      "damage": 30,
+      "hitLevel": "mid",
+      "hitstopFrames": 6,
+      "hitstunFrames": 12,
+      "blockstunFrames": 8,
+      "knockback": {
+        "x": 5,
+        "y": -1
+      },
+      "meterGain": 11,
+      "meterCost": 0,
+      "knockdown": false,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            15
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "hit",
+          "frames": [
+            4,
+            7
+          ],
+          "bone": 16,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 94,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [
+        {
+          "frames": [
+            7,
+            13
+          ],
+          "into": [
+            16,
+            19,
+            7,
+            29
+          ],
+          "condition": "hit-or-block"
+        }
+      ],
+      "tags": [
+        "normal"
+      ]
+    },
+    {
+      "id": 25,
+      "clip": 40,
+      "stance": "standing",
+      "command": {
+        "motion": [
+          5
+        ],
+        "buttons": [
+          "MK"
+        ]
+      },
+      "startupFrames": 7,
+      "activeWindows": [
+        [
+          7,
+          11
+        ]
+      ],
+      "recoveryFrames": 14,
+      "damage": 65,
+      "hitLevel": "mid",
+      "hitstopFrames": 6,
+      "hitstunFrames": 16,
+      "blockstunFrames": 10,
+      "knockback": {
+        "x": 5,
+        "y": -1
+      },
+      "meterGain": 23,
+      "meterCost": 0,
+      "knockdown": false,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            25
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "hit",
+          "frames": [
+            7,
+            11
+          ],
+          "bone": 32,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 96,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [
+        {
+          "frames": [
+            11,
+            17
+          ],
+          "into": [
+            16,
+            19,
+            7,
+            29
+          ],
+          "condition": "hit-or-block"
+        }
+      ],
+      "tags": [
+        "normal"
+      ]
+    },
+    {
+      "id": 26,
+      "clip": 41,
+      "stance": "standing",
+      "command": {
+        "motion": [
+          5
+        ],
+        "buttons": [
+          "MP"
+        ]
+      },
+      "startupFrames": 6,
+      "activeWindows": [
+        [
+          6,
+          9
+        ]
+      ],
+      "recoveryFrames": 12,
+      "damage": 60,
+      "hitLevel": "mid",
+      "hitstopFrames": 6,
+      "hitstunFrames": 14,
+      "blockstunFrames": 9,
+      "knockback": {
+        "x": 5,
+        "y": -1
+      },
+      "meterGain": 21,
+      "meterCost": 0,
+      "knockdown": false,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            21
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "hit",
+          "frames": [
+            6,
+            9
+          ],
+          "bone": 16,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 94,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [
+        {
+          "frames": [
+            9,
+            15
+          ],
+          "into": [
+            16,
+            19,
+            7,
+            29
+          ],
+          "condition": "hit-or-block"
+        }
+      ],
+      "tags": [
+        "normal"
+      ]
+    },
+    {
+      "id": 27,
+      "clip": 42,
+      "stance": "standing",
+      "command": {
+        "motion": [
+          4
+        ],
+        "buttons": [
+          "LP",
+          "LK"
+        ]
+      },
+      "startupFrames": 6,
+      "activeWindows": [
+        [
+          6,
+          8
+        ]
+      ],
+      "recoveryFrames": 26,
+      "damage": 120,
+      "hitLevel": "throw",
+      "hitstopFrames": 12,
+      "hitstunFrames": 29,
+      "blockstunFrames": 18,
+      "knockback": {
+        "x": 9,
+        "y": -6
+      },
+      "meterGain": 42,
+      "meterCost": 0,
+      "knockdown": true,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            34
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "throw",
+          "frames": [
+            6,
+            8
+          ],
+          "bone": 16,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 94,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [],
+      "tags": [
+        "throw"
+      ]
+    },
+    {
+      "id": 28,
+      "clip": 44,
+      "stance": "standing",
+      "command": {
+        "motion": [
+          6
+        ],
+        "buttons": [
+          "LP",
+          "LK"
+        ]
+      },
+      "startupFrames": 5,
+      "activeWindows": [
+        [
+          5,
+          7
+        ]
+      ],
+      "recoveryFrames": 24,
+      "damage": 120,
+      "hitLevel": "throw",
+      "hitstopFrames": 12,
+      "hitstunFrames": 29,
+      "blockstunFrames": 18,
+      "knockback": {
+        "x": 9,
+        "y": -6
+      },
+      "meterGain": 42,
+      "meterCost": 0,
+      "knockdown": true,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            31
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "throw",
+          "frames": [
+            5,
+            7
+          ],
+          "bone": 16,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 94,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [],
+      "tags": [
+        "throw"
+      ]
+    },
+    {
+      "id": 29,
+      "clip": 46,
+      "stance": "standing",
+      "command": {
+        "motion": [
+          2,
+          3,
+          6,
+          2,
+          3,
+          6
+        ],
+        "buttons": [
+          "HP",
+          "HK"
+        ]
+      },
+      "startupFrames": 12,
+      "activeWindows": [
+        [
+          12,
+          24
+        ]
+      ],
+      "recoveryFrames": 42,
+      "damage": 320,
+      "hitLevel": "mid",
+      "hitstopFrames": 12,
+      "hitstunFrames": 77,
+      "blockstunFrames": 48,
+      "knockback": {
+        "x": 9,
+        "y": -6
+      },
+      "meterGain": 0,
+      "meterCost": 1000,
+      "knockdown": true,
+      "boxes": [
+        {
+          "kind": "hurt",
+          "frames": [
+            0,
+            66
+          ],
+          "bone": 3,
+          "rect": {
+            "x": -55,
+            "y": -110,
+            "width": 110,
+            "height": 220
+          }
+        },
+        {
+          "kind": "hit",
+          "frames": [
+            12,
+            24
+          ],
+          "bone": 32,
+          "rect": {
+            "x": 8,
+            "y": -30,
+            "width": 96,
+            "height": 60
+          }
+        }
+      ],
+      "cancelWindows": [],
+      "tags": [
+        "super"
+      ]
+    }
+  ],
+  "moveLookup": {
+    "aerial_hk": 0,
+    "aerial_hp": 1,
+    "aerial_lk": 2,
+    "aerial_lp": 3,
+    "aerial_mk": 4,
+    "aerial_mp": 5,
+    "breaker_kick_h": 6,
+    "breaker_kick_l": 7,
+    "breaker_kick_m": 8,
+    "crouching_hk": 9,
+    "crouching_hp": 10,
+    "crouching_lk": 11,
+    "crouching_lp": 12,
+    "crouching_mk": 13,
+    "crouching_mp": 14,
+    "drive_palm_h": 15,
+    "drive_palm_l": 16,
+    "drive_palm_m": 17,
+    "rising_guard_h": 18,
+    "rising_guard_l": 19,
+    "rising_guard_m": 20,
+    "standing_hk": 21,
+    "standing_hp": 22,
+    "standing_lk": 23,
+    "standing_lp": 24,
+    "standing_mk": 25,
+    "standing_mp": 26,
+    "throw_back": 27,
+    "throw_forward": 28,
+    "vanguard_rush": 29
+  }
+}

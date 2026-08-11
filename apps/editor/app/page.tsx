@@ -111,7 +111,6 @@ import {
   undo,
   type CurvePreset,
   type BlendTree1D,
-  type CharacterKind,
   type EditorProjectState,
   type EditorTransition,
   type EditorTransitionCondition,
@@ -125,7 +124,7 @@ import { defaultEditorProject } from "./defaultEditorProject";
 import { createProjectExportBundle, createRuntimeParityReport, DEFAULT_RUNTIME_BUNDLE_FILE, DEFAULT_RUNTIME_ZIP_FILE, EXPORT_BUNDLE_ROOT_DIR, EDITOR_DRAFT_KEY, EDITOR_DRAFT_META_KEY, loadDraft, loadDraftMeta, parseImportedProject, saveDraft, serializeEditorProject, type DraftMetadata, type ProjectExportBundle, type ProjectImportResult, type RuntimeParityReport } from "./projectIo";
 import { PixiPreview } from "./PixiPreview";
 import { GuidedEditor, type GuidedStep } from "./GuidedEditor";
-import { createDogCharacterProject, createHumanCharacterProject } from "./characterTemplates";
+import { createCharacterProject, type CreationTemplate } from "./characterTemplates";
 import { createDeflateZipBlob, type RuntimeArchiveEntry } from "./runtimeArchive";
 import { inspectSvgVector, vectorizeSvgPart } from "./editorVectorImport";
 import { parseLdtkLevel } from "@bones/ldtk-adapter";
@@ -307,8 +306,16 @@ function keysToPlatformerInput(keys: ReadonlySet<string>) {
   };
 }
 
-function clipIdForControllerState(state: PlatformerControllerState): string {
-  return state.animationState === "wallSlide" ? "fall" : state.animationState;
+function clipIdForControllerState(state: PlatformerControllerState, project: EditorProjectState): string {
+  const requested = state.animationState === "wallSlide" ? "fall" : state.animationState;
+  if (project.animations[requested]) return requested;
+  const fighterFallbacks: Readonly<Record<string, string>> = {
+    walk: "walk_forward",
+    run: "dash_forward",
+    jump: "jump_start",
+    fall: "air_neutral"
+  };
+  return fighterFallbacks[requested] ?? "idle";
 }
 
 const hybridZipFileNames = new Set(["manifest.json", DEFAULT_RUNTIME_BUNDLE_FILE, "hero.visual.compiled.json", "hero.path.runtime.rig.json"]);
@@ -395,7 +402,7 @@ export default function EditorPage() {
   const [guidedStep, setGuidedStep] = useState<GuidedStep>("character");
   const [creatingCharacter, setCreatingCharacter] = useState(true);
   const [createName, setCreateName] = useState("Milo");
-  const [createKind, setCreateKind] = useState<CharacterKind>("dog");
+  const [createKind, setCreateKind] = useState<CreationTemplate>("dog");
   const [runtimeZipBytes, setRuntimeZipBytes] = useState<number | null>(null);
   const [packageZipBytes, setPackageZipBytes] = useState<number | null>(null);
   const [leftPanelWidth, setLeftPanelWidth] = useState(220);
@@ -477,7 +484,7 @@ export default function EditorPage() {
     history: { past: [], future: [] }
   });
   const creationPreviewProject = useMemo(
-    () => createKind === "dog" ? createDogCharacterProject(createName) : createHumanCharacterProject(createName),
+    () => createCharacterProject(createKind, createName),
     [createKind, createName]
   );
   const selectedBone = editorState.project.selectedBoneId;
@@ -634,14 +641,14 @@ export default function EditorPage() {
       previousTime = time;
       setLiveControllerState((state) => {
         const next = updatePlatformerController(state, keysToPlatformerInput(previewKeysRef.current), dt, previewLevel);
-        setPreviewClipId(clipIdForControllerState(next));
+        setPreviewClipId(clipIdForControllerState(next, editorState.project));
         return next;
       });
       animationFrame = requestAnimationFrame(tick);
     };
     animationFrame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animationFrame);
-  }, [mode, previewLevel, previewScenario]);
+  }, [editorState.project, mode, previewLevel, previewScenario]);
   const platformerDebug = useMemo(() => {
     const state =
       previewScenario === "control"
@@ -979,7 +986,7 @@ export default function EditorPage() {
     setIoStatus("new empty project");
   };
   const createSelectedCharacter = () => {
-    const project = createKind === "dog" ? createDogCharacterProject(createName) : createHumanCharacterProject(createName);
+    const project = createCharacterProject(createKind, createName);
     replaceProject(project, "created", Object.keys(project.poses)[0] ?? "");
     setCreatingCharacter(false);
     setGuidedStep("textures");

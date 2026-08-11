@@ -1,17 +1,24 @@
-import { copyFileSync, cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { basename, dirname, join, resolve } from "node:path";
 import { compileRig } from "../packages/compiler/dist/index.js";
 
-const repoRoot = resolve(new URL("..", import.meta.url).pathname);
-const sourceRoot = "/Users/irine/Documents/DarkAssassinAnimations/Animation";
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const outputRoot = join(repoRoot, "apps/editor/public/assets/dark-assassin");
+const sourceRoot = join(outputRoot, "spine-source");
 const selectedAnimations = [
+  { source: "Attack", id: "attack", name: "Attack", loop: false },
+  { source: "die", id: "die", name: "Die", loop: false },
+  { source: "hurt", id: "hurt", name: "Hurt", loop: false },
   { source: "idle", id: "idle", name: "Idle", loop: true },
   { source: "walk", id: "walk", name: "Walk", loop: true },
   { source: "run", id: "run", name: "Run", loop: true },
   { source: "jump", id: "jump", name: "Jump", loop: false },
   { source: "jump_airborne", id: "fall", name: "Fall", loop: true },
-  { source: "jump_land", id: "land", name: "Land", loop: false }
+  { source: "jump_airborne_attack", id: "jump_airborne_attack", name: "Jump Airborne Attack", loop: false },
+  { source: "jump_land", id: "land", name: "Land", loop: false },
+  { source: "run_attack", id: "run_attack", name: "Run Attack", loop: false },
+  { source: "walk_attack", id: "walk_attack", name: "Walk Attack", loop: false }
 ];
 
 const identity = { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 };
@@ -22,17 +29,13 @@ const boneIndexToName = bones.map((bone) => bone.name);
 const slots = spine.slots ?? [];
 const slotIndexByName = new Map(slots.map((slot, index) => [slot.name, index]));
 const ikConstraints = [...(spine.ik ?? [])].sort((left, right) => (left.order ?? 0) - (right.order ?? 0));
-const bakedFrameRate = 30;
+const bakedFrameRate = 60;
 const setupWorld = buildSetupWorldMatrices(bones);
 const attachments = spine.skins?.[0]?.attachments ?? {};
 const setupLocalTransforms = bakeSpineLocalTransforms(undefined, 0);
 
 mkdirSync(outputRoot, { recursive: true });
 mkdirSync(join(outputRoot, "spine-source"), { recursive: true });
-cpSync(join(sourceRoot, "images"), join(outputRoot, "images"), { recursive: true });
-for (const fileName of ["DarkAssassin.json", "DarkAssassin.atlas", "DarkAssassin.png", "Skull.json", "Skull.atlas", "Skull.png"]) {
-  copyFileSync(join(sourceRoot, fileName), join(outputRoot, "spine-source", fileName));
-}
 
 const project = {
   schemaVersion: "1.0.0",
@@ -436,8 +439,6 @@ function toBonesAnimation(definition) {
     throw new Error(`Missing Spine animation '${definition.source}'.`);
   }
   const tracks = bakeBoneTracks(definition, animation);
-  pushDeformTracks(tracks, definition.id, animation);
-  pushDrawOrderTracks(tracks, definition.id, animation);
   const duration = Math.max(1 / 60, ...tracks.flatMap((track) => track.keyframes.map((keyframe) => keyframe.time)));
   return {
     id: definition.id,
@@ -477,6 +478,9 @@ function bakeBoneTracks(definition, animation) {
   for (const bone of bones) {
     const byProperty = tracksByBone.get(bone.name);
     for (const property of properties) {
+      if (isConstantChannel(byProperty[property])) {
+        continue;
+      }
       const keyframes = compactBakedKeyframes(byProperty[property]);
       tracks.push({
         id: `${definition.id}.${bone.name}.transform.${property}`,
@@ -487,6 +491,14 @@ function bakeBoneTracks(definition, animation) {
     }
   }
   return tracks;
+}
+
+function isConstantChannel(keyframes) {
+  if (keyframes.length < 2) {
+    return true;
+  }
+  const first = keyframes[0].value;
+  return keyframes.every((keyframe) => Math.abs(keyframe.value - first) <= 0.001);
 }
 
 function compactBakedKeyframes(keyframes) {

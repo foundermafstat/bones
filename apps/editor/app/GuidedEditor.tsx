@@ -20,7 +20,8 @@ import {
   SettingsIcon,
   TestTube2Icon,
   UploadCloudIcon,
-  UserRoundIcon
+  UserRoundIcon,
+  ZapIcon
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -35,7 +36,8 @@ import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 import type { QualityPresetName } from "@bones/runtime-pixi";
-import type { CharacterKind, EditorProjectState } from "./editorState";
+import type { EditorProjectState } from "./editorState";
+import type { CreationTemplate } from "./characterTemplates";
 import type { ProjectExportBundle } from "./projectIo";
 import { PixiPreview } from "./PixiPreview";
 
@@ -44,7 +46,7 @@ export type GuidedStep = "character" | "textures" | "skeleton" | "animations" | 
 interface GuidedEditorProps {
   readonly creating: boolean;
   readonly createName: string;
-  readonly createKind: CharacterKind;
+  readonly createKind: CreationTemplate;
   readonly creationPreviewProject: EditorProjectState;
   readonly project: EditorProjectState;
   readonly step: GuidedStep;
@@ -56,7 +58,7 @@ interface GuidedEditorProps {
   readonly runtimeZipBytes: number | null;
   readonly packageZipBytes: number | null;
   readonly onCreateNameChange: (value: string) => void;
-  readonly onCreateKindChange: (kind: CharacterKind) => void;
+  readonly onCreateKindChange: (kind: CreationTemplate) => void;
   readonly onCreate: () => void;
   readonly onOpenSample: () => void;
   readonly onImportProject: (file: File) => Promise<void>;
@@ -80,6 +82,7 @@ const guidedSteps: readonly { readonly id: GuidedStep; readonly label: string; r
 ];
 
 const requiredClips = ["idle", "walk", "run", "jump", "fall", "land"] as const;
+const fighterRequiredClips = ["idle", "walk_forward", "dash_forward", "jump_start", "air_neutral", "land"] as const;
 
 export function GuidedEditor(props: GuidedEditorProps) {
   if (props.creating) {
@@ -137,11 +140,11 @@ function CharacterCreator({
                   <FieldLabel id="guided-character-type">Starting rig</FieldLabel>
                   <ToggleGroup
                     aria-labelledby="guided-character-type"
-                    className="grid grid-cols-2 gap-3"
+                    className="grid grid-cols-1 gap-3 sm:grid-cols-3"
                     type="single"
                     value={createKind}
                     variant="outline"
-                    onValueChange={(value) => value && onCreateKindChange(value as CharacterKind)}
+                    onValueChange={(value) => value && onCreateKindChange(value as CreationTemplate)}
                   >
                     <ToggleGroupItem className="h-28 items-start justify-start px-4 py-4" value="human">
                       <UserRoundIcon aria-hidden="true" className="mt-0.5 shrink-0" />
@@ -157,6 +160,13 @@ function CharacterCreator({
                         <span className="text-xs text-muted-foreground">Four-legged platformer rig</span>
                       </span>
                     </ToggleGroupItem>
+                    <ToggleGroupItem className="h-28 items-start justify-start px-4 py-4" value="pulse">
+                      <ZapIcon aria-hidden="true" className="mt-0.5 shrink-0" />
+                      <span className="flex flex-col items-start gap-1 text-left">
+                        <strong className="text-base">Pulse</strong>
+                        <span className="text-xs text-muted-foreground">38-bone fighting preset</span>
+                      </span>
+                    </ToggleGroupItem>
                   </ToggleGroup>
                 </Field>
               </FieldGroup>
@@ -164,7 +174,7 @@ function CharacterCreator({
             <CardFooter className="flex-wrap gap-3 border-0 bg-transparent px-0 pb-8">
               <Button disabled={!nameValid} size="lg" onClick={onCreate}>
                 {createKind === "dog" ? <DogIcon data-icon="inline-start" /> : <UserRoundIcon data-icon="inline-start" />}
-                Create {createKind}
+                Create {createKind === "pulse" ? "Pulse fighter" : createKind}
               </Button>
               <Button size="lg" variant="outline" onClick={() => importInputRef.current?.click()}>
                 <FolderOpenIcon data-icon="inline-start" />
@@ -459,7 +469,8 @@ function SkeletonStep(props: GuidedEditorProps) {
 }
 
 function AnimationsStep(props: GuidedEditorProps) {
-  const activeClip = props.project.animations[props.clipId] ?? props.project.animations[requiredClips[0]];
+  const projectRequiredClips = requiredClipsFor(props.project);
+  const activeClip = props.project.animations[props.clipId] ?? props.project.animations[projectRequiredClips[0]];
   const timelineRows = getTimelineRows(activeClip?.tracks ?? {});
 
   return (
@@ -657,6 +668,7 @@ function PlaybackControls(props: GuidedEditorProps) {
 }
 
 function AnimationChecklist(props: GuidedEditorProps) {
+  const projectRequiredClips = requiredClipsFor(props.project);
   return (
     <div className="flex min-h-0 flex-col gap-3">
       <div>
@@ -664,7 +676,7 @@ function AnimationChecklist(props: GuidedEditorProps) {
         <p className="mt-1 text-sm text-muted-foreground">Select a clip to preview it.</p>
       </div>
       <div className="flex flex-col gap-1">
-        {requiredClips.map((clipId) => {
+        {projectRequiredClips.map((clipId) => {
           const available = Boolean(props.project.animations[clipId]);
           return (
             <Button
@@ -714,14 +726,19 @@ function SummaryRow({ label, value }: { readonly label: string; readonly value: 
 }
 
 function getStepCompletion(project: EditorProjectState, bundle: ProjectExportBundle | null): Record<GuidedStep, boolean> {
+  const projectRequiredClips = requiredClipsFor(project);
   return {
     character: project.name.trim().length > 1,
     textures: Object.keys(project.parts).length > 0,
     skeleton: project.hierarchy.length > 1,
-    animations: requiredClips.every((clipId) => Boolean(project.animations[clipId])),
-    test: requiredClips.every((clipId) => Boolean(project.animations[clipId])),
+    animations: projectRequiredClips.every((clipId) => Boolean(project.animations[clipId])),
+    test: projectRequiredClips.every((clipId) => Boolean(project.animations[clipId])),
     export: Boolean(bundle?.validation.ok)
   };
+}
+
+function requiredClipsFor(project: EditorProjectState): readonly string[] {
+  return project.animations.walk_forward ? fighterRequiredClips : requiredClips;
 }
 
 function getPartGroups(project: EditorProjectState): readonly { readonly label: string; readonly count: number }[] {

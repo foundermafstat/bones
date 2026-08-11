@@ -1,7 +1,7 @@
 {
   "id": "dark-assassin",
   "name": "Dark Assassin",
-  "source": "Animation",
+  "source": "spine-source",
   "sourceJson": "dark-assassin.source.rig.json",
   "compiledJson": "dark-assassin.compiled.json",
   "vectorSourceJson": "dark-assassin.vector.source.rig.json",
@@ -12,6 +12,21 @@
     "stateMachines": "dark-assassin.vector.runtime.state-machines.json"
   },
   "animations": [
+    {
+      "id": "attack",
+      "source": "Attack",
+      "loop": false
+    },
+    {
+      "id": "die",
+      "source": "die",
+      "loop": false
+    },
+    {
+      "id": "hurt",
+      "source": "hurt",
+      "loop": false
+    },
     {
       "id": "idle",
       "source": "idle",
@@ -38,8 +53,23 @@
       "loop": true
     },
     {
+      "id": "jump_airborne_attack",
+      "source": "jump_airborne_attack",
+      "loop": false
+    },
+    {
       "id": "land",
       "source": "jump_land",
+      "loop": false
+    },
+    {
+      "id": "run_attack",
+      "source": "run_attack",
+      "loop": false
+    },
+    {
+      "id": "walk_attack",
+      "source": "walk_attack",
       "loop": false
     }
   ],

@@ -5,49 +5,49 @@
     "states": [
       {
         "id": 0,
-        "clip": 0
-      },
-      {
-        "id": 1,
-        "clip": 1
-      },
-      {
-        "id": 2,
         "clip": 2
       },
       {
+        "id": 1,
+        "clip": 4
+      },
+      {
+        "id": 2,
+        "clip": 5
+      },
+      {
         "id": 3,
-        "clip": 3
+        "clip": 7
       },
       {
         "id": 4,
-        "clip": 5,
+        "clip": 10,
         "blendTree": {
           "type": "1d",
           "parameter": 0,
           "children": [
             {
               "threshold": 0,
-              "clip": 1
+              "clip": 4
             },
             {
               "threshold": 80,
-              "clip": 5
+              "clip": 10
             },
             {
               "threshold": 150,
-              "clip": 4
+              "clip": 8
             }
           ]
         }
       },
       {
         "id": 5,
-        "clip": 4
+        "clip": 8
       },
       {
         "id": 6,
-        "clip": 5
+        "clip": 10
       }
     ],
     "transitions": [
