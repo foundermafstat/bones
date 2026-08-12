@@ -1,5 +1,6 @@
 import { Container } from "pixi.js";
 import { AnimationMixer } from "./AnimationMixer.js";
+import { sampleAnimationClip } from "./AnimationSampler.js";
 import { ConstraintSolver } from "./ConstraintSolver.js";
 import type {
   AnimationSample,
@@ -13,6 +14,7 @@ import type {
   RigStateMachineUpdate,
   RigUpdateState,
   RuntimeAnimationEventDispatch,
+  RuntimeAnimationClip,
   RuntimeCompiledRig
 } from "./types.js";
 import { RigLoader } from "./RigLoader.js";
@@ -45,6 +47,11 @@ export class RigInstance {
   private readonly constraints: ConstraintSolver | undefined;
   private readonly animationEventListeners = new Set<(event: RuntimeAnimationEventDispatch) => void>();
   private readonly eventHistory: RuntimeAnimationEventDispatch[] = [];
+  private readonly skinManagedPartIds = new Set<number>();
+  private readonly activeSkinPartIds = new Set<number>();
+  private readonly defaultSlotAttachments = new Map<number, number | null>();
+  private readonly activeSlotAttachments = new Map<number, number | null>();
+  private activeSkinId: string | undefined;
   private activeClip: number | undefined;
   private activeTransition: number | undefined;
 
@@ -113,7 +120,11 @@ export class RigInstance {
     this.startDefaultAnimation();
 
     this.buildHierarchy();
+    this.initializeVisualSlots();
     this.applyDefaultTransforms();
+    if (this.compiled.rig.skins?.length) {
+      this.setSkin(options.skinId ?? this.compiled.rig.defaultSkinId ?? this.compiled.rig.skins[0]!.id);
+    }
     this.updateSkinnedMeshes();
   }
 
@@ -194,9 +205,46 @@ export class RigInstance {
     return this.partById.get(id)?.container;
   }
 
+  get skinId(): string | undefined {
+    return this.activeSkinId;
+  }
+
+  setSkin(skinId: string): void {
+    const skins = this.compiled.rig.skins ?? [];
+    const skin = skins.find((item) => item.id === skinId);
+    if (!skin) {
+      throw new Error(`Compiled rig does not contain skin '${skinId}'.`);
+    }
+    this.activeSkinId = skin.id;
+    this.defaultSlotAttachments.clear();
+    for (const attachment of skin.attachments) {
+      this.defaultSlotAttachments.set(attachment.slot, attachment.part);
+      const part = this.partById.get(attachment.part);
+      const slot = this.compiled.rig.visualSlots?.[attachment.slot];
+      if (part && slot) {
+        part.container.zIndex = slot.drawOrder;
+      }
+    }
+    this.restoreDefaultSlotAttachments();
+    this.applySkinVisibility();
+  }
+
   applySample(sample: AnimationSample): void {
     this.applyDefaultTransforms();
     this.applySampleValues(sample, false);
+    this.updateSkinnedMeshes();
+  }
+
+  evaluateAt(clip: RuntimeAnimationClip | undefined, time: number, params: AnimationParameters = {}, options: { readonly statefulDelta?: number } = {}): void {
+    this.params = params;
+    this.elapsed = Math.max(0, time);
+    this.applyDefaultTransforms();
+    if (clip) this.applySampleValues(sampleAnimationClip(clip, time), false);
+    const proceduralSample = this.procedural?.sampleAt(time, params, options.statefulDelta);
+    if (proceduralSample) this.applySampleValues(proceduralSample, true);
+    const constraintParams = this.constraints ? this.withBoneWorldParams(params) : params;
+    const constraintSample = this.constraints?.solve(constraintParams);
+    if (constraintSample) this.applySampleValues(constraintSample, true);
     this.updateSkinnedMeshes();
   }
 
@@ -281,6 +329,20 @@ export class RigInstance {
   }
 
   private applySampleValues(sample: AnimationSample, additive: boolean): void {
+    let attachmentChanged = false;
+    for (const value of sample.values) {
+      if (value.targetKind === "slot" && value.property === "attachment") {
+        if (value.value === null || typeof value.value === "number") {
+          this.activeSlotAttachments.set(value.target, value.value);
+          attachmentChanged = true;
+        }
+      }
+    }
+    if (attachmentChanged) {
+      this.syncActiveSkinParts();
+      this.applySkinVisibility();
+    }
+
     for (const value of sample.values) {
       if (value.targetKind === "bone") {
         const bone = this.boneById.get(value.target);
@@ -289,7 +351,7 @@ export class RigInstance {
         }
       } else if (value.targetKind === "part") {
         const part = this.partById.get(value.target);
-        if (part) {
+        if (part && this.isPartActive(part.id)) {
           if (value.property === "deform") {
             this.applyMeshDeform(part, value.value, additive);
           } else {
@@ -318,6 +380,19 @@ export class RigInstance {
   }
 
   private buildHierarchy(): void {
+    const maxDrawOrderByBone = new Map<number, number>();
+    for (const part of this.parts) {
+      maxDrawOrderByBone.set(part.bone, Math.max(maxDrawOrderByBone.get(part.bone) ?? Number.NEGATIVE_INFINITY, part.drawOrder));
+    }
+    for (let index = this.bones.length - 1; index >= 0; index -= 1) {
+      const bone = this.bones[index]!;
+      bone.container.sortableChildren = true;
+      const drawOrder = maxDrawOrderByBone.get(bone.id) ?? 0;
+      bone.container.zIndex = drawOrder;
+      if (bone.parent >= 0) {
+        maxDrawOrderByBone.set(bone.parent, Math.max(maxDrawOrderByBone.get(bone.parent) ?? Number.NEGATIVE_INFINITY, drawOrder));
+      }
+    }
     for (const bone of this.bones) {
       if (bone.parent < 0) {
         this.rigContainer.addChild(bone.container);
@@ -344,6 +419,22 @@ export class RigInstance {
     }
   }
 
+  private initializeVisualSlots(): void {
+    const slots = this.compiled.rig.visualSlots ?? [];
+    for (const [slotIndex, slot] of slots.entries()) {
+      for (const partId of slot.partIds ?? []) {
+        this.skinManagedPartIds.add(partId);
+        const part = this.partById.get(partId);
+        if (part) part.container.zIndex = slot.drawOrder;
+      }
+      for (const skin of this.compiled.rig.skins ?? []) {
+        for (const attachment of skin.attachments) {
+          if (attachment.slot === slotIndex) this.skinManagedPartIds.add(attachment.part);
+        }
+      }
+    }
+  }
+
   private applyDefaultTransforms(): void {
     for (const bone of this.bones) {
       applyTransform(bone.container, bone.local);
@@ -358,6 +449,40 @@ export class RigInstance {
         part.container.zIndex = source.drawOrder;
       }
       this.resetMeshDeform(part);
+    }
+    this.restoreDefaultSlotAttachments();
+    this.applySkinVisibility();
+  }
+
+  private restoreDefaultSlotAttachments(): void {
+    this.activeSlotAttachments.clear();
+    for (const [slot, part] of this.defaultSlotAttachments) {
+      this.activeSlotAttachments.set(slot, part);
+    }
+    this.syncActiveSkinParts();
+  }
+
+  private syncActiveSkinParts(): void {
+    this.activeSkinPartIds.clear();
+    for (const partId of this.activeSlotAttachments.values()) {
+      if (partId !== null) this.activeSkinPartIds.add(partId);
+    }
+  }
+
+  private isPartActive(partId: number): boolean {
+    return !this.skinManagedPartIds.has(partId) || this.activeSkinPartIds.has(partId);
+  }
+
+  private applySkinVisibility(): void {
+    if (!this.skinManagedPartIds.size) {
+      return;
+    }
+    for (const partId of this.skinManagedPartIds) {
+      const part = this.partById.get(partId);
+      const source = this.compiledPartById.get(partId);
+      if (part) {
+        part.container.visible = this.activeSkinPartIds.has(partId) && (source?.visible ?? true);
+      }
     }
   }
 

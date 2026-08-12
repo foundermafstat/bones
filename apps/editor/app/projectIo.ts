@@ -1,4 +1,4 @@
-import type { DirtyScopes, EditorProjectState } from "./editorState";
+import { createDefaultEditorIkChains, createEditorAppearance, createEditorTopology, createProjectIdentity, hasAnimatedDrawOrderTracks, type DirtyScopes, type EditorProjectState } from "./editorState.ts";
 import { cleanDirtyScopes, initialEditorProject } from "./editorState.ts";
 import { fromSourceProject, toSourceProject } from "./editorSourceProject.ts";
 import { vectorizeSvgParts } from "./editorVectorImport.ts";
@@ -927,9 +927,21 @@ function summarizeImport(project: EditorProjectState, kind: ProjectImportResult[
 }
 
 function normalizeEditorProject(project: EditorProjectState): EditorProjectState {
+  const appearance = project.visualSlots && Object.keys(project.visualSlots).length
+    ? { visualSlots: project.visualSlots, skins: project.skins, activeSkinId: project.activeSkinId }
+    : hasAnimatedDrawOrderTracks(project)
+      ? { visualSlots: {}, skins: project.skins ?? { default: { id: "default", name: "Legacy", attachments: {} } }, activeSkinId: project.activeSkinId ?? "default" }
+      : createEditorAppearance(project.parts ?? initialEditorProject.parts);
+  const identity = project.projectId && project.rigId && project.stateMachineId ? {} : createProjectIdentity();
   return {
     ...initialEditorProject,
+    ...identity,
     ...project,
+    ...appearance,
+    activeSkinId: appearance.skins[appearance.activeSkinId] ? appearance.activeSkinId : Object.keys(appearance.skins)[0] ?? "default",
+    ikChains: project.ikChains ?? createDefaultEditorIkChains(project.bones ?? initialEditorProject.bones),
+    boneLengths: project.boneLengths ?? Object.fromEntries(Object.keys(project.bones ?? initialEditorProject.bones).map((boneId) => [boneId, 0])),
+    topology: project.topology ?? createEditorTopology(project.hierarchy ?? initialEditorProject.hierarchy, project.parents ?? initialEditorProject.parents),
     poseClipboard: project.poseClipboard ?? null,
     timeline: project.timeline ?? initialEditorProject.timeline,
     stateMachine: { ...initialEditorProject.stateMachine, ...project.stateMachine, preview: project.stateMachine.preview ?? initialEditorProject.stateMachine.preview },

@@ -33,6 +33,7 @@ export interface RuntimeLookupTables {
   readonly rigs: Readonly<Record<string, NumericId>>;
   readonly bones: Readonly<Record<string, NumericId>>;
   readonly parts: Readonly<Record<string, NumericId>>;
+  readonly visualSlots?: Readonly<Record<string, NumericId>>;
   readonly animations: Readonly<Record<string, NumericId>>;
   readonly stateMachines: Readonly<Record<string, NumericId>>;
 }
@@ -42,6 +43,22 @@ export interface RuntimeCompiledRigData {
   readonly rootBone: NumericId;
   readonly bones: readonly RuntimeCompiledBone[];
   readonly parts: readonly RuntimeCompiledPart[];
+  readonly visualSlots?: readonly RuntimeVisualSlot[];
+  readonly skins?: readonly RuntimeSkin[];
+  readonly defaultSkinId?: string;
+}
+
+export interface RuntimeVisualSlot {
+  readonly id: string;
+  readonly bone: NumericId;
+  readonly drawOrder: number;
+  readonly partIds: readonly NumericId[];
+}
+
+export interface RuntimeSkin {
+  readonly id: string;
+  readonly name: string;
+  readonly attachments: readonly { readonly slot: NumericId; readonly part: NumericId }[];
 }
 
 export interface RuntimeCompiledBone {
@@ -95,6 +112,7 @@ export interface RuntimeMeshVertexInfluence {
 
 export interface RigInstanceOptions {
   readonly quality?: "low" | "medium" | "high";
+  readonly skinId?: string;
   readonly stateMachine?: NumericId | false;
   readonly proceduralLayers?: readonly ProceduralLayerConfig[] | false;
   readonly constraintWorld?: RaycastWorld;
@@ -175,7 +193,7 @@ export interface RigStateMachineUpdate {
   };
 }
 
-export type RuntimeTrackTargetKind = "bone" | "part" | "project" | "stateMachine";
+export type RuntimeTrackTargetKind = "bone" | "part" | "slot" | "project" | "stateMachine";
 export type RuntimeTrackProperty =
   | "transform.x"
   | "transform.y"
@@ -190,7 +208,8 @@ export type RuntimeTrackProperty =
   | "procedural.params"
   | "deform"
   | "event"
-  | "collider";
+  | "collider"
+  | "attachment";
 export type RuntimeKeyframeInterpolation = "linear" | "step" | "hold" | "bezier" | "spring";
 export type RuntimeSampleValue = string | number | boolean | null | readonly RuntimeSampleValue[] | { readonly [key: string]: RuntimeSampleValue };
 

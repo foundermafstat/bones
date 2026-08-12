@@ -1,4 +1,4 @@
-import { BONES_RUNTIME_TARGET, BONES_SCHEMA_VERSION } from "./types.js";
+import { BONES_RUNTIME_TARGET, BONES_SUPPORTED_SCHEMA_VERSIONS } from "./types.js";
 
 export type JsonSchema = {
   readonly [key: string]: unknown;
@@ -6,13 +6,13 @@ export type JsonSchema = {
 
 export const rigProjectJsonSchema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "https://bones.dev/schemas/source-project-1.0.0.json",
+  $id: "https://bones.dev/schemas/source-project-1.2.0.json",
   title: "Bones RigProject Source JSON",
   type: "object",
   additionalProperties: false,
   required: ["schemaVersion", "runtimeTarget", "id", "name", "rigs"],
   properties: {
-    schemaVersion: { const: BONES_SCHEMA_VERSION },
+    schemaVersion: { enum: BONES_SUPPORTED_SCHEMA_VERSIONS },
     runtimeTarget: { const: BONES_RUNTIME_TARGET },
     id: { $ref: "#/$defs/nonEmptyString" },
     projectId: { $ref: "#/$defs/nonEmptyString" },
@@ -76,7 +76,52 @@ export const rigProjectJsonSchema = {
           type: "array",
           items: { $ref: "#/$defs/part" }
         },
+        visualSlots: {
+          type: "array",
+          items: { $ref: "#/$defs/visualSlot" }
+        },
+        skins: {
+          type: "array",
+          items: { $ref: "#/$defs/skin" }
+        },
+        defaultSkinId: { $ref: "#/$defs/nonEmptyString" },
         editor: { $ref: "#/$defs/editorMetadata" }
+      }
+    },
+    visualSlot: {
+      type: "object",
+      additionalProperties: false,
+      required: ["id", "name", "boneId", "drawOrder"],
+      properties: {
+        id: { $ref: "#/$defs/nonEmptyString" },
+        name: { $ref: "#/$defs/nonEmptyString" },
+        boneId: { $ref: "#/$defs/nonEmptyString" },
+        drawOrder: { type: "number" },
+        partIds: { type: "array", uniqueItems: true, items: { $ref: "#/$defs/nonEmptyString" } },
+        editor: { $ref: "#/$defs/editorMetadata" }
+      }
+    },
+    skin: {
+      type: "object",
+      additionalProperties: false,
+      required: ["id", "name", "attachments"],
+      properties: {
+        id: { $ref: "#/$defs/nonEmptyString" },
+        name: { $ref: "#/$defs/nonEmptyString" },
+        attachments: {
+          type: "array",
+          items: { $ref: "#/$defs/skinAttachment" }
+        },
+        editor: { $ref: "#/$defs/editorMetadata" }
+      }
+    },
+    skinAttachment: {
+      type: "object",
+      additionalProperties: false,
+      required: ["slotId", "partId"],
+      properties: {
+        slotId: { $ref: "#/$defs/nonEmptyString" },
+        partId: { $ref: "#/$defs/nonEmptyString" }
       }
     },
     bone: {
@@ -235,7 +280,7 @@ export const rigProjectJsonSchema = {
           additionalProperties: false,
           required: ["kind", "id"],
           properties: {
-            kind: { enum: ["bone", "part", "project", "stateMachine"] },
+            kind: { enum: ["bone", "part", "slot", "project", "stateMachine"] },
             id: { $ref: "#/$defs/nonEmptyString" }
           }
         },
@@ -251,6 +296,7 @@ export const rigProjectJsonSchema = {
             "visible",
             "opacity",
             "drawOrder",
+            "attachment",
             "procedural.params",
             "deform",
             "event",

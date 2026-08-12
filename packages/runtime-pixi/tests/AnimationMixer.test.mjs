@@ -38,6 +38,20 @@ test("crossfades between clips by transition weight", () => {
   assert.equal(mixer.transitionWeight, 0);
 });
 
+test("switches discrete attachments to the incoming clip at 50 percent", () => {
+  const outgoing = clip(0, 3, "attachment", 0);
+  outgoing.tracks[0].targetKind = "slot";
+  const incoming = clip(1, 7, "attachment", 0);
+  incoming.tracks[0].targetKind = "slot";
+  const mixer = new AnimationMixer([outgoing, incoming]);
+  mixer.play(0);
+  mixer.update(0);
+  mixer.crossfadeTo(1, { duration: 1 });
+
+  assert.equal(mixer.update(0.49).values[0].value, 3);
+  assert.equal(mixer.update(0.01).values[0].value, 7);
+});
+
 test("adds additive layers", () => {
   const mixer = new AnimationMixer([clip(0, 10), clip(1, 4)]);
   mixer.play(0);

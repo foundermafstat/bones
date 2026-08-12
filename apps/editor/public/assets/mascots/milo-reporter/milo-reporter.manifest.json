@@ -1,0 +1,652 @@
+{
+  "id": "milo-reporter",
+  "name": "Milo Reporter",
+  "generatedWith": "OpenAI built-in ImageGen",
+  "reference": "User-provided white cat reporter portrait",
+  "chromaKey": "#00FF00",
+  "prompts": {
+    "identity": "Front-facing waist-up white cat reporter, amber eyes, black trench coat, no glasses or microphone.",
+    "body": "Strict isolated body and coat cutouts plus straight shoulder, upper-arm, forearm, closed-paw and open-paw chains for both sides.",
+    "eyes": "Strict 3x2 aligned eye-expression and gaze sheet with distinct pupil directions and shapes.",
+    "mouths": "Strict 5x5 aligned emotional viseme sheet with 21 visibly distinct feline mouth geometries and a locked nose anchor."
+  },
+  "counts": {
+    "bones": 25,
+    "bodyParts": 22,
+    "pawVariants": 2,
+    "eyeParts": 6,
+    "mouthParts": 21,
+    "totalParts": 51,
+    "clips": 10
+  },
+  "facialPivots": {
+    "eyes": [
+      0.5,
+      0.5
+    ],
+    "mouth": [
+      0.5,
+      0.5
+    ]
+  },
+  "bindings": {
+    "body_lower_coat": {
+      "boneId": "coatLower",
+      "texture": "/assets/mascots/milo-reporter/parts/body_lower_coat.png",
+      "sourceSize": [
+        236,
+        232
+      ],
+      "runtimeSize": [
+        220,
+        216
+      ]
+    },
+    "chest_upper_coat": {
+      "boneId": "chest",
+      "texture": "/assets/mascots/milo-reporter/parts/chest_upper_coat_v5.png",
+      "sourceSize": [
+        428,
+        512
+      ],
+      "runtimeSize": [
+        340,
+        430
+      ]
+    },
+    "neck_ruff": {
+      "boneId": "neckRuff",
+      "texture": "/assets/mascots/milo-reporter/parts/neck_ruff.png",
+      "sourceSize": [
+        184,
+        184
+      ],
+      "runtimeSize": [
+        150,
+        150
+      ]
+    },
+    "head_shell": {
+      "boneId": "head",
+      "texture": "/assets/mascots/milo-reporter/parts/head_shell_v5.png",
+      "sourceSize": [
+        512,
+        454
+      ],
+      "runtimeSize": [
+        205,
+        205
+      ]
+    },
+    "jaw_chin": {
+      "boneId": "jaw",
+      "texture": "/assets/mascots/milo-reporter/parts/jaw_chin.png",
+      "sourceSize": [
+        147,
+        91
+      ],
+      "runtimeSize": [
+        120,
+        74
+      ]
+    },
+    "ear_left": {
+      "boneId": "earLeft",
+      "texture": "/assets/mascots/milo-reporter/parts/ear_left.png",
+      "sourceSize": [
+        133,
+        204
+      ],
+      "runtimeSize": [
+        70,
+        107
+      ]
+    },
+    "ear_right": {
+      "boneId": "earRight",
+      "texture": "/assets/mascots/milo-reporter/parts/ear_right.png",
+      "sourceSize": [
+        132,
+        204
+      ],
+      "runtimeSize": [
+        70,
+        107
+      ]
+    },
+    "whiskers_left": {
+      "boneId": "whiskerLeft",
+      "texture": "/assets/mascots/milo-reporter/parts/whiskers_left.png",
+      "sourceSize": [
+        47,
+        57
+      ],
+      "runtimeSize": [
+        38,
+        47
+      ]
+    },
+    "whiskers_right": {
+      "boneId": "whiskerRight",
+      "texture": "/assets/mascots/milo-reporter/parts/whiskers_right.png",
+      "sourceSize": [
+        42,
+        56
+      ],
+      "runtimeSize": [
+        38,
+        47
+      ]
+    },
+    "shoulder_left": {
+      "boneId": "shoulderLeft",
+      "texture": "/assets/mascots/milo-reporter/parts/shoulder_left.png",
+      "sourceSize": [
+        184,
+        359
+      ],
+      "runtimeSize": [
+        104,
+        112
+      ]
+    },
+    "upper_arm_left": {
+      "boneId": "upperArmLeft",
+      "texture": "/assets/mascots/milo-reporter/parts/upper_arm_left.png",
+      "sourceSize": [
+        179,
+        414
+      ],
+      "runtimeSize": [
+        90,
+        142
+      ]
+    },
+    "forearm_left": {
+      "boneId": "forearmLeft",
+      "texture": "/assets/mascots/milo-reporter/parts/forearm_left.png",
+      "sourceSize": [
+        172,
+        318
+      ],
+      "runtimeSize": [
+        92,
+        122
+      ]
+    },
+    "paw_left": {
+      "boneId": "pawLeft",
+      "texture": "/assets/mascots/milo-reporter/parts/paw_left.png",
+      "sourceSize": [
+        205,
+        230
+      ],
+      "runtimeSize": [
+        82,
+        78
+      ]
+    },
+    "shoulder_right": {
+      "boneId": "shoulderRight",
+      "texture": "/assets/mascots/milo-reporter/parts/shoulder_right.png",
+      "sourceSize": [
+        184,
+        359
+      ],
+      "runtimeSize": [
+        104,
+        112
+      ]
+    },
+    "upper_arm_right": {
+      "boneId": "upperArmRight",
+      "texture": "/assets/mascots/milo-reporter/parts/upper_arm_right.png",
+      "sourceSize": [
+        179,
+        411
+      ],
+      "runtimeSize": [
+        90,
+        142
+      ]
+    },
+    "forearm_right": {
+      "boneId": "forearmRight",
+      "texture": "/assets/mascots/milo-reporter/parts/forearm_right.png",
+      "sourceSize": [
+        173,
+        317
+      ],
+      "runtimeSize": [
+        92,
+        122
+      ]
+    },
+    "paw_right": {
+      "boneId": "pawRight",
+      "texture": "/assets/mascots/milo-reporter/parts/paw_right.png",
+      "sourceSize": [
+        200,
+        231
+      ],
+      "runtimeSize": [
+        82,
+        78
+      ]
+    },
+    "collar_left": {
+      "boneId": "torso",
+      "texture": "/assets/mascots/milo-reporter/parts/collar_left.png",
+      "sourceSize": [
+        148,
+        229
+      ],
+      "runtimeSize": [
+        82,
+        127
+      ]
+    },
+    "collar_right": {
+      "boneId": "torso",
+      "texture": "/assets/mascots/milo-reporter/parts/collar_right.png",
+      "sourceSize": [
+        148,
+        228
+      ],
+      "runtimeSize": [
+        82,
+        127
+      ]
+    },
+    "scarf_center": {
+      "boneId": "torso",
+      "texture": "/assets/mascots/milo-reporter/parts/scarf_center.png",
+      "sourceSize": [
+        198,
+        251
+      ],
+      "runtimeSize": [
+        260,
+        340
+      ]
+    },
+    "coat_flap_left": {
+      "boneId": "torso",
+      "texture": "/assets/mascots/milo-reporter/parts/coat_flap_left.png",
+      "sourceSize": [
+        153,
+        262
+      ],
+      "runtimeSize": [
+        75,
+        129
+      ]
+    },
+    "coat_flap_right": {
+      "boneId": "torso",
+      "texture": "/assets/mascots/milo-reporter/parts/coat_flap_right.png",
+      "sourceSize": [
+        142,
+        260
+      ],
+      "runtimeSize": [
+        75,
+        129
+      ]
+    },
+    "paw_open_left": {
+      "boneId": "pawLeft",
+      "texture": "/assets/mascots/milo-reporter/parts/paw_open_left.png",
+      "sourceSize": [
+        205,
+        230
+      ],
+      "runtimeSize": [
+        88,
+        88
+      ]
+    },
+    "paw_open_right": {
+      "boneId": "pawRight",
+      "texture": "/assets/mascots/milo-reporter/parts/paw_open_right.png",
+      "sourceSize": [
+        200,
+        231
+      ],
+      "runtimeSize": [
+        88,
+        88
+      ]
+    },
+    "eyes_neutral": {
+      "boneId": "head",
+      "texture": "/assets/mascots/milo-reporter/parts/eyes_neutral.png",
+      "sourceSize": [
+        447,
+        363
+      ],
+      "runtimeSize": [
+        150,
+        61
+      ]
+    },
+    "eyes_blink": {
+      "boneId": "head",
+      "texture": "/assets/mascots/milo-reporter/parts/eyes_blink.png",
+      "sourceSize": [
+        447,
+        363
+      ],
+      "runtimeSize": [
+        150,
+        61
+      ]
+    },
+    "eyes_happy": {
+      "boneId": "head",
+      "texture": "/assets/mascots/milo-reporter/parts/eyes_happy.png",
+      "sourceSize": [
+        447,
+        363
+      ],
+      "runtimeSize": [
+        150,
+        61
+      ]
+    },
+    "eyes_sad": {
+      "boneId": "head",
+      "texture": "/assets/mascots/milo-reporter/parts/eyes_sad.png",
+      "sourceSize": [
+        447,
+        363
+      ],
+      "runtimeSize": [
+        150,
+        61
+      ]
+    },
+    "eyes_angry": {
+      "boneId": "head",
+      "texture": "/assets/mascots/milo-reporter/parts/eyes_angry.png",
+      "sourceSize": [
+        447,
+        363
+      ],
+      "runtimeSize": [
+        150,
+        61
+      ]
+    },
+    "eyes_surprised": {
+      "boneId": "head",
+      "texture": "/assets/mascots/milo-reporter/parts/eyes_surprised.png",
+      "sourceSize": [
+        447,
+        363
+      ],
+      "runtimeSize": [
+        150,
+        61
+      ]
+    },
+    "mouth_neutral_mbp": {
+      "boneId": "jaw",
+      "texture": "/assets/mascots/milo-reporter/parts/mouth_neutral_mbp.png",
+      "sourceSize": [
+        248,
+        236
+      ],
+      "runtimeSize": [
+        92,
+        67
+      ]
+    },
+    "mouth_neutral_ai": {
+      "boneId": "jaw",
+      "texture": "/assets/mascots/milo-reporter/parts/mouth_neutral_ai.png",
+      "sourceSize": [
+        248,
+        236
+      ],
+      "runtimeSize": [
+        92,
+        67
+      ]
+    },
+    "mouth_neutral_e": {
+      "boneId": "jaw",
+      "texture": "/assets/mascots/milo-reporter/parts/mouth_neutral_e.png",
+      "sourceSize": [
+        248,
+        236
+      ],
+      "runtimeSize": [
+        92,
+        67
+      ]
+    },
+    "mouth_neutral_ou": {
+      "boneId": "jaw",
+      "texture": "/assets/mascots/milo-reporter/parts/mouth_neutral_ou.png",
+      "sourceSize": [
+        248,
+        236
+      ],
+      "runtimeSize": [
+        92,
+        67
+      ]
+    },
+    "mouth_neutral_fv": {
+      "boneId": "jaw",
+      "texture": "/assets/mascots/milo-reporter/parts/mouth_neutral_fv.png",
+      "sourceSize": [
+        248,
+        236
+      ],
+      "runtimeSize": [
+        92,
+        67
+      ]
+    },
+    "mouth_happy_mbp": {
+      "boneId": "jaw",
+      "texture": "/assets/mascots/milo-reporter/parts/mouth_happy_mbp.png",
+      "sourceSize": [
+        248,
+        236
+      ],
+      "runtimeSize": [
+        92,
+        67
+      ]
+    },
+    "mouth_happy_ai": {
+      "boneId": "jaw",
+      "texture": "/assets/mascots/milo-reporter/parts/mouth_happy_ai.png",
+      "sourceSize": [
+        248,
+        236
+      ],
+      "runtimeSize": [
+        92,
+        67
+      ]
+    },
+    "mouth_happy_e": {
+      "boneId": "jaw",
+      "texture": "/assets/mascots/milo-reporter/parts/mouth_happy_e.png",
+      "sourceSize": [
+        248,
+        236
+      ],
+      "runtimeSize": [
+        92,
+        67
+      ]
+    },
+    "mouth_happy_ou": {
+      "boneId": "jaw",
+      "texture": "/assets/mascots/milo-reporter/parts/mouth_happy_ou.png",
+      "sourceSize": [
+        248,
+        236
+      ],
+      "runtimeSize": [
+        92,
+        67
+      ]
+    },
+    "mouth_happy_fv": {
+      "boneId": "jaw",
+      "texture": "/assets/mascots/milo-reporter/parts/mouth_happy_fv.png",
+      "sourceSize": [
+        248,
+        236
+      ],
+      "runtimeSize": [
+        92,
+        67
+      ]
+    },
+    "mouth_sad_mbp": {
+      "boneId": "jaw",
+      "texture": "/assets/mascots/milo-reporter/parts/mouth_sad_mbp.png",
+      "sourceSize": [
+        248,
+        236
+      ],
+      "runtimeSize": [
+        92,
+        67
+      ]
+    },
+    "mouth_sad_ai": {
+      "boneId": "jaw",
+      "texture": "/assets/mascots/milo-reporter/parts/mouth_sad_ai.png",
+      "sourceSize": [
+        248,
+        236
+      ],
+      "runtimeSize": [
+        92,
+        67
+      ]
+    },
+    "mouth_sad_e": {
+      "boneId": "jaw",
+      "texture": "/assets/mascots/milo-reporter/parts/mouth_sad_e.png",
+      "sourceSize": [
+        248,
+        236
+      ],
+      "runtimeSize": [
+        92,
+        67
+      ]
+    },
+    "mouth_sad_ou": {
+      "boneId": "jaw",
+      "texture": "/assets/mascots/milo-reporter/parts/mouth_sad_ou.png",
+      "sourceSize": [
+        248,
+        236
+      ],
+      "runtimeSize": [
+        92,
+        67
+      ]
+    },
+    "mouth_sad_fv": {
+      "boneId": "jaw",
+      "texture": "/assets/mascots/milo-reporter/parts/mouth_sad_fv.png",
+      "sourceSize": [
+        248,
+        236
+      ],
+      "runtimeSize": [
+        92,
+        67
+      ]
+    },
+    "mouth_angry_mbp": {
+      "boneId": "jaw",
+      "texture": "/assets/mascots/milo-reporter/parts/mouth_angry_mbp.png",
+      "sourceSize": [
+        248,
+        236
+      ],
+      "runtimeSize": [
+        92,
+        67
+      ]
+    },
+    "mouth_angry_ai": {
+      "boneId": "jaw",
+      "texture": "/assets/mascots/milo-reporter/parts/mouth_angry_ai.png",
+      "sourceSize": [
+        248,
+        236
+      ],
+      "runtimeSize": [
+        92,
+        67
+      ]
+    },
+    "mouth_angry_e": {
+      "boneId": "jaw",
+      "texture": "/assets/mascots/milo-reporter/parts/mouth_angry_e.png",
+      "sourceSize": [
+        248,
+        236
+      ],
+      "runtimeSize": [
+        92,
+        67
+      ]
+    },
+    "mouth_angry_ou": {
+      "boneId": "jaw",
+      "texture": "/assets/mascots/milo-reporter/parts/mouth_angry_ou.png",
+      "sourceSize": [
+        248,
+        236
+      ],
+      "runtimeSize": [
+        92,
+        67
+      ]
+    },
+    "mouth_angry_fv": {
+      "boneId": "jaw",
+      "texture": "/assets/mascots/milo-reporter/parts/mouth_angry_fv.png",
+      "sourceSize": [
+        248,
+        236
+      ],
+      "runtimeSize": [
+        92,
+        67
+      ]
+    },
+    "mouth_surprised_round": {
+      "boneId": "jaw",
+      "texture": "/assets/mascots/milo-reporter/parts/mouth_surprised_round.png",
+      "sourceSize": [
+        248,
+        236
+      ],
+      "runtimeSize": [
+        92,
+        67
+      ]
+    }
+  },
+  "qa": {
+    "transparentCorners": true,
+    "chromaFringeChecked": true,
+    "facialPivotsEqual": true,
+    "shoulderOverlapPadding": true
+  }
+}

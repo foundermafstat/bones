@@ -1,6 +1,6 @@
 import type { PathCommand } from "@bones/schema";
 import { importSvgPaths, type PathCommand as VectorPathCommand } from "@bones/vector-core";
-import type { EditorProjectState, ShapePart } from "./editorState";
+import type { EditorProjectState, ShapePart } from "./editorState.ts";
 
 export async function vectorizeSvgParts(
   project: EditorProjectState,

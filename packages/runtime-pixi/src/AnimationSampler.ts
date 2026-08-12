@@ -131,6 +131,9 @@ export function interpolateValue(
   t: number,
   property: RuntimeAnimationTrack["property"]
 ): RuntimeSampleValue {
+  if (property === "attachment") {
+    return t < 0.5 ? from : to;
+  }
   if (typeof from === "number" && typeof to === "number") {
     if (property === "transform.rotation") {
       return from + shortestAngleDelta(from, to) * t;

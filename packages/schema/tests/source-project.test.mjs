@@ -41,7 +41,7 @@ const minimalProject = {
 
 test("exports a source JSON schema for RigProject", () => {
   assert.equal(rigProjectJsonSchema.title, "Bones RigProject Source JSON");
-  assert.equal(rigProjectJsonSchema.properties.schemaVersion.const, BONES_SCHEMA_VERSION);
+  assert.ok(rigProjectJsonSchema.properties.schemaVersion.enum.includes(BONES_SCHEMA_VERSION));
   assert.equal(rigProjectJsonSchema.properties.runtimeTarget.const, BONES_RUNTIME_TARGET);
 });
 
@@ -49,7 +49,7 @@ test("validates a minimal source project", () => {
   const result = validateRigProject(minimalProject);
 
   assert.equal(result.ok, true);
-  assert.equal(result.value.schemaVersion, "1.0.0");
+  assert.equal(result.value.schemaVersion, BONES_SCHEMA_VERSION);
   assert.equal(result.value.runtimeTarget, "pixi-v8");
 });
 
@@ -329,4 +329,60 @@ test("migrates source project defaults for production metadata", () => {
   assert.equal(result.project.projectId, minimalProject.id);
   assert.equal(result.project.units, "pixels");
   assert.equal(result.project.defaultFrameRate, 60);
+});
+
+test("validates step-only visual slot attachment tracks and migrates slot variants", () => {
+  const legacy = {
+    ...minimalProject,
+    schemaVersion: "1.1.0",
+    rigs: [{
+      ...minimalProject.rigs[0],
+      parts: ["neutral", "happy"].map((name) => ({
+        id: `eyes.${name}`,
+        name,
+        boneId: "root",
+        type: "procedural",
+        procedural: { preset: "circle", params: { radius: 4 } }
+      })),
+      visualSlots: [{ id: "eyes", name: "Eyes", boneId: "root", drawOrder: 10 }],
+      skins: [{ id: "default", name: "Default", attachments: [{ slotId: "eyes", partId: "eyes.neutral" }] }]
+    }],
+    animations: [{
+      id: "talk",
+      name: "Talk",
+      duration: 1,
+      tracks: [{
+        id: "eyes.attachment",
+        target: { kind: "slot", id: "eyes" },
+        property: "attachment",
+        keyframes: [
+          { time: 0, value: "eyes.neutral", interpolation: "step" },
+          { time: 0.5, value: "eyes.neutral", interpolation: "hold" },
+          { time: 1, value: null, interpolation: "step" }
+        ]
+      }]
+    }]
+  };
+
+  const migrated = migrateRigProject(legacy);
+  assert.equal(migrated.project.schemaVersion, BONES_SCHEMA_VERSION);
+  assert.deepEqual(migrated.project.rigs[0].visualSlots[0].partIds, ["eyes.neutral"]);
+  const current = {
+    ...migrated.project,
+    rigs: [{ ...migrated.project.rigs[0], visualSlots: [{ ...migrated.project.rigs[0].visualSlots[0], partIds: ["eyes.neutral", "eyes.happy"] }] }],
+    animations: [{
+      ...migrated.project.animations[0],
+      tracks: [{
+        ...migrated.project.animations[0].tracks[0],
+        keyframes: migrated.project.animations[0].tracks[0].keyframes.map((keyframe, index) =>
+          index === 1 ? { ...keyframe, value: "eyes.happy" } : keyframe
+        )
+      }]
+    }]
+  };
+  assert.equal(validateRigProject(current).ok, true);
+
+  const invalid = structuredClone(legacy);
+  invalid.animations[0].tracks[0].keyframes[0].interpolation = "linear";
+  assert.match(validateRigProject(invalid).errors.map((error) => error.message).join("\n"), /require step or hold/);
 });

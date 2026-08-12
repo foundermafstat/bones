@@ -63,6 +63,24 @@ export function compileRig(projectInput: unknown, options: CompileOptions = {}):
   const normalized = normalizeForCompile(project, rig);
   const lookups = buildLookupTables(project, rig);
   const defaultFrameRate = options.defaultFrameRate ?? project.defaultFrameRate ?? 60;
+  const visualSlots = rig.visualSlots ?? [];
+  const slotIndexById = new Map(visualSlots.map((slot, index) => [slot.id, index]));
+  const slotByPartId = new Map<string, (typeof visualSlots)[number]>();
+  for (const slot of visualSlots) {
+    for (const partId of slot.partIds ?? []) {
+      if (!slotByPartId.has(partId)) {
+        slotByPartId.set(partId, slot);
+      }
+    }
+  }
+  for (const skin of rig.skins ?? []) {
+    for (const attachment of skin.attachments) {
+      const slot = visualSlots[slotIndexById.get(attachment.slotId) ?? -1];
+      if (slot && !slotByPartId.has(attachment.partId)) {
+        slotByPartId.set(attachment.partId, slot);
+      }
+    }
+  }
 
   return {
     compiledFormatVersion: BONES_COMPILED_FORMAT_VERSION,
@@ -80,11 +98,12 @@ export function compileRig(projectInput: unknown, options: CompileOptions = {}):
         length: bone.length ?? 0
       })),
       parts: normalized.parts.map((part) => {
+        const slot = slotByPartId.get(part.id);
         const compiled: CompiledPartV1 = {
           id: lookupRequired(lookups.parts, part.id, "part"),
-          bone: lookupRequired(lookups.bones, part.boneId, "bone"),
+          bone: lookupRequired(lookups.bones, slot?.boneId ?? part.boneId, "bone"),
           type: part.type,
-          drawOrder: part.drawOrder ?? 0,
+          drawOrder: slot?.drawOrder ?? part.drawOrder ?? 0,
           visible: part.visible ?? true,
           opacity: part.opacity ?? 1,
           local: packTransform(part.local ?? part.transform ?? identityTransform),
@@ -106,7 +125,37 @@ export function compileRig(projectInput: unknown, options: CompileOptions = {}):
             : {})
         };
         return compiled;
-      })
+      }),
+      ...(visualSlots.length
+        ? {
+            visualSlots: visualSlots.map((slot) => ({
+              id: slot.id,
+              bone: lookupRequired(lookups.bones, slot.boneId, "bone"),
+              drawOrder: slot.drawOrder,
+              partIds: [...new Set([
+                ...(slot.partIds ?? []),
+                ...(rig.skins ?? []).flatMap((skin) =>
+                  skin.attachments.filter((attachment) => attachment.slotId === slot.id).map((attachment) => attachment.partId)
+                )
+              ])]
+                .sort()
+                .map((partId) => lookupRequired(lookups.parts, partId, "part"))
+            }))
+          }
+        : {}),
+      ...(rig.skins?.length
+        ? {
+            skins: rig.skins.map((skin) => ({
+              id: skin.id,
+              name: skin.name,
+              attachments: skin.attachments.map((attachment) => ({
+                slot: slotIndexById.get(attachment.slotId) ?? -1,
+                part: lookupRequired(lookups.parts, attachment.partId, "part")
+              }))
+            })),
+            defaultSkinId: rig.defaultSkinId ?? rig.skins[0]!.id
+          }
+        : {})
     },
     animations: normalized.animations.map((clip) => compileAnimationClip(clip, lookups, defaultFrameRate)),
     stateMachines: normalized.stateMachines.map((machine) => compileStateMachine(machine, lookups)),
@@ -122,6 +171,7 @@ export function buildLookupTables(project: RigProject, rig: RigDefinition = sele
     rigs: makeLookup(sortById(project.rigs).map((item) => item.id)),
     bones: makeLookup(normalized.bones.map((item) => item.id)),
     parts: makeLookup(normalized.parts.map((item) => item.id)),
+    visualSlots: makeLookup((rig.visualSlots ?? []).map((item) => item.id)),
     animations: makeLookup(normalized.animations.map((item) => item.id)),
     stateMachines: makeLookup(normalized.stateMachines.map((item) => item.id))
   };
@@ -280,7 +330,16 @@ function compileTrack(
     targetKind: track.target.kind,
     target: compileTrackTarget(track, lookups),
     property: track.property,
-    keyframes: flattenKeyframes(track.keyframes)
+    keyframes:
+      track.property === "attachment"
+        ? flattenKeyframes(track.keyframes).map((keyframe) => ({
+            ...keyframe,
+            value:
+              keyframe.value === null
+                ? null
+                : lookupRequired(lookups.parts, keyframe.value as string, "attachment part")
+          }))
+        : flattenKeyframes(track.keyframes)
   };
 }
 
@@ -290,6 +349,9 @@ function compileTrackTarget(track: AnimationTrack, lookups: CompiledLookupTables
   }
   if (track.target.kind === "part") {
     return lookupRequired(lookups.parts, track.target.id, "part");
+  }
+  if (track.target.kind === "slot") {
+    return lookupRequired(lookups.visualSlots, track.target.id, "visual slot");
   }
   if (track.target.kind === "stateMachine") {
     return lookupRequired(lookups.stateMachines, track.target.id, "stateMachine");

@@ -1,6 +1,7 @@
 import {
   BONES_RUNTIME_TARGET,
   BONES_SCHEMA_VERSION,
+  BONES_SUPPORTED_SCHEMA_VERSIONS,
   type AnimationClip,
   type AnimationCondition,
   type AnimationParameter,
@@ -34,7 +35,7 @@ export class SchemaValidationError extends Error {
 
 const partTypes = new Set(["path", "procedural", "mesh", "svg"]);
 const proceduralPresets = new Set(["tapered-limb", "organic-blob", "capsule", "circle", "rect"]);
-const trackTargets = new Set(["bone", "part", "project", "stateMachine"]);
+const trackTargets = new Set(["bone", "part", "slot", "project", "stateMachine"]);
 const trackProperties = new Set([
   "transform.x",
   "transform.y",
@@ -46,6 +47,7 @@ const trackProperties = new Set([
   "visible",
   "opacity",
   "drawOrder",
+  "attachment",
   "procedural.params",
   "deform",
   "event",
@@ -64,6 +66,8 @@ interface ProjectReferences {
   readonly rigIds: ReadonlySet<string>;
   readonly boneIds: ReadonlySet<string>;
   readonly partIds: ReadonlySet<string>;
+  readonly slotIds: ReadonlySet<string>;
+  readonly slotPartIds: ReadonlyMap<string, ReadonlySet<string>>;
   readonly stateMachineIds: ReadonlySet<string>;
   readonly bonesByRig: ReadonlyMap<string, ReadonlySet<string>>;
   readonly partsByRig: ReadonlyMap<string, ReadonlySet<string>>;
@@ -76,7 +80,9 @@ export function validateRigProject(input: unknown): ValidationResult<RigProject>
     return invalid([{ path: "$", message: "Project must be an object." }]);
   }
 
-  expectExact(input.schemaVersion, BONES_SCHEMA_VERSION, "$.schemaVersion", "Unsupported schemaVersion.", errors);
+  if (typeof input.schemaVersion !== "string" || !BONES_SUPPORTED_SCHEMA_VERSIONS.some((version) => version === input.schemaVersion)) {
+    errors.push({ path: "$.schemaVersion", message: `Unsupported schemaVersion. Expected ${BONES_SUPPORTED_SCHEMA_VERSIONS.join(" or ")}.` });
+  }
   expectExact(input.runtimeTarget, BONES_RUNTIME_TARGET, "$.runtimeTarget", "Unsupported runtimeTarget.", errors);
   expectNonEmptyString(input.id, "$.id", errors);
   if (input.projectId !== undefined) {
@@ -150,6 +156,8 @@ function collectProjectReferences(input: Record<string, unknown>): ProjectRefere
   const rigIds = new Set<string>();
   const boneIds = new Set<string>();
   const partIds = new Set<string>();
+  const slotIds = new Set<string>();
+  const slotPartIds = new Map<string, Set<string>>();
   const bonesByRig = new Map<string, Set<string>>();
   const partsByRig = new Map<string, Set<string>>();
 
@@ -176,6 +184,28 @@ function collectProjectReferences(input: Record<string, unknown>): ProjectRefere
         }
       }
     }
+    if (Array.isArray(rig.visualSlots)) {
+      for (const slot of rig.visualSlots.filter(isRecord)) {
+        if (typeof slot.id !== "string") continue;
+        slotIds.add(slot.id);
+        const allowed = slotPartIds.get(slot.id) ?? new Set<string>();
+        if (Array.isArray(slot.partIds)) {
+          for (const partId of slot.partIds) if (typeof partId === "string") allowed.add(partId);
+        }
+        slotPartIds.set(slot.id, allowed);
+      }
+    }
+    if (Array.isArray(rig.skins)) {
+      for (const skin of rig.skins.filter(isRecord)) {
+        if (!Array.isArray(skin.attachments)) continue;
+        for (const attachment of skin.attachments.filter(isRecord)) {
+          if (typeof attachment.slotId !== "string" || typeof attachment.partId !== "string") continue;
+          const allowed = slotPartIds.get(attachment.slotId) ?? new Set<string>();
+          allowed.add(attachment.partId);
+          slotPartIds.set(attachment.slotId, allowed);
+        }
+      }
+    }
     bonesByRig.set(rig.id, rigBoneIds);
     partsByRig.set(rig.id, rigPartIds);
   }
@@ -194,6 +224,8 @@ function collectProjectReferences(input: Record<string, unknown>): ProjectRefere
     rigIds,
     boneIds,
     partIds,
+    slotIds,
+    slotPartIds,
     stateMachineIds,
     bonesByRig,
     partsByRig
@@ -252,17 +284,122 @@ function validateRig(input: unknown, path: string, errors: ValidationIssue[]): v
     validateBoneGraph(input.bones, input.rootBoneId, path, errors);
   }
 
+  const partIds = new Set<string>();
   if (input.parts !== undefined) {
     if (!Array.isArray(input.parts)) {
       errors.push({ path: `${path}.parts`, message: "Parts must be an array when provided." });
     } else {
-      const partIds = new Set<string>();
       input.parts.forEach((part, index) => {
         validatePart(part, `${path}.parts[${index}]`, boneIds, errors);
         if (isRecord(part) && typeof part.id === "string") {
           addUnique(partIds, part.id, `${path}.parts[${index}].id`, "Part id", errors);
         }
       });
+    }
+  }
+
+  const slotIds = new Set<string>();
+  const slotByAttachedPart = new Map<string, string>();
+  if (input.visualSlots !== undefined) {
+    if (!Array.isArray(input.visualSlots)) {
+      errors.push({ path: `${path}.visualSlots`, message: "Visual slots must be an array when provided." });
+    } else {
+      input.visualSlots.forEach((slot, index) => {
+        const slotPath = `${path}.visualSlots[${index}]`;
+        if (!isRecord(slot)) {
+          errors.push({ path: slotPath, message: "Visual slot must be an object." });
+          return;
+        }
+        expectNonEmptyString(slot.id, `${slotPath}.id`, errors);
+        expectNonEmptyString(slot.name, `${slotPath}.name`, errors);
+        expectNonEmptyString(slot.boneId, `${slotPath}.boneId`, errors);
+        expectNumber(slot.drawOrder, `${slotPath}.drawOrder`, errors);
+        if (typeof slot.id === "string") {
+          addUnique(slotIds, slot.id, `${slotPath}.id`, "Visual slot id", errors);
+        }
+        if (typeof slot.boneId === "string" && !boneIds.has(slot.boneId)) {
+          errors.push({ path: `${slotPath}.boneId`, message: `Visual slot bone '${slot.boneId}' does not exist.` });
+        }
+        if (slot.partIds !== undefined) {
+          if (!Array.isArray(slot.partIds)) {
+            errors.push({ path: `${slotPath}.partIds`, message: "Visual slot partIds must be an array." });
+          } else {
+            const allowedPartIds = new Set<string>();
+            slot.partIds.forEach((partId, partIndex) => {
+              expectNonEmptyString(partId, `${slotPath}.partIds[${partIndex}]`, errors);
+              if (typeof partId !== "string") return;
+              addUnique(allowedPartIds, partId, `${slotPath}.partIds[${partIndex}]`, "Visual slot part id", errors);
+              if (!partIds.has(partId)) errors.push({ path: `${slotPath}.partIds[${partIndex}]`, message: `Part '${partId}' does not exist.` });
+              const previousSlotId = slotByAttachedPart.get(partId);
+              if (previousSlotId && previousSlotId !== slot.id) {
+                errors.push({ path: `${slotPath}.partIds[${partIndex}]`, message: `Part '${partId}' is already attached to visual slot '${previousSlotId}'.` });
+              } else if (typeof slot.id === "string") {
+                slotByAttachedPart.set(partId, slot.id);
+              }
+            });
+          }
+        }
+      });
+    }
+  }
+
+  const skinIds = new Set<string>();
+  if (input.skins !== undefined) {
+    if (!Array.isArray(input.skins)) {
+      errors.push({ path: `${path}.skins`, message: "Skins must be an array when provided." });
+    } else {
+      input.skins.forEach((skin, skinIndex) => {
+        const skinPath = `${path}.skins[${skinIndex}]`;
+        if (!isRecord(skin)) {
+          errors.push({ path: skinPath, message: "Skin must be an object." });
+          return;
+        }
+        expectNonEmptyString(skin.id, `${skinPath}.id`, errors);
+        expectNonEmptyString(skin.name, `${skinPath}.name`, errors);
+        if (typeof skin.id === "string") {
+          addUnique(skinIds, skin.id, `${skinPath}.id`, "Skin id", errors);
+        }
+        if (!Array.isArray(skin.attachments)) {
+          errors.push({ path: `${skinPath}.attachments`, message: "Skin attachments must be an array." });
+          return;
+        }
+        const attachmentSlots = new Set<string>();
+        skin.attachments.forEach((attachment, attachmentIndex) => {
+          const attachmentPath = `${skinPath}.attachments[${attachmentIndex}]`;
+          if (!isRecord(attachment)) {
+            errors.push({ path: attachmentPath, message: "Skin attachment must be an object." });
+            return;
+          }
+          expectNonEmptyString(attachment.slotId, `${attachmentPath}.slotId`, errors);
+          expectNonEmptyString(attachment.partId, `${attachmentPath}.partId`, errors);
+          if (typeof attachment.slotId === "string") {
+            addUnique(attachmentSlots, attachment.slotId, `${attachmentPath}.slotId`, "Skin attachment slot", errors);
+            if (!slotIds.has(attachment.slotId)) {
+              errors.push({ path: `${attachmentPath}.slotId`, message: `Visual slot '${attachment.slotId}' does not exist.` });
+            }
+          }
+          if (typeof attachment.partId === "string") {
+            if (!partIds.has(attachment.partId)) {
+              errors.push({ path: `${attachmentPath}.partId`, message: `Part '${attachment.partId}' does not exist.` });
+            }
+            if (typeof attachment.slotId === "string") {
+              const previousSlotId = slotByAttachedPart.get(attachment.partId);
+              if (previousSlotId && previousSlotId !== attachment.slotId) {
+                errors.push({ path: `${attachmentPath}.partId`, message: `Part '${attachment.partId}' is already attached to visual slot '${previousSlotId}'.` });
+              } else {
+                slotByAttachedPart.set(attachment.partId, attachment.slotId);
+              }
+            }
+          }
+        });
+      });
+    }
+  }
+
+  if (input.defaultSkinId !== undefined) {
+    expectNonEmptyString(input.defaultSkinId, `${path}.defaultSkinId`, errors);
+    if (typeof input.defaultSkinId === "string" && !skinIds.has(input.defaultSkinId)) {
+      errors.push({ path: `${path}.defaultSkinId`, message: `Default skin '${input.defaultSkinId}' does not exist.` });
     }
   }
 }
@@ -590,6 +727,12 @@ function validateAnimationTrack(input: unknown, path: string, duration: unknown,
   if (typeof input.property !== "string" || !trackProperties.has(input.property)) {
     errors.push({ path: `${path}.property`, message: "Unknown animation track property." });
   }
+  if (input.property === "attachment" && (!isRecord(input.target) || input.target.kind !== "slot")) {
+    errors.push({ path: `${path}.property`, message: "Attachment tracks must target a visual slot." });
+  }
+  if (isRecord(input.target) && input.target.kind === "slot" && input.property !== "attachment") {
+    errors.push({ path: `${path}.property`, message: "Visual slot tracks only support the attachment property." });
+  }
   if (!Array.isArray(input.keyframes) || input.keyframes.length === 0) {
     errors.push({ path: `${path}.keyframes`, message: "Animation track must contain at least one keyframe." });
     return;
@@ -598,6 +741,19 @@ function validateAnimationTrack(input: unknown, path: string, duration: unknown,
   let previousTime = -Infinity;
   input.keyframes.forEach((keyframe, index) => {
     validateKeyframe(keyframe, `${path}.keyframes[${index}]`, duration, errors);
+    if (input.property === "attachment" && isRecord(keyframe)) {
+      if (keyframe.interpolation !== "step" && keyframe.interpolation !== "hold") {
+        errors.push({ path: `${path}.keyframes[${index}].interpolation`, message: "Attachment keyframes require step or hold interpolation." });
+      }
+      if (keyframe.value !== null && typeof keyframe.value !== "string") {
+        errors.push({ path: `${path}.keyframes[${index}].value`, message: "Attachment keyframe value must be a part id or null." });
+      } else if (typeof keyframe.value === "string" && isRecord(input.target) && typeof input.target.id === "string") {
+        const allowedPartIds = refs.slotPartIds.get(input.target.id);
+        if (!allowedPartIds?.has(keyframe.value)) {
+          errors.push({ path: `${path}.keyframes[${index}].value`, message: `Part '${keyframe.value}' is not allowed in visual slot '${input.target.id}'.` });
+        }
+      }
+    }
     if (isRecord(keyframe) && typeof keyframe.time === "number") {
       if (keyframe.time < previousTime) {
         errors.push({ path: `${path}.keyframes[${index}].time`, message: "Keyframes must be sorted by time." });
@@ -616,6 +772,9 @@ function validateTrackTargetReference(target: Record<string, unknown>, path: str
   }
   if (target.kind === "part" && !refs.partIds.has(target.id)) {
     errors.push({ path: `${path}.id`, message: `Animation track part target '${target.id}' does not exist.` });
+  }
+  if (target.kind === "slot" && !refs.slotIds.has(target.id)) {
+    errors.push({ path: `${path}.id`, message: `Animation track visual slot target '${target.id}' does not exist.` });
   }
   if (target.kind === "stateMachine" && !refs.stateMachineIds.has(target.id)) {
     errors.push({ path: `${path}.id`, message: `Animation track state machine target '${target.id}' does not exist.` });

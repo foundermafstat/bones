@@ -5,6 +5,7 @@ import {
   ArrowLeftIcon,
   ArrowRightIcon,
   BoneIcon,
+  CatIcon,
   CheckIcon,
   CircleIcon,
   DogIcon,
@@ -83,6 +84,7 @@ const guidedSteps: readonly { readonly id: GuidedStep; readonly label: string; r
 
 const requiredClips = ["idle", "walk", "run", "jump", "fall", "land"] as const;
 const fighterRequiredClips = ["idle", "walk_forward", "dash_forward", "jump_start", "air_neutral", "land"] as const;
+const reporterRequiredClips = ["idle_neutral", "talk_neutral", "talk_happy", "talk_sad", "talk_angry", "explain_point", "discuss_two_hands", "greeting", "surprise_reaction", "farewell"] as const;
 
 export function GuidedEditor(props: GuidedEditorProps) {
   if (props.creating) {
@@ -140,7 +142,7 @@ function CharacterCreator({
                   <FieldLabel id="guided-character-type">Starting rig</FieldLabel>
                   <ToggleGroup
                     aria-labelledby="guided-character-type"
-                    className="grid grid-cols-1 gap-3 sm:grid-cols-3"
+                    className="grid grid-cols-1 gap-3 sm:grid-cols-2"
                     type="single"
                     value={createKind}
                     variant="outline"
@@ -167,14 +169,21 @@ function CharacterCreator({
                         <span className="text-xs text-muted-foreground">38-bone fighting preset</span>
                       </span>
                     </ToggleGroupItem>
+                    <ToggleGroupItem className="h-28 items-start justify-start px-4 py-4" value="milo-reporter">
+                      <CatIcon aria-hidden="true" className="mt-0.5 shrink-0" />
+                      <span className="flex flex-col items-start gap-1 text-left">
+                        <strong className="text-base">Milo Reporter</strong>
+                        <span className="text-xs text-muted-foreground">25-bone talking mascot</span>
+                      </span>
+                    </ToggleGroupItem>
                   </ToggleGroup>
                 </Field>
               </FieldGroup>
             </CardContent>
             <CardFooter className="flex-wrap gap-3 border-0 bg-transparent px-0 pb-8">
               <Button disabled={!nameValid} size="lg" onClick={onCreate}>
-                {createKind === "dog" ? <DogIcon data-icon="inline-start" /> : <UserRoundIcon data-icon="inline-start" />}
-                Create {createKind === "pulse" ? "Pulse fighter" : createKind}
+                {createKind === "dog" ? <DogIcon data-icon="inline-start" /> : createKind === "milo-reporter" || createKind === "cat" ? <CatIcon data-icon="inline-start" /> : <UserRoundIcon data-icon="inline-start" />}
+                Create {createKind === "pulse" ? "Pulse fighter" : createKind === "milo-reporter" || createKind === "cat" ? "Milo Reporter" : createKind}
               </Button>
               <Button size="lg" variant="outline" onClick={() => importInputRef.current?.click()}>
                 <FolderOpenIcon data-icon="inline-start" />
@@ -203,7 +212,7 @@ function CharacterCreator({
           <div className="flex min-h-[520px] flex-col gap-6 p-8 lg:p-12">
             <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg bg-[var(--guide-canvas)]">
               <PixiPreview
-                clipId="idle"
+                clipId={createKind === "milo-reporter" || createKind === "cat" ? "idle_neutral" : "idle"}
                 playing
                 project={creationPreviewProject}
                 quality={quality}
@@ -241,7 +250,7 @@ function GuidedWorkspace(props: GuidedEditorProps) {
         </div>
         <div className="min-w-0 border-l px-5">
           <p className="truncate text-sm font-medium">{props.project.name}</p>
-          <p className="text-xs text-muted-foreground">{props.project.characterKind === "dog" ? "Dog character" : "Human character"}</p>
+          <p className="text-xs text-muted-foreground">{characterKindLabel(props.project.characterKind)} character</p>
         </div>
         <div className="flex items-center gap-3 px-5">
           <Button size="sm" variant="outline" onClick={props.onSaveDraft}>
@@ -329,7 +338,7 @@ function CharacterStep(props: GuidedEditorProps) {
       aside={
         <div className="flex flex-col gap-4">
           <h2 className="text-base font-medium">Starting content</h2>
-          <SummaryRow label="Character type" value={props.project.characterKind === "dog" ? "Dog" : "Human"} />
+          <SummaryRow label="Character type" value={characterKindLabel(props.project.characterKind)} />
           <SummaryRow label="Bones" value={String(props.project.hierarchy.length)} />
           <SummaryRow label="Parts" value={String(Object.keys(props.project.parts).length)} />
           <SummaryRow label="Animations" value={String(Object.keys(props.project.animations).length)} />
@@ -470,7 +479,8 @@ function SkeletonStep(props: GuidedEditorProps) {
 
 function AnimationsStep(props: GuidedEditorProps) {
   const projectRequiredClips = requiredClipsFor(props.project);
-  const activeClip = props.project.animations[props.clipId] ?? props.project.animations[projectRequiredClips[0]];
+  const fallbackClipId = projectRequiredClips[0];
+  const activeClip = props.project.animations[props.clipId] ?? (fallbackClipId ? props.project.animations[fallbackClipId] : undefined);
   const timelineRows = getTimelineRows(activeClip?.tracks ?? {});
 
   return (
@@ -738,7 +748,12 @@ function getStepCompletion(project: EditorProjectState, bundle: ProjectExportBun
 }
 
 function requiredClipsFor(project: EditorProjectState): readonly string[] {
+  if (project.characterKind === "cat") return reporterRequiredClips;
   return project.animations.walk_forward ? fighterRequiredClips : requiredClips;
+}
+
+function characterKindLabel(kind: EditorProjectState["characterKind"]): string {
+  return kind === "dog" ? "Dog" : kind === "cat" ? "Cat" : "Human";
 }
 
 function getPartGroups(project: EditorProjectState): readonly { readonly label: string; readonly count: number }[] {

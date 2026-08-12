@@ -59,9 +59,10 @@ PlayerRig
 ```txt
 Human — нативный 2D biped rig.
 Dog — нативный 2D quadruped rig с четырьмя лапами, корпусом, шеей, головой и хвостом.
+Milo Reporter — фронтальный 2.5D cat mascot по пояс: 25 upper-body bones, 22 базовые части, 2 open-paw attachment-варианта, facial slots `eyes / mouth`, 6 eye states, 21 emotional viseme и 10 reporter clips.
 ```
 
-Оба шаблона должны сразу давать редактируемый skeleton, визуальные части/texture slots и базовый набор `idle / walk / run / jump / fall / land`. Внешние CC0-модели, rig-файлы, анимации и PNG-наборы используются только как референсы анатомии и движения. Они не импортируются и не включаются в runtime: собака хранится в нативных source/runtime-форматах Bones.
+Human и Dog сразу дают редактируемый skeleton, визуальные части/texture slots и базовый набор `idle / walk / run / jump / fall / land`. Milo Reporter использует дискретные `attachment`-треки: ключ содержит `partId | null`, допускает только `step / hold`, а runtime показывает один attachment на slot и при crossfade переключает его на входящий клип при весе 50%. Face workspace умеет записывать отдельную гримасу на playhead и генерировать потоковую viseme-последовательность до конца клипа с регулируемым шагом в кадрах; reporter clips синхронно анимируют плечи, предплечья и лапы. Все три шаблона сохраняются и экспортируются в нативных source/runtime-форматах Bones. Внешние CC0-модели, rig-файлы, анимации и PNG-наборы используются только как референсы анатомии и движения.
 
 Референс собаки: [Quaternius Ultimate Animated Animal Pack](https://quaternius.com/packs/ultimateanimatedanimals.html), CC0, модели Husky/Shiba и набор locomotion-анимаций в `.blend / FBX / glTF`.
 
@@ -586,7 +587,7 @@ PixiJS действительно поддерживает SVG двумя спо
 Character → Textures → Skeleton → Animations → Test → Export
 ```
 
-1. **Character** — имя и выбор `Human / Dog`, после которого создаётся соответствующий стартовый template.
+1. **Character** — имя и выбор `Human / Dog / Milo Reporter`, после которого создаётся соответствующий стартовый template.
 2. **Textures** — добавление и привязка визуальных частей/текстур с понятным preview.
 3. **Skeleton** — проверка skeleton и привязок; шаблон уже содержит рабочую структуру.
 4. **Animations** — выбор и редактирование базовых клипов без обязательного доступа ко всем профессиональным параметрам.
@@ -594,6 +595,8 @@ Character → Textures → Skeleton → Animations → Test → Export
 6. **Export** — production package, отчёт о размере и готовый runtime-файл.
 
 На экране одновременно показывается только текущий шаг, его краткая цель и одно основное действие `Next`. Рекомендуемые значения берутся из template; заблокированный переход всегда объясняет, что именно нужно исправить. Прогресс по шести шагам остаётся видимым.
+
+Каждый созданный персонаж сохраняется в библиотеке БД как полный versioned source project: skeleton, визуальные slots/skins и bindings, state machine, clips, tracks и keyframes. Экран `Select` показывает сохранённых персонажей и загружает выбранный source project для дальнейшего редактирования. Сами PNG/SVG-файлы остаются в локальной директории проекта `assets/`; в source JSON и asset metadata БД хранятся только относительные пути, размеры и checksum, но не бинарные изображения.
 
 ## 11.2. Advanced mode
 

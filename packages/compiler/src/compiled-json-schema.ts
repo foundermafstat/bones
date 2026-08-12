@@ -1,4 +1,4 @@
-import { BONES_RUNTIME_TARGET, BONES_SCHEMA_VERSION } from "@bones/schema";
+import { BONES_RUNTIME_TARGET, BONES_SUPPORTED_SCHEMA_VERSIONS } from "@bones/schema";
 import { BONES_COMPILED_FORMAT_VERSION } from "./types.js";
 
 export type JsonSchema = {
@@ -13,7 +13,7 @@ const lookupTable = {
 
 export const compiledRigProjectJsonSchema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
-  $id: "https://bones.dev/schemas/compiled-rig-project-1.0.0.json",
+  $id: "https://bones.dev/schemas/compiled-rig-project-1.1.0.json",
   title: "Bones CompiledRigProject JSON",
   type: "object",
   additionalProperties: false,
@@ -31,7 +31,7 @@ export const compiledRigProjectJsonSchema = {
   ],
   properties: {
     compiledFormatVersion: { const: BONES_COMPILED_FORMAT_VERSION },
-    schemaVersion: { const: BONES_SCHEMA_VERSION },
+    schemaVersion: { enum: BONES_SUPPORTED_SCHEMA_VERSIONS },
     runtimeTarget: { const: BONES_RUNTIME_TARGET },
     sourceProjectId: { type: "string", minLength: 1 },
     name: { type: "string", minLength: 1 },
@@ -43,11 +43,12 @@ export const compiledRigProjectJsonSchema = {
     lookups: {
       type: "object",
       additionalProperties: false,
-      required: ["rigs", "bones", "parts", "animations", "stateMachines"],
+      required: ["rigs", "bones", "parts", "visualSlots", "animations", "stateMachines"],
       properties: {
         rigs: lookupTable,
         bones: lookupTable,
         parts: lookupTable,
+        visualSlots: lookupTable,
         animations: lookupTable,
         stateMachines: lookupTable
       }
@@ -77,7 +78,42 @@ export const compiledRigProjectJsonSchema = {
         id: numericId,
         rootBone: numericId,
         bones: { type: "array", minItems: 1, items: { $ref: "#/$defs/bone" } },
-        parts: { type: "array", items: { $ref: "#/$defs/part" } }
+        parts: { type: "array", items: { $ref: "#/$defs/part" } },
+        visualSlots: { type: "array", items: { $ref: "#/$defs/visualSlot" } },
+        skins: { type: "array", items: { $ref: "#/$defs/skin" } },
+        defaultSkinId: { type: "string", minLength: 1 }
+      }
+    },
+    visualSlot: {
+      type: "object",
+      additionalProperties: false,
+      required: ["id", "bone", "drawOrder", "partIds"],
+      properties: {
+        id: { type: "string", minLength: 1 },
+        bone: numericId,
+        drawOrder: { type: "number" },
+        partIds: { type: "array", items: numericId, uniqueItems: true }
+      }
+    },
+    skin: {
+      type: "object",
+      additionalProperties: false,
+      required: ["id", "name", "attachments"],
+      properties: {
+        id: { type: "string", minLength: 1 },
+        name: { type: "string", minLength: 1 },
+        attachments: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["slot", "part"],
+            properties: {
+              slot: numericId,
+              part: numericId
+            }
+          }
+        }
       }
     },
     bone: {
@@ -211,7 +247,7 @@ export const compiledRigProjectJsonSchema = {
       required: ["id", "targetKind", "target", "property", "keyframes"],
       properties: {
         id: numericId,
-        targetKind: { enum: ["bone", "part", "project", "stateMachine"] },
+        targetKind: { enum: ["bone", "part", "slot", "project", "stateMachine"] },
         target: { type: "integer", minimum: 0 },
         property: {
           enum: [
@@ -228,7 +264,8 @@ export const compiledRigProjectJsonSchema = {
             "procedural.params",
             "deform",
             "event",
-            "collider"
+            "collider",
+            "attachment"
           ]
         },
         keyframes: { type: "array", minItems: 1, items: { $ref: "#/$defs/keyframe" } }

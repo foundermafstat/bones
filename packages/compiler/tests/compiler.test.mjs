@@ -119,6 +119,7 @@ test("compiles source project into deterministic compiled JSON v1", () => {
     rigs: { "rig.hero": 0 },
     bones: { root: 0, body: 1 },
     parts: { "part.body": 0 },
+    visualSlots: {},
     animations: { idle: 0 },
     stateMachines: { locomotion: 0 }
   });
@@ -194,8 +195,50 @@ test("validateProject keeps source schema validation semantics", () => {
 test("exports compiled json schema and compiled migration contract", () => {
   const compiled = compileRig(sourceProject);
 
-  assert.equal(compiledRigProjectJsonSchema.$id, "https://bones.dev/schemas/compiled-rig-project-1.0.0.json");
+  assert.equal(compiledRigProjectJsonSchema.$id, "https://bones.dev/schemas/compiled-rig-project-1.1.0.json");
   assert.equal(compiledRigProjectJsonSchema.properties.compiledFormatVersion.const, BONES_COMPILED_FORMAT_VERSION);
   assert.equal(migrateCompiledRigProject(compiled), compiled);
   assert.throws(() => migrateCompiledRigProject({ ...compiled, compiledFormatVersion: "0.9.0" }), /Unsupported compiledFormatVersion/);
+});
+
+test("compiles visual slot attachments to stable numeric ids", () => {
+  const project = structuredClone(sourceProject);
+  project.schemaVersion = "1.2.0";
+  project.rigs[0].parts.push({
+    ...project.rigs[0].parts[0],
+    id: "eyes.neutral",
+    name: "Neutral Eyes"
+  }, {
+    ...project.rigs[0].parts[0],
+    id: "eyes.happy",
+    name: "Happy Eyes"
+  });
+  project.rigs[0].visualSlots = [{
+    id: "eyes",
+    name: "Eyes",
+    boneId: "body",
+    drawOrder: 20,
+    partIds: ["eyes.neutral", "eyes.happy"]
+  }];
+  project.rigs[0].skins = [{
+    id: "default",
+    name: "Default",
+    attachments: [{ slotId: "eyes", partId: "eyes.neutral" }]
+  }];
+  project.animations[0].tracks.push({
+    id: "track.eyes.attachment",
+    target: { kind: "slot", id: "eyes" },
+    property: "attachment",
+    keyframes: [
+      { time: 0, value: "eyes.neutral", interpolation: "step" },
+      { time: 0.5, value: "eyes.happy", interpolation: "hold" }
+    ]
+  });
+
+  const compiled = compileRig(project);
+  const track = compiled.animations[0].tracks.find((item) => item.targetKind === "slot");
+  assert.deepEqual(compiled.rig.visualSlots[0].partIds, [compiled.lookups.parts["eyes.happy"], compiled.lookups.parts["eyes.neutral"]]);
+  assert.equal(compiled.lookups.visualSlots.eyes, 0);
+  assert.equal(track.target, 0);
+  assert.deepEqual(track.keyframes.map((keyframe) => keyframe.value), [compiled.lookups.parts["eyes.neutral"], compiled.lookups.parts["eyes.happy"]]);
 });

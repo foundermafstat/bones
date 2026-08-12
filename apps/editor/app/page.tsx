@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -86,6 +86,7 @@ import {
   createSelectTrackKeysCommand,
   createSetTimelineSelectionCommand,
   createSetTimelineAutoKeyCommand,
+  createSetSkinAttachmentCommand,
   createGroupedCommand,
   createDeleteStateMachineStateCommand,
   createDeleteTransitionCommand,
@@ -104,6 +105,7 @@ import {
   createUpdateProceduralCommand,
   createUpdateKeyframeCommand,
   createEmptyEditorProject,
+  createProjectIdentity,
   evaluateStateMachinePreview,
   executeCommand,
   markAutosaveSaved,
@@ -123,10 +125,14 @@ import {
 import { defaultEditorProject } from "./defaultEditorProject";
 import { createProjectExportBundle, createRuntimeParityReport, DEFAULT_RUNTIME_BUNDLE_FILE, DEFAULT_RUNTIME_ZIP_FILE, EXPORT_BUNDLE_ROOT_DIR, EDITOR_DRAFT_KEY, EDITOR_DRAFT_META_KEY, loadDraft, loadDraftMeta, parseImportedProject, saveDraft, serializeEditorProject, type DraftMetadata, type ProjectExportBundle, type ProjectImportResult, type RuntimeParityReport } from "./projectIo";
 import { PixiPreview } from "./PixiPreview";
-import { GuidedEditor, type GuidedStep } from "./GuidedEditor";
+import type { GuidedStep } from "./GuidedEditor";
+import { StudioEditor } from "./StudioEditor";
+import { fromSourceProject, toSourceProject } from "./editorSourceProject";
 import { createCharacterProject, type CreationTemplate } from "./characterTemplates";
 import { createDeflateZipBlob, type RuntimeArchiveEntry } from "./runtimeArchive";
 import { inspectSvgVector, vectorizeSvgPart } from "./editorVectorImport";
+import { connectProjectFolder, resolveProjectAssetUrl, writeProjectAsset } from "./localProjectAssets";
+import { createRemoteRevision, ensureRemoteProject, listRemoteProjects, listRemoteRevisions, loadRemoteProject, RemoteProjectConflictError, restoreRemoteRevision, saveRemoteProject, upsertRemoteAsset, type RemoteProjectSession, type RemoteProjectSummary } from "./projectPersistence";
 import { parseLdtkLevel } from "@bones/ldtk-adapter";
 import { createInitialControllerState, toAnimationParameters, updatePlatformerController, type PlatformerControllerState } from "@bones/platformer-preview";
 import type { CompiledRigProjectV1 } from "@bones/compiler";
@@ -321,8 +327,9 @@ function clipIdForControllerState(state: PlatformerControllerState, project: Edi
 const hybridZipFileNames = new Set(["manifest.json", DEFAULT_RUNTIME_BUNDLE_FILE, "hero.visual.compiled.json", "hero.path.runtime.rig.json"]);
 const guidedAssetByteLimit = 2 * 1024 * 1024;
 
-async function createUploadedPart(project: EditorProjectState, file: File, index: number): Promise<ShapePart> {
-  const dataUrl = await readFileAsDataUrl(file);
+async function createUploadedPart(project: EditorProjectState, file: File, index: number, stored?: { readonly metadata: { readonly relativePath: string }; readonly objectUrl: string }): Promise<ShapePart> {
+  const dataUrl = stored?.objectUrl ?? await readFileAsDataUrl(file);
+  const assetPath = stored?.metadata.relativePath ?? dataUrl;
   const baseName = (file.name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9_-]/g, "-") || `part-${index + 1}`).toLowerCase();
   let id = `uploaded-${baseName}${index ? `-${index + 1}` : ""}`;
   let suffix = 2;
@@ -333,7 +340,7 @@ async function createUploadedPart(project: EditorProjectState, file: File, index
   const boneId = inferUploadBone(project, file.name);
   const zIndex = Math.max(0, ...Object.values(project.parts).map((part) => part.zIndex ?? 0)) + index + 1;
   if (file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg")) {
-    return { id, boneId, type: "svg", pivot: [0, 0], points: [], preset: undefined, assetPath: dataUrl, zIndex };
+    return { id, boneId, type: "svg", pivot: [0, 0], points: [], preset: undefined, assetPath, assetUrl: dataUrl, rotation: 0, scale: [1, 1], opacity: 1, zIndex };
   }
 
   const bitmap = await createImageBitmap(file);
@@ -348,13 +355,17 @@ async function createUploadedPart(project: EditorProjectState, file: File, index
     pivot: [0, 0],
     points: [],
     preset: undefined,
-    assetPath: dataUrl,
+    assetPath,
+    assetUrl: dataUrl,
+    rotation: 0,
+    scale: [1, 1],
+    opacity: 1,
     zIndex,
     mesh: {
       vertices: [-width / 2, -height / 2, width / 2, -height / 2, width / 2, height / 2, -width / 2, height / 2],
       indices: [0, 1, 2, 0, 2, 3],
       uvs: [0, 0, 1, 0, 1, 1, 0, 1],
-      texture: dataUrl
+      texture: assetPath
     }
   };
 }
@@ -471,6 +482,11 @@ export default function EditorPage() {
   const [squashScaleY, setSquashScaleY] = useState(1.12);
   const [squashDuration, setSquashDuration] = useState(0.08);
   const [ioStatus, setIoStatus] = useState("ready");
+  const [remoteStatus, setRemoteStatus] = useState("Local draft");
+  const [folderStatus, setFolderStatus] = useState("Folder not connected");
+  const [remoteConflictVersion, setRemoteConflictVersion] = useState<number | null>(null);
+  const [remoteProjects, setRemoteProjects] = useState<readonly RemoteProjectSummary[]>([]);
+  const [characterLibraryStatus, setCharacterLibraryStatus] = useState("Loading saved characters…");
   const [lastCommand, setLastCommand] = useState("none");
   const [projectOrigin, setProjectOrigin] = useState<ProjectOrigin>("sample");
   const [confirmDeleteBoneId, setConfirmDeleteBoneId] = useState("");
@@ -479,14 +495,115 @@ export default function EditorPage() {
   const [runtimeParityReport, setRuntimeParityReport] = useState<RuntimeParityReport | null>(null);
   const [pendingImport, setPendingImport] = useState<ProjectImportResult | null>(null);
   const previewKeysRef = useRef(new Set<string>());
+  const remoteSessionRef = useRef<RemoteProjectSession | null>(null);
+  const lastRevisionAtRef = useRef(0);
   const [editorState, setEditorState] = useState<EditorStateContainer>({
     project: defaultEditorProject,
     history: { past: [], future: [] }
   });
+  const refreshRemoteProjects = useCallback(async () => {
+    try {
+      const projects = await listRemoteProjects();
+      setRemoteProjects(projects);
+      setCharacterLibraryStatus(projects.length ? `${projects.length} saved character${projects.length === 1 ? "" : "s"}` : "No saved characters yet");
+      return projects;
+    } catch (error) {
+      setRemoteProjects([]);
+      setCharacterLibraryStatus(error instanceof Error ? error.message : "Character database unavailable");
+      return [];
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshRemoteProjects();
+  }, [refreshRemoteProjects]);
+
+  const persistRemoteProject = useCallback(async (project: EditorProjectState, revision?: "manual" | "periodic" | "import") => {
+    const source = toSourceProject(project);
+    try {
+      let session = remoteSessionRef.current;
+      if (!session || session.id !== source.id) {
+        session = await ensureRemoteProject(source);
+      } else {
+        session = await saveRemoteProject(source, session.version);
+      }
+      remoteSessionRef.current = session;
+      setRemoteConflictVersion(null);
+      setRemoteStatus(`Neon saved · v${session.version}`);
+      if (revision) {
+        await createRemoteRevision(source.id, revision, revision === "manual" ? `Manual save ${new Date().toLocaleString()}` : undefined);
+        lastRevisionAtRef.current = Date.now();
+      }
+      void refreshRemoteProjects();
+      return session;
+    } catch (error) {
+      if (error instanceof RemoteProjectConflictError) {
+        setRemoteConflictVersion(error.currentVersion);
+        setRemoteStatus(`Conflict · remote v${error.currentVersion}`);
+      } else {
+        setRemoteStatus(error instanceof Error ? `Local only · ${error.message}` : "Local only · Neon unavailable");
+      }
+      return null;
+    }
+  }, [refreshRemoteProjects]);
+
+  const connectCurrentProjectFolder = useCallback(async () => {
+    try {
+      await connectProjectFolder(editorState.project.projectId, editorState.project.name);
+      setFolderStatus("Project folder connected");
+    } catch (error) {
+      setFolderStatus(error instanceof Error ? error.message : "Folder connection failed");
+    }
+  }, [editorState.project.name, editorState.project.projectId]);
   const creationPreviewProject = useMemo(
     () => createCharacterProject(createKind, createName),
     [createKind, createName]
   );
+  const localAssetPathsKey = useMemo(
+    () => Object.values(editorState.project.parts).map((part) => part.assetPath).filter((path): path is string => Boolean(path?.startsWith("assets/"))).sort().join("|"),
+    [editorState.project.parts]
+  );
+
+  useEffect(() => {
+    if (!localAssetPathsKey) return;
+    let cancelled = false;
+    const urls: string[] = [];
+    void Promise.all(Object.entries(editorState.project.parts).map(async ([partId, part]) => {
+      if (!part.assetPath?.startsWith("assets/") || part.assetUrl?.startsWith("blob:")) return null;
+      try {
+        const assetUrl = await resolveProjectAssetUrl(editorState.project.projectId, editorState.project.name, part.assetPath);
+        urls.push(assetUrl);
+        return [partId, assetUrl] as const;
+      } catch {
+        return null;
+      }
+    })).then((resolved) => {
+      if (cancelled) return;
+      const entries = resolved.filter((entry): entry is readonly [string, string] => Boolean(entry));
+      if (!entries.length) {
+        setFolderStatus("Reconnect folder · local artwork missing");
+        return;
+      }
+      setFolderStatus("Project folder connected");
+      setEditorState((state) => ({
+        ...state,
+        project: {
+          ...state.project,
+          parts: {
+            ...state.project.parts,
+            ...Object.fromEntries(entries.map(([partId, assetUrl]) => {
+              const part = state.project.parts[partId]!;
+              return [partId, { ...part, assetUrl }];
+            }))
+          }
+        }
+      }));
+    });
+    return () => {
+      cancelled = true;
+      for (const url of urls) URL.revokeObjectURL(url);
+    };
+  }, [editorState.project.name, editorState.project.projectId, localAssetPathsKey]);
   const selectedBone = editorState.project.selectedBoneId;
   const selectedTransform = editorState.project.bones[selectedBone] ?? editorState.project.bones.root ?? defaultEditorProject.bones.root!;
   const selectedBoneMetadata = editorState.project.boneMetadata[selectedBone] ?? {};
@@ -946,6 +1063,10 @@ export default function EditorPage() {
     setAvailableDraft(loadDraftMeta());
   }, []);
   const replaceProject = (project: EditorProjectState, origin: ProjectOrigin, poseId = "") => {
+    if (remoteSessionRef.current?.id !== project.projectId) remoteSessionRef.current = null;
+    setRemoteConflictVersion(null);
+    setRemoteStatus("Local draft");
+    setFolderStatus("Folder not connected");
     setEditorState({ project, history: { past: [], future: [] } });
     setLastExportBundle(null);
     setRuntimeZipBytes(null);
@@ -962,6 +1083,23 @@ export default function EditorPage() {
     setDragCurve(null);
     setDragHierarchyBoneId(null);
     setDragTimelineKey(null);
+  };
+  const loadSavedCharacter = async (projectId: string) => {
+    try {
+      setCharacterLibraryStatus("Loading character…");
+      const snapshot = await loadRemoteProject(projectId);
+      const project = fromSourceProject(snapshot.sourceJson);
+      replaceProject(project, "draft", Object.keys(project.poses)[0] ?? "");
+      remoteSessionRef.current = snapshot;
+      setPreviewClipId(project.animations.idle_neutral ? "idle_neutral" : Object.keys(project.animations)[0] ?? "idle");
+      setTimelineCurrentTime(0);
+      setPreviewPlaying(true);
+      setRemoteStatus(`Neon loaded · v${snapshot.version}`);
+      setCharacterLibraryStatus(`Loaded ${snapshot.name}`);
+      setIoStatus(`loaded ${snapshot.name} from database`);
+    } catch (error) {
+      setCharacterLibraryStatus(error instanceof Error ? error.message : "Could not load character");
+    }
   };
   const loadDraftProject = () => {
     const draft = loadDraft();
@@ -982,8 +1120,48 @@ export default function EditorPage() {
     setIoStatus("sample loaded; draft cleared");
   };
   const startEmptyProject = () => {
-    replaceProject(createEmptyEditorProject(), "empty");
+    const project = createEmptyEditorProject();
+    replaceProject(project, "empty");
     setIoStatus("new empty project");
+    void connectProjectFolder(project.projectId, project.name).then(() => setFolderStatus("Project folder connected")).catch((error) => setFolderStatus(error instanceof Error ? error.message : "Folder not connected"));
+  };
+  const openRemoteConflictVersion = async () => {
+    try {
+      const snapshot = await loadRemoteProject(editorState.project.projectId);
+      const project = fromSourceProject(snapshot.sourceJson);
+      replaceProject(project, "draft", Object.keys(project.poses)[0] ?? "");
+      remoteSessionRef.current = snapshot;
+      setRemoteConflictVersion(null);
+      setRemoteStatus(`Neon loaded · v${snapshot.version}`);
+      setIoStatus("opened database version");
+    } catch (error) {
+      setIoStatus(error instanceof Error ? error.message : "could not open database version");
+    }
+  };
+  const saveConflictAsNewProject = async () => {
+    const identity = createProjectIdentity();
+    const project = { ...editorState.project, ...identity, name: `${editorState.project.name} Copy`, dirty: true };
+    replaceProject(project, "created", Object.keys(project.poses)[0] ?? "");
+    const session = await persistRemoteProject(project, "manual");
+    setIoStatus(session ? `saved as new project · Neon v${session.version}` : "new project kept locally");
+  };
+  const restoreLatestRemoteRevision = async () => {
+    try {
+      const session = remoteSessionRef.current ?? await persistRemoteProject(editorState.project);
+      if (!session) throw new Error("Neon project is unavailable.");
+      const revision = (await listRemoteRevisions(editorState.project.projectId))[0];
+      if (!revision) throw new Error("No saved revisions yet.");
+      const restored = await restoreRemoteRevision(editorState.project.projectId, revision.id, session.version);
+      remoteSessionRef.current = restored;
+      const snapshot = await loadRemoteProject(editorState.project.projectId);
+      const project = fromSourceProject(snapshot.sourceJson);
+      replaceProject(project, "draft", Object.keys(project.poses)[0] ?? "");
+      remoteSessionRef.current = snapshot;
+      setRemoteStatus(`Revision ${revision.revisionNumber} restored · v${snapshot.version}`);
+      setIoStatus(`restored revision ${revision.revisionNumber}`);
+    } catch (error) {
+      setIoStatus(error instanceof Error ? error.message : "revision restore failed");
+    }
   };
   const createSelectedCharacter = () => {
     const project = createCharacterProject(createKind, createName);
@@ -992,6 +1170,17 @@ export default function EditorPage() {
     setGuidedStep("textures");
     setPreviewPlaying(true);
     setIoStatus(`${createKind} character created`);
+    void connectProjectFolder(project.projectId, project.name).then(() => setFolderStatus("Project folder connected")).catch((error) => setFolderStatus(error instanceof Error ? error.message : "Folder not connected"));
+    void persistRemoteProject(project, "manual").then((session) => setIoStatus(session ? `${project.name} saved to database` : `${project.name} kept locally`));
+  };
+  const createMiloReporter = () => {
+    const project = createCharacterProject("milo-reporter", "Milo Reporter");
+    replaceProject(project, "created", "idle_neutral");
+    setPreviewClipId("idle_neutral");
+    setTimelineCurrentTime(0);
+    setPreviewPlaying(true);
+    setIoStatus("Milo Reporter created");
+    void persistRemoteProject(project, "manual").then((session) => setIoStatus(session ? "Milo Reporter saved to database" : "Milo Reporter kept locally"));
   };
   const openSampleInGuide = () => {
     resetToSampleProject();
@@ -1005,6 +1194,7 @@ export default function EditorPage() {
         setIoStatus(result.errors.join("; ") || "project file is invalid");
         return;
       }
+      if (remoteSessionRef.current?.id === editorState.project.projectId) await createRemoteRevision(editorState.project.projectId, "import", `Before import ${file.name}`);
       replaceProject(result.project, "imported", Object.keys(result.project.poses)[0] ?? "");
       setCreatingCharacter(false);
       setGuidedStep("character");
@@ -1012,6 +1202,13 @@ export default function EditorPage() {
     } catch (error) {
       setIoStatus(error instanceof Error ? error.message : "project import failed");
     }
+  };
+  const storeArtworkFile = async (file: File) => {
+    const stored = await writeProjectAsset(editorState.project.projectId, editorState.project.name, file);
+    const session = remoteSessionRef.current ?? await persistRemoteProject(editorState.project);
+    if (session) await upsertRemoteAsset(editorState.project.projectId, stored.metadata);
+    setFolderStatus("Project folder connected");
+    return stored;
   };
   const addGuidedArtwork = async (files: readonly File[]) => {
     const accepted = files.filter((file) => file.type === "image/png" || file.type === "image/svg+xml" || /\.(png|svg)$/i.test(file.name));
@@ -1025,7 +1222,7 @@ export default function EditorPage() {
       return;
     }
     try {
-      const parts = await Promise.all(accepted.map((file, index) => createUploadedPart(editorState.project, file, index)));
+      const parts = await Promise.all(accepted.map(async (file, index) => createUploadedPart(editorState.project, file, index, await storeArtworkFile(file))));
       if (!parts.length) {
         return;
       }
@@ -1036,11 +1233,31 @@ export default function EditorPage() {
       setIoStatus(error instanceof Error ? error.message : "artwork import failed");
     }
   };
+  const replaceStudioArtwork = async (slotId: string, file: File) => {
+    const slot = editorState.project.visualSlots[slotId];
+    if (!slot) {
+      setIoStatus("select a visual slot first");
+      return;
+    }
+    try {
+      const uploaded = await createUploadedPart(editorState.project, file, 0, await storeArtworkFile(file));
+      const part: ShapePart = { ...uploaded, boneId: slot.boneId, zIndex: slot.drawOrder };
+      runCommand(createGroupedCommand("Replace skin artwork", [
+        createAddSvgPartCommand(part),
+        createSetSkinAttachmentCommand(editorState.project.activeSkinId, slotId, part.id)
+      ]));
+      setSelectedPartId(part.id);
+      setIoStatus(`replaced ${slot.name} in ${editorState.project.skins[editorState.project.activeSkinId]?.name ?? "active skin"}`);
+    } catch (error) {
+      setIoStatus(error instanceof Error ? error.message : "artwork replacement failed");
+    }
+  };
   const saveCurrentDraft = () => {
     saveDraft(editorState.project);
     setAvailableDraft(loadDraftMeta());
     setProjectOrigin("draft");
-    setIoStatus("draft saved");
+    setIoStatus("draft saved; syncing revision");
+    void persistRemoteProject(editorState.project, "manual").then((session) => setIoStatus(session ? `saved revision · Neon v${session.version}` : "draft saved locally; Neon unavailable"));
   };
   const downloadBlob = (fileName: string, blob: Blob, status?: string) => {
     const url = URL.createObjectURL(blob);
@@ -1247,10 +1464,11 @@ export default function EditorPage() {
     setPendingImport(result);
     setIoStatus(result.errors.length ? result.errors.join("; ") : editorState.project.dirty ? "import preview ready; confirm required" : "import preview ready");
   };
-  const confirmImport = () => {
+  const confirmImport = async () => {
     if (!pendingImport?.project) {
       return;
     }
+    if (remoteSessionRef.current?.id === editorState.project.projectId) await createRemoteRevision(editorState.project.projectId, "import", "Before clipboard import");
     replaceProject(pendingImport.project, "imported", Object.keys(pendingImport.project.poses)[0] ?? "");
     setIoStatus(`imported ${pendingImport.kind ?? "project"}`);
     setPendingImport(null);
@@ -1262,11 +1480,24 @@ export default function EditorPage() {
     }
     const revision = autosave.revision;
     const handle = window.setTimeout(() => {
-      saveDraft(editorState.project);
+      const snapshot = editorState.project;
+      saveDraft(snapshot);
+      const createPeriodicRevision = Date.now() - lastRevisionAtRef.current >= 5 * 60 * 1000;
+      void persistRemoteProject(snapshot, createPeriodicRevision ? "periodic" : undefined);
       setEditorState((state) => (state.project.autosave.revision === revision ? { ...state, project: markAutosaveSaved(state.project) } : state));
     }, Math.max(0, autosave.nextSaveAt - Date.now()));
     return () => window.clearTimeout(handle);
-  }, [editorState.project, editorState.project.autosave]);
+  }, [editorState.project, editorState.project.autosave, persistRemoteProject]);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        saveCurrentDraft();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [editorState.project, persistRemoteProject]);
   const vectorizeSelectedPart = async () => {
     if (!selectedPart) {
       setIoStatus("select an SVG part first");
@@ -1373,7 +1604,7 @@ export default function EditorPage() {
     {
       label: "Procedural",
       actions: [
-        { label: "Breathing", onClick: () => runCommand(createUpdateProceduralCommand({ breathing: { ...editorState.project.procedural.breathing, enabled: true, frequency: 1, amplitude: 1.2, affectedBones: ["body", "head", "upperArmFront", "upperArmBack"] } })) },
+        { label: "Breathing", onClick: () => runCommand(createUpdateProceduralCommand({ breathing: { ...editorState.project.procedural.breathing, enabled: true, frequency: 1, amplitude: 1.2, affectedBoneTransforms: { body: { scaleX: 0.02, scaleY: 0.02 }, head: { y: -0.35 }, upperArmFront: { rotation: 0.02 }, upperArmBack: { rotation: -0.02 } } } })) },
         { label: "Foot IK", onClick: () => runCommand(createUpdateProceduralCommand({ footIk: { ...editorState.project.procedural.footIk, enabled: true, feet: ["footFront", "footBack"], maxCorrection: 8, blend: 0.75 } })) }
       ]
     },
@@ -1420,47 +1651,59 @@ export default function EditorPage() {
   );
   const showDraftBanner = availableDraft !== null && projectOrigin !== "draft";
 
-  if (!advancedMode) {
-    return (
-      <GuidedEditor
-        creating={creatingCharacter}
-        createName={createName}
-        createKind={createKind}
-        creationPreviewProject={creationPreviewProject}
+  const renderStudio = (advancedWorkspace?: ReactNode) => (
+      <StudioEditor
         project={editorState.project}
-        step={guidedStep}
         playing={previewPlaying}
         clipId={previewClipId}
+        currentTime={timelineCurrentTime}
         quality={previewQuality}
         ioStatus={ioStatus}
+        remoteStatus={remoteStatus}
+        folderStatus={folderStatus}
+        remoteConflictVersion={remoteConflictVersion}
+        remoteProjects={remoteProjects}
+        characterLibraryStatus={characterLibraryStatus}
         lastExportBundle={lastExportBundle}
-        runtimeZipBytes={runtimeZipBytes}
-        packageZipBytes={packageZipBytes}
-        onCreateNameChange={setCreateName}
-        onCreateKindChange={setCreateKind}
-        onCreate={createSelectedCharacter}
-        onOpenSample={openSampleInGuide}
-        onImportProject={importProjectFile}
-        onNewCharacter={() => setCreatingCharacter(true)}
-        onStepChange={setGuidedStep}
+        canUndo={editorState.history.past.length > 0}
+        canRedo={editorState.history.future.length > 0}
+        onRunCommand={runCommand}
+        onSelectBone={(boneId) => setEditorState((state) => ({ ...state, project: { ...state.project, selectedBoneId: boneId } }))}
         onPlayingChange={setPreviewPlaying}
         onClipChange={setPreviewClipId}
-        onSaveDraft={saveCurrentDraft}
+        onCurrentTimeChange={setTimelineCurrentTime}
+        onUndo={() => setEditorState((state) => undo(state))}
+        onRedo={() => setEditorState((state) => redo(state))}
+        onSave={saveCurrentDraft}
+        onConnectFolder={() => void connectCurrentProjectFolder()}
+        onNewProject={startEmptyProject}
+        onCreateMiloReporter={createMiloReporter}
+        onOpenRemoteConflict={() => void openRemoteConflictVersion()}
+        onSaveConflictAsNew={() => void saveConflictAsNewProject()}
+        onRestoreLatestRevision={() => void restoreLatestRemoteRevision()}
+        onRefreshRemoteProjects={() => void refreshRemoteProjects()}
+        onLoadRemoteProject={(projectId) => void loadSavedCharacter(projectId)}
+        advancedMode={mode}
+        advancedWorkspace={advancedWorkspace}
+        onCloseAdvanced={() => setAdvancedMode(false)}
         onOpenAdvanced={(nextMode) => {
           if (nextMode) {
             setMode(nextMode);
           }
           setAdvancedMode(true);
         }}
-        onFilesSelected={addGuidedArtwork}
-        onExport={exportBundle}
+        onReplaceArtwork={(slotId, file) => void replaceStudioArtwork(slotId, file)}
+        onExport={() => void exportBundle()}
       />
-    );
+  );
+
+  if (!advancedMode) {
+    return renderStudio();
   }
 
-  return (
+  const advancedWorkspace = (
     <main
-      className="grid h-dvh w-screen min-w-0 overflow-hidden bg-background text-foreground"
+      className="bones-advanced-embed grid min-w-0 overflow-hidden bg-background text-foreground"
       style={{ gridTemplateRows: `${showDraftBanner ? 118 : 84}px minmax(0,1fr) ${timelineHeight}px` }}
       aria-label="Bones editor shell"
     >
@@ -1492,7 +1735,7 @@ export default function EditorPage() {
           </ToggleGroup>
           <div className="flex items-center justify-end gap-1.5">
             <Button size="sm" variant="outline" type="button" onClick={() => setAdvancedMode(false)}>
-              Guided
+              Studio
             </Button>
             <Button size="sm" variant={previewPlaying ? "default" : "outline"} type="button" onClick={() => setPreviewPlaying(true)}>
               Play
@@ -2093,7 +2336,7 @@ export default function EditorPage() {
                   <CardContent className="grid gap-2">
                     <p className="text-xs text-muted-foreground">{pendingImport.errors.length ? pendingImport.errors.join("; ") : pendingImport.summary}</p>
                     <div className="grid grid-cols-2 gap-1">
-                      <Button size="sm" type="button" disabled={!pendingImport.project} onClick={confirmImport}>
+                      <Button size="sm" type="button" disabled={!pendingImport.project} onClick={() => void confirmImport()}>
                         Confirm Import
                       </Button>
                       <Button size="sm" type="button" variant="outline" onClick={() => setPendingImport(null)}>
@@ -2982,7 +3225,7 @@ export default function EditorPage() {
                       <Input className="h-7 text-xs" type="number" step="0.1" value={editorState.project.procedural.breathing.amplitude} onChange={(event) => runCommand(createUpdateProceduralCommand({ breathing: { ...editorState.project.procedural.breathing, enabled: true, amplitude: Number(event.target.value) } }))} aria-label="Breathing amplitude" />
                     </div>
                     <Input className="h-7 text-xs" value={proceduralBonesText} onChange={(event) => setProceduralBonesText(event.target.value)} aria-label="Breathing affected bones" />
-                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createUpdateProceduralCommand({ breathing: { ...editorState.project.procedural.breathing, enabled: true, affectedBones: parseCsvIds(proceduralBonesText) } }))}>
+                    <Button size="sm" type="button" variant="outline" onClick={() => runCommand(createUpdateProceduralCommand({ breathing: { ...editorState.project.procedural.breathing, enabled: true, affectedBoneTransforms: Object.fromEntries(parseCsvIds(proceduralBonesText).map((boneId) => [boneId, editorState.project.procedural.breathing.affectedBoneTransforms[boneId] ?? { scaleX: 0.02, scaleY: 0.02 }])) } }))}>
                       Apply Bones
                     </Button>
                   </div>
@@ -3329,6 +3572,8 @@ export default function EditorPage() {
       </Card>
     </main>
   );
+
+  return renderStudio(advancedWorkspace);
 }
 
 interface ShapeViewBox {
@@ -3420,7 +3665,7 @@ function getBoneTailPoint(project: EditorProjectState, boneId: string, rigPoints
 function countProceduralBoneRefs(project: EditorProjectState, boneId: string): number {
   const procedural = project.procedural;
   return (
-    procedural.breathing.affectedBones.filter((id) => id === boneId).length +
+    (procedural.breathing.affectedBoneTransforms[boneId] ? 1 : 0) +
     Object.keys(procedural.breathing.affectedBoneTransforms).filter((id) => id === boneId).length +
     (procedural.secondaryMotion.target === boneId ? 1 : 0) +
     (procedural.squashStretch.targetBone === boneId ? 1 : 0) +

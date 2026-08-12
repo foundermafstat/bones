@@ -9,7 +9,8 @@ import type {
   ProceduralPreset
 } from "@bones/schema";
 
-export const BONES_COMPILED_FORMAT_VERSION = "1.0.0" as const;
+export const BONES_COMPILED_FORMAT_VERSION = "1.1.0" as const;
+export const BONES_LEGACY_COMPILED_FORMAT_VERSION = "1.0.0" as const;
 
 export type NumericId = number;
 export type PackedTransform2D = readonly [
@@ -41,6 +42,25 @@ export interface CompiledRigV1 {
   readonly rootBone: NumericId;
   readonly bones: readonly CompiledBoneV1[];
   readonly parts: readonly CompiledPartV1[];
+  readonly visualSlots?: readonly CompiledVisualSlotV1[];
+  readonly skins?: readonly CompiledSkinV1[];
+  readonly defaultSkinId?: string;
+}
+
+export interface CompiledVisualSlotV1 {
+  readonly id: string;
+  readonly bone: NumericId;
+  readonly drawOrder: number;
+  readonly partIds: readonly NumericId[];
+}
+
+export interface CompiledSkinV1 {
+  readonly id: string;
+  readonly name: string;
+  readonly attachments: readonly {
+    readonly slot: NumericId;
+    readonly part: NumericId;
+  }[];
 }
 
 export interface CompiledBoneV1 {
@@ -104,7 +124,7 @@ export interface CompiledAnimationClipV1 {
 
 export interface CompiledAnimationTrackV1 {
   readonly id: NumericId;
-  readonly targetKind: "bone" | "part" | "project" | "stateMachine";
+  readonly targetKind: "bone" | "part" | "slot" | "project" | "stateMachine";
   readonly target: NumericId;
   readonly property: AnimationTrackProperty;
   readonly keyframes: readonly CompiledKeyframeV1[];
@@ -222,6 +242,7 @@ export interface CompiledLookupTablesV1 {
   readonly rigs: Readonly<Record<string, NumericId>>;
   readonly bones: Readonly<Record<string, NumericId>>;
   readonly parts: Readonly<Record<string, NumericId>>;
+  readonly visualSlots: Readonly<Record<string, NumericId>>;
   readonly animations: Readonly<Record<string, NumericId>>;
   readonly stateMachines: Readonly<Record<string, NumericId>>;
 }

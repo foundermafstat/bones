@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "db:generate": "drizzle-kit generate",
+    "db:check": "node scripts/bones-db-migrate.mjs --check",
+    "db:migrate": "node scripts/bones-db-migrate.mjs --apply",
     "test": "node --test tests/*.test.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit"
@@ -18,10 +21,13 @@
     "@bones/runtime-pixi": "workspace:*",
     "@bones/schema": "workspace:*",
     "@bones/vector-core": "workspace:*",
+    "@neondatabase/serverless": "^1.1.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^4.4.0",
+    "drizzle-orm": "^0.45.2",
+    "earcut": "^3.2.3",
     "embla-carousel-react": "^8.6.0",
     "fflate": "^0.8.3",
     "input-otp": "^1.4.2",
@@ -43,8 +49,10 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.1",
+    "@types/earcut": "^3.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "drizzle-kit": "^0.31.10",
     "tailwindcss": "^4.3.1"
   }
 }

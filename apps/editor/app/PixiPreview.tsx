@@ -7,6 +7,8 @@ import {
   sampleAnimationClip,
   qualityPresets,
   type RuntimeAnimationClip,
+  type AnimationSample,
+  type RuntimeTrackProperty,
   type RuntimeCompiledRig,
   type QualityPresetName,
   type RuntimeProfilerStats
@@ -19,12 +21,17 @@ import { vectorizeSvgParts } from "./editorVectorImport";
 interface PixiPreviewProps {
   readonly clipId: string;
   readonly compiledProject?: RuntimeCompiledRig | null;
+  readonly currentTime?: number;
+  readonly disableAnimation?: boolean;
   readonly playing: boolean;
   readonly project: EditorProjectState;
   readonly quality: QualityPresetName;
   readonly runtimeMode: "source" | "compiled";
   readonly sceneState?: PixiPreviewSceneState | undefined;
   readonly showSkeleton: boolean;
+  readonly skinId?: string;
+  readonly interactionMode?: "select" | "pose" | "preview";
+  readonly onTimeChange?: (time: number) => void;
   readonly onProfilerStats?: (stats: RuntimeProfilerStats) => void;
 }
 
@@ -37,12 +44,17 @@ interface PixiPreviewSceneState {
   readonly colliders: readonly { readonly x: number; readonly y: number; readonly width: number; readonly height: number; readonly kind: string }[];
 }
 
-export function PixiPreview({ clipId, compiledProject, playing, project, quality, runtimeMode, sceneState, showSkeleton, onProfilerStats }: PixiPreviewProps) {
+export function PixiPreview({ clipId, compiledProject, currentTime, disableAnimation, playing, project, quality, runtimeMode, sceneState, showSkeleton, skinId, interactionMode = "preview", onTimeChange, onProfilerStats }: PixiPreviewProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
-  const stateRef = useRef({ clipId, playing, sceneState, showSkeleton });
+  const stateRef = useRef({ clipId, currentTime, disableAnimation, playing, sceneState, showSkeleton, skinId, interactionMode, onTimeChange, onProfilerStats });
   const [error, setError] = useState<string | null>(null);
 
-  stateRef.current = { clipId, playing, sceneState, showSkeleton };
+  stateRef.current = { clipId, currentTime, disableAnimation, playing, sceneState, showSkeleton, skinId, interactionMode, onTimeChange, onProfilerStats };
+
+  useEffect(() => {
+    const canvas = hostRef.current?.querySelector("canvas");
+    if (canvas) canvas.style.cursor = interactionMode === "preview" ? "grab" : "default";
+  }, [interactionMode]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -81,7 +93,7 @@ export function PixiPreview({ clipId, compiledProject, playing, project, quality
           return;
         }
 
-        const rig = new RigInstance(compiled, { quality });
+        const rig = new RigInstance(compiled, { quality, ...(stateRef.current.skinId ? { skinId: stateRef.current.skinId } : {}) });
         const profiler = new RuntimeProfiler();
         const sceneLayer = new pixi.Graphics();
         const skeleton = new pixi.Graphics();
@@ -93,8 +105,9 @@ export function PixiPreview({ clipId, compiledProject, playing, project, quality
         app.stage.addChild(sceneLayer);
         app.stage.addChild(rig.container);
 
-        let time = 0;
+        let time = stateRef.current.currentTime ?? 0;
         let activeClipId = stateRef.current.clipId;
+        let activeSkinId = rig.skinId;
         let resizeFrame = 0;
         const meshBounds = getRigMeshBounds(compiled);
         const viewState = {
@@ -127,7 +140,8 @@ export function PixiPreview({ clipId, compiledProject, playing, project, quality
         resizePreview();
         const canvas = app.canvas as HTMLCanvasElement;
         canvas.style.touchAction = "none";
-        canvas.style.cursor = "grab";
+        canvas.style.cursor = stateRef.current.interactionMode === "preview" ? "grab" : "default";
+        let spacePressed = false;
         const applyZoom = (clientX: number, clientY: number, nextZoom: number) => {
           const rect = canvas.getBoundingClientRect();
           const x = clientX - rect.left;
@@ -158,6 +172,9 @@ export function PixiPreview({ clipId, compiledProject, playing, project, quality
           };
         };
         const onPointerDown = (event: PointerEvent) => {
+          if (stateRef.current.interactionMode !== "preview" && !spacePressed && event.button !== 1) {
+            return;
+          }
           canvas.setPointerCapture(event.pointerId);
           viewState.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
           viewState.pinchDistance = pointerDistance();
@@ -185,12 +202,22 @@ export function PixiPreview({ clipId, compiledProject, playing, project, quality
           viewState.pointers.delete(event.pointerId);
           viewState.pinchDistance = pointerDistance();
           if (!viewState.pointers.size) {
-            canvas.style.cursor = "grab";
+            canvas.style.cursor = stateRef.current.interactionMode === "preview" || spacePressed ? "grab" : "default";
           }
         };
         const onWheel = (event: WheelEvent) => {
           event.preventDefault();
           applyZoom(event.clientX, event.clientY, viewState.zoom * Math.exp(-event.deltaY * 0.0012));
+        };
+        const onKeyDown = (event: KeyboardEvent) => {
+          if (event.code !== "Space" || event.repeat) return;
+          spacePressed = true;
+          canvas.style.cursor = "grab";
+        };
+        const onKeyUp = (event: KeyboardEvent) => {
+          if (event.code !== "Space") return;
+          spacePressed = false;
+          canvas.style.cursor = stateRef.current.interactionMode === "preview" ? "grab" : "default";
         };
         canvas.addEventListener("pointerdown", onPointerDown);
         canvas.addEventListener("pointermove", onPointerMove);
@@ -198,15 +225,23 @@ export function PixiPreview({ clipId, compiledProject, playing, project, quality
         canvas.addEventListener("pointercancel", onPointerEnd);
         canvas.addEventListener("dblclick", centerRig);
         canvas.addEventListener("wheel", onWheel, { passive: false });
+        window.addEventListener("keydown", onKeyDown);
+        window.addEventListener("keyup", onKeyUp);
 
         const tick = (ticker: { deltaMS: number }) => {
           const current = stateRef.current;
           if (current.clipId !== activeClipId) {
             activeClipId = current.clipId;
-            time = 0;
+            time = current.currentTime ?? 0;
+          }
+          if (current.skinId && current.skinId !== activeSkinId) {
+            activeSkinId = current.skinId;
+            rig.setSkin(current.skinId);
           }
           if (current.playing) {
             time += ticker.deltaMS / 1000;
+          } else if (current.currentTime !== undefined) {
+            time = current.currentTime;
           }
           const updateStart = performance.now();
 
@@ -229,9 +264,15 @@ export function PixiPreview({ clipId, compiledProject, playing, project, quality
           rig.container.scale.set(scaleX, scale);
           drawPreviewScene(sceneLayer, scene, app.screen, scale, viewState);
 
-          const clip = getPreviewClip(compiled, current.clipId);
-          if (clip) {
-            rig.applySample(sampleAnimationClip(clip, time));
+          const clip = current.disableAnimation ? undefined : getPreviewClip(compiled, current.clipId);
+          if (current.disableAnimation) {
+            evaluateAuthoringRig(rig, compiled, undefined, 0);
+          } else if (clip) {
+            if (clip.duration > 0 && time > clip.duration) {
+              time = clip.loop ? time % clip.duration : clip.duration;
+            }
+            evaluateAuthoringRig(rig, compiled, clip, time, current.playing ? ticker.deltaMS / 1000 : undefined);
+            if (current.playing) current.onTimeChange?.(time);
           } else {
             rig.update(0);
           }
@@ -240,7 +281,7 @@ export function PixiPreview({ clipId, compiledProject, playing, project, quality
           const updateMs = performance.now() - updateStart;
           const stats = profiler.record({ updateMs, renderMs: ticker.deltaMS, allocations: 0 });
           if (stats.frames % 30 === 0) {
-            onProfilerStats?.({ ...stats });
+            current.onProfilerStats?.({ ...stats });
           }
         };
 
@@ -255,6 +296,8 @@ export function PixiPreview({ clipId, compiledProject, playing, project, quality
           canvas.removeEventListener("pointercancel", onPointerEnd);
           canvas.removeEventListener("dblclick", centerRig);
           canvas.removeEventListener("wheel", onWheel);
+          window.removeEventListener("keydown", onKeyDown);
+          window.removeEventListener("keyup", onKeyUp);
           resizeObserver.disconnect();
           app.ticker.remove(tick);
           app.destroy(true, { children: true });
@@ -273,7 +316,7 @@ export function PixiPreview({ clipId, compiledProject, playing, project, quality
       cleanup?.();
       host.replaceChildren();
     };
-  }, [compiledProject, onProfilerStats, project, quality, runtimeMode]);
+  }, [compiledProject, project, quality, runtimeMode]);
 
   return (
     <>
@@ -287,8 +330,53 @@ export function PixiPreview({ clipId, compiledProject, playing, project, quality
   );
 }
 
+function evaluateAuthoringRig(rig: RigInstance, compiled: RuntimeCompiledRig, clip: RuntimeAnimationClip | undefined, time: number, statefulDelta?: number): void {
+  const authoringRig = rig as RigInstance & { evaluateAt?: (clip: RuntimeAnimationClip | undefined, time: number, params?: Readonly<Record<string, number | string | boolean>>, options?: { readonly statefulDelta?: number }) => void };
+  if (authoringRig.evaluateAt) {
+    authoringRig.evaluateAt(clip, time, {}, statefulDelta === undefined ? {} : { statefulDelta });
+    return;
+  }
+  const sample: AnimationSample = clip ? sampleAnimationClip(clip, time) : { normalizedTime: 0, localTime: time, values: [] };
+  for (const layer of compiled.proceduralLayers ?? []) {
+    if (layer.type !== "breathing" || !layer.enabled) continue;
+    const wave = Math.sin(time * Math.PI * 2 * layer.frequency) * layer.amplitude;
+    for (const [boneIdText, properties] of Object.entries(layer.affectedBones)) {
+      const boneId = Number(boneIdText);
+      const bone = compiled.rig.bones.find((item) => item.id === boneId);
+      if (!bone) continue;
+      for (const [property, amount] of Object.entries(properties) as [RuntimeTrackProperty, number][]) {
+        const existing = sample.values.find((item) => item.targetKind === "bone" && item.target === boneId && item.property === property);
+        const base = existing && typeof existing.value === "number" ? existing.value : packedTransformValue(bone.local, property);
+        if (existing) existing.value = base + amount * wave;
+        else sample.values.push({ targetKind: "bone", target: boneId, property, value: base + amount * wave });
+      }
+    }
+  }
+  rig.applySample(sample);
+}
+
+function packedTransformValue(transform: RuntimeCompiledRig["rig"]["bones"][number]["local"], property: RuntimeTrackProperty): number {
+  if (property === "transform.x") return transform[0];
+  if (property === "transform.y") return transform[1];
+  if (property === "transform.rotation") return transform[2];
+  if (property === "transform.scaleX") return transform[3];
+  if (property === "transform.scaleY") return transform[4];
+  if (property === "transform.skewX") return transform[5];
+  if (property === "transform.skewY") return transform[6];
+  return 0;
+}
+
 async function compilePreviewRig(project: EditorProjectState): Promise<RuntimeCompiledRig> {
-  const vectorProject = await vectorizeSvgParts(project);
+  const previewProject: EditorProjectState = {
+    ...project,
+    parts: Object.fromEntries(Object.entries(project.parts).map(([partId, part]) => {
+      const texture = part.assetUrl ?? (part.assetPath?.startsWith("assets/") ? undefined : part.assetPath);
+      const { assetPath: _assetPath, assetUrl: _assetUrl, ...partWithoutAsset } = part;
+      const mesh = part.mesh ? (() => { const { texture: _texture, ...meshWithoutTexture } = part.mesh; return { ...meshWithoutTexture, ...(texture ? { texture } : {}) }; })() : undefined;
+      return [partId, { ...partWithoutAsset, ...(texture ? { assetPath: texture } : {}), ...(mesh ? { mesh } : {}) }];
+    }))
+  };
+  const vectorProject = await vectorizeSvgParts(previewProject);
   return compileRig(toSourceProject(vectorProject)) as unknown as RuntimeCompiledRig;
 }
 

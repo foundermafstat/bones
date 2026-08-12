@@ -1,7 +1,10 @@
-export const BONES_SCHEMA_VERSION = "1.0.0" as const;
+export const BONES_SCHEMA_VERSION = "1.2.0" as const;
+export const BONES_LEGACY_SCHEMA_VERSION = "1.0.0" as const;
+export const BONES_PREVIOUS_SCHEMA_VERSION = "1.1.0" as const;
+export const BONES_SUPPORTED_SCHEMA_VERSIONS = [BONES_LEGACY_SCHEMA_VERSION, BONES_PREVIOUS_SCHEMA_VERSION, BONES_SCHEMA_VERSION] as const;
 export const BONES_RUNTIME_TARGET = "pixi-v8" as const;
 
-export type BonesSchemaVersion = typeof BONES_SCHEMA_VERSION;
+export type BonesSchemaVersion = (typeof BONES_SUPPORTED_SCHEMA_VERSIONS)[number];
 export type BonesRuntimeTarget = typeof BONES_RUNTIME_TARGET;
 
 export type JsonPrimitive = string | number | boolean | null;
@@ -30,7 +33,33 @@ export interface RigDefinition {
   readonly rootBoneId: string;
   readonly bones: readonly BoneDefinition[];
   readonly parts?: readonly PartDefinition[];
+  readonly visualSlots?: readonly VisualSlotDefinition[];
+  readonly skins?: readonly SkinDefinition[];
+  readonly defaultSkinId?: string;
   readonly editor?: EditorMetadata;
+}
+
+/** Stable bone/layer binding shared by every visual skin. */
+export interface VisualSlotDefinition {
+  readonly id: string;
+  readonly name: string;
+  readonly boneId: string;
+  readonly drawOrder: number;
+  readonly partIds?: readonly string[];
+  readonly editor?: EditorMetadata;
+}
+
+/** A named appearance that maps stable slots to existing part assets. */
+export interface SkinDefinition {
+  readonly id: string;
+  readonly name: string;
+  readonly attachments: readonly SkinAttachmentDefinition[];
+  readonly editor?: EditorMetadata;
+}
+
+export interface SkinAttachmentDefinition {
+  readonly slotId: string;
+  readonly partId: string;
 }
 
 export interface BoneDefinition {
@@ -151,7 +180,7 @@ export interface AnimationClip {
   readonly editor?: EditorMetadata;
 }
 
-export type AnimationTrackTargetKind = "bone" | "part" | "project" | "stateMachine";
+export type AnimationTrackTargetKind = "bone" | "part" | "slot" | "project" | "stateMachine";
 
 export interface AnimationTrackTarget {
   readonly kind: AnimationTrackTargetKind;
@@ -169,6 +198,7 @@ export type AnimationTrackProperty =
   | "visible"
   | "opacity"
   | "drawOrder"
+  | "attachment"
   | "procedural.params"
   | "deform"
   | "event"

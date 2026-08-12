@@ -17,9 +17,12 @@ export interface BoneTransform {
   readonly scaleY: number;
 }
 
-export type CharacterKind = "human" | "dog";
+export type CharacterKind = "human" | "dog" | "cat";
 
 export interface EditorProjectState {
+  readonly projectId: string;
+  readonly rigId: string;
+  readonly stateMachineId: string;
   readonly name: string;
   readonly characterKind: CharacterKind;
   readonly selectedBoneId: string;
@@ -27,7 +30,13 @@ export interface EditorProjectState {
   readonly parents: Readonly<Record<string, string | null>>;
   readonly bones: Readonly<Record<string, BoneTransform>>;
   readonly boneMetadata: Readonly<Record<string, BoneMetadata>>;
+  readonly boneLengths: Readonly<Record<string, number>>;
+  readonly topology: EditorRigTopology;
   readonly parts: Readonly<Record<string, ShapePart>>;
+  readonly visualSlots: Readonly<Record<string, EditorVisualSlot>>;
+  readonly skins: Readonly<Record<string, EditorSkin>>;
+  readonly activeSkinId: string;
+  readonly ikChains: Readonly<Record<string, EditorIkChain>>;
   readonly poses: Readonly<Record<string, PoseDefinition>>;
   readonly poseClipboard: PoseDefinition | null;
   readonly animations: Readonly<Record<string, AnimationClip>>;
@@ -56,6 +65,36 @@ export interface BoneMetadataPatch {
   readonly facing?: -1 | 1 | undefined;
 }
 
+export interface EditorJoint {
+  readonly id: string;
+  readonly name: string;
+  readonly boneId: string;
+}
+
+export interface EditorBoneSegment {
+  readonly id: string;
+  readonly name: string;
+  readonly startJointId: string;
+  readonly endJointId: string;
+  readonly boneId: string;
+  readonly groupId: string;
+}
+
+export interface EditorBoneGroup {
+  readonly id: string;
+  readonly name: string;
+  readonly boneIds: readonly string[];
+  readonly locked?: boolean;
+  readonly hidden?: boolean;
+}
+
+export interface EditorRigTopology {
+  readonly joints: Readonly<Record<string, EditorJoint>>;
+  readonly segments: Readonly<Record<string, EditorBoneSegment>>;
+  readonly groups: Readonly<Record<string, EditorBoneGroup>>;
+  readonly activeGroupId: string;
+}
+
 export interface ShapePart {
   readonly id: string;
   readonly boneId: string;
@@ -66,11 +105,95 @@ export interface ShapePart {
   readonly mesh?: MeshShape;
   readonly preset: "tapered-limb" | "organic-blob" | "capsule" | undefined;
   readonly assetPath?: string;
+  readonly assetUrl?: string;
   readonly svgViewBox?: readonly [number, number, number, number];
   readonly width?: number;
   readonly anchor?: readonly [number, number];
   readonly offset?: readonly [number, number];
+  readonly rotation?: number;
+  readonly scale?: readonly [number, number];
+  readonly opacity?: number;
   readonly zIndex?: number;
+}
+
+export interface EditorVisualSlot {
+  readonly id: string;
+  readonly name: string;
+  readonly boneId: string;
+  readonly drawOrder: number;
+  readonly partIds: readonly string[];
+  readonly visible?: boolean;
+  readonly locked?: boolean;
+}
+
+export interface EditorSkin {
+  readonly id: string;
+  readonly name: string;
+  readonly attachments: Readonly<Record<string, string | null>>;
+}
+
+export interface EditorIkChain {
+  readonly id: string;
+  readonly name: string;
+  readonly rootBoneId: string;
+  readonly middleBoneId: string;
+  readonly endBoneId: string;
+  readonly bendDirection: -1 | 1;
+  readonly poleAngle: number;
+  readonly stretch: boolean;
+}
+
+export function createEditorAppearance(parts: Readonly<Record<string, ShapePart>>): {
+  readonly visualSlots: Readonly<Record<string, EditorVisualSlot>>;
+  readonly skins: Readonly<Record<string, EditorSkin>>;
+  readonly activeSkinId: string;
+} {
+  const orderedParts = Object.values(parts).sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
+  return {
+    visualSlots: Object.fromEntries(
+      orderedParts.map((part, index) => [
+        part.id,
+        { id: part.id, name: humanizeEditorId(part.id.replace(/Shape$/, "")), boneId: dominantPartBone(part) ?? part.boneId, drawOrder: part.zIndex ?? index, partIds: [part.id] }
+      ])
+    ),
+    skins: {
+      default: { id: "default", name: "Default", attachments: Object.fromEntries(orderedParts.map((part) => [part.id, part.id])) }
+    },
+    activeSkinId: "default"
+  };
+}
+
+function dominantPartBone(part: ShapePart): string | undefined {
+  const weights = new Map<string, number>();
+  for (const vertex of part.mesh?.skin ?? []) {
+    for (const influence of vertex) weights.set(influence.boneId, (weights.get(influence.boneId) ?? 0) + influence.weight);
+  }
+  return [...weights.entries()].sort((left, right) => right[1] - left[1])[0]?.[0];
+}
+
+export function createDefaultEditorIkChains(bones: Readonly<Record<string, BoneTransform>>): Readonly<Record<string, EditorIkChain>> {
+  const candidates: readonly EditorIkChain[] = [
+    { id: "frontArm", name: "Front arm", rootBoneId: "upperArmFront", middleBoneId: "forearmFront", endBoneId: "handFront", bendDirection: 1, poleAngle: -35, stretch: false },
+    { id: "rearArm", name: "Rear arm", rootBoneId: "upperArmBack", middleBoneId: "forearmBack", endBoneId: "handBack", bendDirection: -1, poleAngle: 35, stretch: false },
+    { id: "frontLeg", name: "Front leg", rootBoneId: "thighFront", middleBoneId: "shinFront", endBoneId: "footFront", bendDirection: 1, poleAngle: -20, stretch: false },
+    { id: "rearLeg", name: "Rear leg", rootBoneId: "thighBack", middleBoneId: "shinBack", endBoneId: "footBack", bendDirection: -1, poleAngle: 20, stretch: false },
+    { id: "darkFrontArm", name: "Front arm", rootBoneId: "bone13", middleBoneId: "bone18", endBoneId: "bone19", bendDirection: -1, poleAngle: 35, stretch: false },
+    { id: "darkRearArm", name: "Rear arm", rootBoneId: "bone14", middleBoneId: "bone15", endBoneId: "bone16", bendDirection: 1, poleAngle: -35, stretch: false },
+    { id: "darkRearLeg", name: "Rear leg", rootBoneId: "bone2", middleBoneId: "bone3", endBoneId: "bone4", bendDirection: -1, poleAngle: 18, stretch: false },
+    { id: "darkFrontLeg", name: "Front leg", rootBoneId: "bone6", middleBoneId: "bone7", endBoneId: "bone8", bendDirection: 1, poleAngle: -18, stretch: false }
+  ];
+  return Object.fromEntries(candidates.filter((chain) => bones[chain.rootBoneId] && bones[chain.middleBoneId] && bones[chain.endBoneId]).map((chain) => [chain.id, chain]));
+}
+
+export function hasAnimatedDrawOrderTracks(project: Pick<EditorProjectState, "animations">): boolean {
+  return Object.values(project.animations).some((clip) => Object.keys(clip.tracks).some((trackId) => trackId.endsWith(".drawOrder")));
+}
+
+function humanizeEditorId(value: string): string {
+  return value
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/^./, (letter) => letter.toUpperCase());
 }
 
 export interface PoseDefinition {
@@ -306,6 +429,34 @@ export const initialAutosaveState: AutosaveState = {
   nextSaveAt: 0
 };
 
+export function createProjectIdentity(): Pick<EditorProjectState, "projectId" | "rigId" | "stateMachineId"> {
+  const id = globalThis.crypto?.randomUUID?.() ?? `bones-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+  return { projectId: id, rigId: `${id}-rig`, stateMachineId: `${id}-state-machine` };
+}
+
+export function createEditorTopology(
+  hierarchy: readonly string[],
+  parents: Readonly<Record<string, string | null>>,
+  groups?: readonly EditorBoneGroup[]
+): EditorRigTopology {
+  const joints = Object.fromEntries(hierarchy.map((boneId) => [boneId, { id: boneId, name: humanizeEditorId(boneId), boneId }]));
+  const segments = Object.fromEntries(hierarchy.flatMap((boneId) => {
+    const parentId = parents[boneId];
+    if (!parentId) return [];
+    const groupId = groups?.find((group) => group.boneIds.includes(boneId))?.id ?? "skeleton";
+    const id = `${parentId}--${boneId}`;
+    return [[id, { id, name: humanizeEditorId(boneId), startJointId: parentId, endJointId: boneId, boneId, groupId }]];
+  }));
+  const fallbackGroup: EditorBoneGroup = { id: "skeleton", name: "Skeleton", boneIds: hierarchy.filter((boneId) => Boolean(parents[boneId])) };
+  const normalizedGroups = groups?.length ? groups : [fallbackGroup];
+  return {
+    joints,
+    segments,
+    groups: Object.fromEntries(normalizedGroups.map((group) => [group.id, group])),
+    activeGroupId: normalizedGroups[0]?.id ?? fallbackGroup.id
+  };
+}
+
 const emptyProceduralState: ProceduralPresetState = {
   inputs: { velocityX: 0, velocityY: 0, gravity: 1, wind: 0, grounded: true, jumpStart: false, landHeavy: false },
   breathing: { enabled: false, frequency: 0.8, amplitude: 0, affectedBones: [], affectedBoneTransforms: {} },
@@ -315,15 +466,25 @@ const emptyProceduralState: ProceduralPresetState = {
 };
 
 export function createEmptyEditorProject(): EditorProjectState {
+  const identity = createProjectIdentity();
+  const hierarchy = ["root"] as const;
+  const parents = { root: null } as const;
   return {
+    ...identity,
     name: "Untitled Rig",
     characterKind: "human",
     selectedBoneId: "root",
-    hierarchy: ["root"],
-    parents: { root: null },
+    hierarchy,
+    parents,
     bones: { root: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 } },
     boneMetadata: {},
+    boneLengths: { root: 0 },
+    topology: createEditorTopology(hierarchy, parents, [{ id: "skeleton", name: "Skeleton", boneIds: [] }]),
     parts: {},
+    visualSlots: {},
+    skins: { default: { id: "default", name: "Default", attachments: {} } },
+    activeSkinId: "default",
+    ikChains: {},
     poses: {},
     poseClipboard: null,
     animations: {},
@@ -338,6 +499,7 @@ export function createEmptyEditorProject(): EditorProjectState {
 }
 
 export const initialEditorProject: EditorProjectState = {
+  ...createProjectIdentity(),
   name: "Shadow Hero",
   characterKind: "human",
   selectedBoneId: "body",
@@ -381,6 +543,15 @@ export const initialEditorProject: EditorProjectState = {
     footFront: { x: 5, y: 78, rotation: 0.12, scaleX: 1, scaleY: 1 }
   },
   boneMetadata: {},
+  boneLengths: {},
+  topology: createEditorTopology(
+    ["root", "body", "head", "upperArmBack", "forearmBack", "handBack", "upperArmFront", "forearmFront", "handFront", "pelvis", "thighBack", "shinBack", "footBack", "thighFront", "shinFront", "footFront"],
+    {
+      root: null, body: "root", head: "body", upperArmBack: "body", forearmBack: "upperArmBack", handBack: "forearmBack",
+      upperArmFront: "body", forearmFront: "upperArmFront", handFront: "forearmFront", pelvis: "body", thighBack: "pelvis",
+      shinBack: "thighBack", footBack: "shinBack", thighFront: "pelvis", shinFront: "thighFront", footFront: "shinFront"
+    }
+  ),
   parts: {
     headShape: { id: "headShape", boneId: "head", type: "svg", pivot: [0, 0], points: [], preset: undefined, assetPath: "/assets/shadow-hero-silhouette/part_01_rear_head_hair.svg", width: 118, anchor: [0.5, 0.72], zIndex: 8 },
     bodyShape: { id: "bodyShape", boneId: "body", type: "svg", pivot: [0, 0], points: [], preset: undefined, assetPath: "/assets/shadow-hero-silhouette/part_08_back_torso.svg", width: 94, anchor: [0.5, 0.36], zIndex: 5 },
@@ -397,6 +568,15 @@ export const initialEditorProject: EditorProjectState = {
     thighFrontShape: { id: "thighFrontShape", boneId: "thighFront", type: "svg", pivot: [0, 0], points: [], preset: undefined, assetPath: "/assets/shadow-hero-silhouette/part_18_right_thigh.svg", width: 52, anchor: [0.5, 0.05], zIndex: 4 },
     shinFrontShape: { id: "shinFrontShape", boneId: "shinFront", type: "svg", pivot: [0, 0], points: [], preset: undefined, assetPath: "/assets/shadow-hero-silhouette/part_25_right_lower_leg.svg", width: 44, anchor: [0.5, 0.06], zIndex: 4 },
     footFrontShape: { id: "footFrontShape", boneId: "footFront", type: "svg", pivot: [0, 0], points: [], preset: undefined, assetPath: "/assets/shadow-hero-silhouette/part_27_right_boot.svg", width: 70, anchor: [0.48, 0.16], zIndex: 4 }
+  },
+  visualSlots: {},
+  skins: { default: { id: "default", name: "Default", attachments: {} } },
+  activeSkinId: "default",
+  ikChains: {
+    frontArm: { id: "frontArm", name: "Front arm", rootBoneId: "upperArmFront", middleBoneId: "forearmFront", endBoneId: "handFront", bendDirection: 1, poleAngle: -35, stretch: false },
+    rearArm: { id: "rearArm", name: "Rear arm", rootBoneId: "upperArmBack", middleBoneId: "forearmBack", endBoneId: "handBack", bendDirection: -1, poleAngle: 35, stretch: false },
+    frontLeg: { id: "frontLeg", name: "Front leg", rootBoneId: "thighFront", middleBoneId: "shinFront", endBoneId: "footFront", bendDirection: 1, poleAngle: -20, stretch: false },
+    rearLeg: { id: "rearLeg", name: "Rear leg", rootBoneId: "thighBack", middleBoneId: "shinBack", endBoneId: "footBack", bendDirection: -1, poleAngle: 20, stretch: false }
   },
   poses: {
     idle_neutral: { id: "idle_neutral", name: "Idle neutral", boneTransforms: {}, tags: ["idle"] },
@@ -605,9 +785,144 @@ export function createAddBoneCommand(parentId: string, boneId: string): EditorCo
       selectedBoneId: boneId,
       hierarchy: state.hierarchy.includes(boneId) ? state.hierarchy : [...state.hierarchy, boneId],
       parents: { ...state.parents, [boneId]: parentId },
-      bones: { ...state.bones, [boneId]: transform }
+      bones: { ...state.bones, [boneId]: transform },
+      boneLengths: { ...state.boneLengths, [boneId]: 0 },
+      topology: addJointToTopology(state.topology, boneId)
     }),
     undo: (state) => removeBone(state, boneId, parentId)
+  };
+}
+
+export function createAddJointCommand(boneId: string, position: readonly [number, number]): EditorCommand {
+  let previous: EditorProjectState | undefined;
+  return {
+    id: `add-joint:${boneId}`,
+    label: "Add joint",
+    do: (state) => {
+      if (state.bones[boneId]) return state;
+      previous = state;
+      const transform: BoneTransform = { x: position[0], y: position[1], rotation: 0, scaleX: 1, scaleY: 1 };
+      return {
+        ...markDirty(state, boneId, "bones"),
+        selectedBoneId: boneId,
+        hierarchy: [...state.hierarchy, boneId],
+        parents: { ...state.parents, [boneId]: state.hierarchy[0] ?? "root" },
+        bones: { ...state.bones, [boneId]: transform },
+        boneLengths: { ...state.boneLengths, [boneId]: 0 },
+        topology: addJointToTopology(state.topology, boneId)
+      };
+    },
+    undo: () => previous ?? initialEditorProject
+  };
+}
+
+export function createConnectJointsCommand(
+  startJointId: string,
+  endJointId: string,
+  groupId: string,
+  endWorldPosition?: readonly [number, number]
+): EditorCommand {
+  let previous: EditorProjectState | undefined;
+  return {
+    id: `connect-joints:${startJointId}:${endJointId}`,
+    label: "Create bone",
+    do: (state) => {
+      if (!state.bones[startJointId] || startJointId === endJointId || wouldCreateCycle(state.parents, endJointId, startJointId)) return state;
+      previous = state;
+      const topology = ensureTopologyGroup(state.topology, groupId);
+      const startWorld = calculateBoneWorldPosition(state, startJointId);
+      const parentRotation = calculateBoneWorldRotation(state, startJointId);
+      const targetWorld = endWorldPosition ?? calculateBoneWorldPosition(state, endJointId);
+      const dx = targetWorld[0] - startWorld[0];
+      const dy = targetWorld[1] - startWorld[1];
+      const cos = Math.cos(-parentRotation);
+      const sin = Math.sin(-parentRotation);
+      const local: BoneTransform = {
+        x: dx * cos - dy * sin,
+        y: dx * sin + dy * cos,
+        rotation: state.bones[endJointId]?.rotation ?? 0,
+        scaleX: state.bones[endJointId]?.scaleX ?? 1,
+        scaleY: state.bones[endJointId]?.scaleY ?? 1
+      };
+      const isNew = !state.bones[endJointId];
+      const hierarchy = isNew ? [...state.hierarchy, endJointId] : state.hierarchy;
+      const nextTopology = connectTopologyJoints(addJointToTopology(topology, endJointId), startJointId, endJointId, groupId);
+      return {
+        ...markDirty(state, endJointId, "bones"),
+        selectedBoneId: endJointId,
+        hierarchy,
+        parents: { ...state.parents, [endJointId]: startJointId },
+        bones: { ...state.bones, [endJointId]: local },
+        boneLengths: { ...state.boneLengths, [endJointId]: Math.hypot(dx, dy) },
+        topology: nextTopology
+      };
+    },
+    undo: () => previous ?? initialEditorProject
+  };
+}
+
+export function createBoneGroupCommand(id: string, name: string): EditorCommand {
+  let previous: EditorRigTopology | undefined;
+  return {
+    id: `add-bone-group:${id}`,
+    label: "Add bone group",
+    do: (state) => {
+      if (state.topology.groups[id]) return state;
+      previous = state.topology;
+      return {
+        ...markDirty(state, id, "bones"),
+        topology: { ...state.topology, groups: { ...state.topology.groups, [id]: { id, name, boneIds: [] } }, activeGroupId: id }
+      };
+    },
+    undo: (state) => previous ? { ...markDirty(state, id, "bones"), topology: previous } : state
+  };
+}
+
+export function createUpdateBoneGroupCommand(groupId: string, patch: Partial<Omit<EditorBoneGroup, "id">>): EditorCommand {
+  let previous: EditorBoneGroup | undefined;
+  return {
+    id: `update-bone-group:${groupId}`,
+    label: "Update bone group",
+    do: (state) => {
+      const group = state.topology.groups[groupId];
+      if (!group) return state;
+      previous = group;
+      return { ...markDirty(state, groupId, "bones"), topology: { ...state.topology, groups: { ...state.topology.groups, [groupId]: { ...group, ...patch } } } };
+    },
+    undo: (state) => previous ? { ...markDirty(state, groupId, "bones"), topology: { ...state.topology, groups: { ...state.topology.groups, [groupId]: previous } } } : state
+  };
+}
+
+export function createMoveBoneToGroupCommand(boneId: string, groupId: string): EditorCommand {
+  let previous: EditorRigTopology | undefined;
+  return {
+    id: `move-bone-group:${boneId}:${groupId}`,
+    label: "Move bone to group",
+    do: (state) => {
+      if (!state.bones[boneId] || !state.topology.groups[groupId]) return state;
+      previous = state.topology;
+      const groups = Object.fromEntries(Object.entries(state.topology.groups).map(([id, group]) => [id, {
+        ...group,
+        boneIds: id === groupId ? [...new Set([...group.boneIds, boneId])] : group.boneIds.filter((id) => id !== boneId)
+      }]));
+      const segments = Object.fromEntries(Object.entries(state.topology.segments).map(([id, segment]) => [id, segment.boneId === boneId ? { ...segment, groupId } : segment]));
+      return { ...markDirty(state, boneId, "bones"), topology: { ...state.topology, groups, segments, activeGroupId: groupId } };
+    },
+    undo: (state) => previous ? { ...markDirty(state, boneId, "bones"), topology: previous } : state
+  };
+}
+
+export function createSetActiveBoneGroupCommand(groupId: string): EditorCommand {
+  let previous = "";
+  return {
+    id: `set-active-bone-group:${groupId}`,
+    label: "Set active bone group",
+    do: (state) => {
+      if (!state.topology.groups[groupId]) return state;
+      previous = state.topology.activeGroupId;
+      return { ...state, topology: { ...state.topology, activeGroupId: groupId } };
+    },
+    undo: (state) => state.topology.groups[previous] ? { ...state, topology: { ...state.topology, activeGroupId: previous } } : state
   };
 }
 
@@ -656,6 +971,160 @@ export function createSetBoneTransformCommand(boneId: string, transform: BoneTra
       return { ...markDirty(state, boneId), bones: { ...state.bones, [boneId]: transform } };
     },
     undo: (state) => (previous ? { ...markDirty(state, boneId), bones: { ...state.bones, [boneId]: previous } } : state)
+  };
+}
+
+export function createSetBoneTransformsCommand(transforms: Readonly<Record<string, BoneTransform>>, label = "Set bone transforms"): EditorCommand {
+  let previous: Readonly<Record<string, BoneTransform>> | undefined;
+  const boneIds = Object.keys(transforms);
+  return {
+    id: `set-bone-transforms:${boneIds.join(":")}`,
+    label,
+    do: (state) => {
+      const validIds = boneIds.filter((boneId) => Boolean(state.bones[boneId]));
+      if (!validIds.length) return state;
+      previous = Object.fromEntries(validIds.map((boneId) => [boneId, state.bones[boneId]!]));
+      let next = state;
+      for (const boneId of validIds) next = markDirty(next, boneId, "bones");
+      return { ...next, bones: { ...state.bones, ...Object.fromEntries(validIds.map((boneId) => [boneId, transforms[boneId]!])) } };
+    },
+    undo: (state) => (previous ? { ...markDirty(state, boneIds[0] ?? "bones", "bones"), bones: { ...state.bones, ...previous } } : state)
+  };
+}
+
+export function createSetActiveSkinCommand(skinId: string): EditorCommand {
+  let previous = "";
+  return {
+    id: `set-active-skin:${skinId}`,
+    label: "Set active skin",
+    do: (state) => {
+      if (!state.skins[skinId]) return state;
+      previous = state.activeSkinId;
+      return { ...markDirty(state, skinId, "project"), activeSkinId: skinId };
+    },
+    undo: (state) => (state.skins[previous] ? { ...markDirty(state, previous, "project"), activeSkinId: previous } : state)
+  };
+}
+
+export function createSkinCommand(id: string, name: string, sourceSkinId?: string): EditorCommand {
+  return {
+    id: `create-skin:${id}`,
+    label: "Create skin",
+    do: (state) => {
+      if (state.skins[id]) return state;
+      const source = state.skins[sourceSkinId ?? state.activeSkinId];
+      return {
+        ...markDirty(state, id, "project"),
+        skins: { ...state.skins, [id]: { id, name, attachments: { ...(source?.attachments ?? {}) } } },
+        activeSkinId: id
+      };
+    },
+    undo: (state) => {
+      const { [id]: _removed, ...skins } = state.skins;
+      const activeSkinId = sourceSkinId && skins[sourceSkinId] ? sourceSkinId : Object.keys(skins)[0] ?? "default";
+      return { ...markDirty(state, id, "project"), skins, activeSkinId };
+    }
+  };
+}
+
+export function createRenameSkinCommand(skinId: string, name: string): EditorCommand {
+  let previous = "";
+  return {
+    id: `rename-skin:${skinId}`,
+    label: "Rename skin",
+    do: (state) => {
+      const skin = state.skins[skinId];
+      if (!skin) return state;
+      previous = skin.name;
+      return { ...markDirty(state, skinId, "project"), skins: { ...state.skins, [skinId]: { ...skin, name } } };
+    },
+    undo: (state) => {
+      const skin = state.skins[skinId];
+      return skin ? { ...markDirty(state, skinId, "project"), skins: { ...state.skins, [skinId]: { ...skin, name: previous } } } : state;
+    }
+  };
+}
+
+export function createSetSkinAttachmentCommand(skinId: string, slotId: string, partId: string | null): EditorCommand {
+  let previous: string | null | undefined;
+  return {
+    id: `set-skin-attachment:${skinId}:${slotId}:${partId ?? "hidden"}`,
+    label: "Set skin attachment",
+    do: (state) => {
+      const skin = state.skins[skinId];
+      if (!skin || !state.visualSlots[slotId] || (partId !== null && !state.parts[partId])) return state;
+      previous = skin.attachments[slotId];
+      return { ...markDirty(state, slotId, "parts"), skins: { ...state.skins, [skinId]: { ...skin, attachments: { ...skin.attachments, [slotId]: partId } } } };
+    },
+    undo: (state) => {
+      const skin = state.skins[skinId];
+      if (!skin) return state;
+      const attachments = { ...skin.attachments };
+      if (previous === undefined) delete attachments[slotId];
+      else attachments[slotId] = previous;
+      return { ...markDirty(state, slotId, "parts"), skins: { ...state.skins, [skinId]: { ...skin, attachments } } };
+    }
+  };
+}
+
+export function createSetVisualSlotOrderCommand(slotIds: readonly string[]): EditorCommand {
+  let previousSlots: Readonly<Record<string, EditorVisualSlot>> | undefined;
+  let previousParts: Readonly<Record<string, ShapePart>> | undefined;
+  return {
+    id: `set-slot-order:${slotIds.join(":")}`,
+    label: "Reorder visual layers",
+    do: (state) => {
+      const orderedIds = slotIds.filter((slotId) => Boolean(state.visualSlots[slotId]));
+      if (!orderedIds.length) return state;
+      previousSlots = state.visualSlots;
+      previousParts = state.parts;
+      const visualSlots = { ...state.visualSlots };
+      const parts = { ...state.parts };
+      orderedIds.forEach((slotId, drawOrder) => {
+        const slot = visualSlots[slotId]!;
+        visualSlots[slotId] = { ...slot, drawOrder };
+        for (const skin of Object.values(state.skins)) {
+          const partId = skin.attachments[slotId];
+          if (partId && parts[partId]) parts[partId] = { ...parts[partId]!, zIndex: drawOrder, boneId: slot.boneId };
+        }
+      });
+      return { ...markDirty(state, "visual-slots", "parts"), visualSlots, parts };
+    },
+    undo: (state) => (previousSlots && previousParts ? { ...markDirty(state, "visual-slots", "parts"), visualSlots: previousSlots, parts: previousParts } : state)
+  };
+}
+
+export function createSetVisualSlotBoneCommand(slotId: string, boneId: string): EditorCommand {
+  let previousSlot: EditorVisualSlot | undefined;
+  let previousParts: Readonly<Record<string, ShapePart>> | undefined;
+  return {
+    id: `bind-slot:${slotId}:${boneId}`,
+    label: "Bind artwork",
+    do: (state) => {
+      const slot = state.visualSlots[slotId];
+      if (!slot || !state.bones[boneId]) return state;
+      previousSlot = slot;
+      previousParts = state.parts;
+      const attachedPartIds = new Set(Object.values(state.skins).map((skin) => skin.attachments[slotId]).filter((id): id is string => Boolean(id)));
+      const parts = Object.fromEntries(Object.entries(state.parts).map(([partId, part]) => [partId, attachedPartIds.has(partId) ? { ...part, boneId } : part]));
+      return { ...markDirty(state, slotId, "parts"), visualSlots: { ...state.visualSlots, [slotId]: { ...slot, boneId } }, parts };
+    },
+    undo: (state) => previousSlot && previousParts ? { ...markDirty(state, slotId, "parts"), visualSlots: { ...state.visualSlots, [slotId]: previousSlot }, parts: previousParts } : state
+  };
+}
+
+export function createUpdateIkChainCommand(chainId: string, patch: Partial<EditorIkChain>): EditorCommand {
+  let previous: EditorIkChain | undefined;
+  return {
+    id: `update-ik-chain:${chainId}`,
+    label: "Update IK chain",
+    do: (state) => {
+      const chain = state.ikChains[chainId];
+      if (!chain) return state;
+      previous = chain;
+      return { ...markDirty(state, chainId, "bones"), ikChains: { ...state.ikChains, [chainId]: { ...chain, ...patch, id: chain.id } } };
+    },
+    undo: (state) => (previous ? { ...markDirty(state, chainId, "bones"), ikChains: { ...state.ikChains, [chainId]: previous } } : state)
   };
 }
 
@@ -926,6 +1395,98 @@ export function createSetPartPivotCommand(partId: string, pivot: readonly [numbe
       const part = state.parts[partId];
       return part ? { ...markDirty(state, partId), parts: { ...state.parts, [partId]: { ...part, pivot: previous } } } : state;
     }
+  };
+}
+
+export function createUpdatePartTransformCommand(
+  partId: string,
+  patch: Pick<Partial<ShapePart>, "offset" | "rotation" | "scale" | "opacity" | "pivot">
+): EditorCommand {
+  let previous: ShapePart | undefined;
+  return {
+    id: `update-part-transform:${partId}`,
+    label: "Update attachment transform",
+    do: (state) => {
+      const part = state.parts[partId];
+      if (!part) return state;
+      previous = part;
+      return { ...markDirty(state, partId, "parts"), parts: { ...state.parts, [partId]: { ...part, ...patch } } };
+    },
+    undo: (state) => previous ? { ...markDirty(state, partId, "parts"), parts: { ...state.parts, [partId]: previous } } : state
+  };
+}
+
+export function createSetPartMeshCommand(partId: string, mesh: MeshShape): EditorCommand {
+  let previous: ShapePart | undefined;
+  return {
+    id: `set-part-mesh:${partId}`,
+    label: "Create mesh",
+    do: (state) => {
+      const part = state.parts[partId];
+      if (!part || hasPartDeformTracks(state, partId)) return state;
+      previous = part;
+      return { ...markDirty(state, partId, "parts"), parts: { ...state.parts, [partId]: { ...part, type: "mesh", mesh } } };
+    },
+    undo: (state) => previous ? { ...markDirty(state, partId, "parts"), parts: { ...state.parts, [partId]: previous } } : state
+  };
+}
+
+export function createSetMeshVertexCommand(partId: string, vertexIndex: number, point: readonly [number, number]): EditorCommand {
+  let previous: readonly number[] | undefined;
+  return {
+    id: `set-mesh-vertex:${partId}:${vertexIndex}`,
+    label: "Move mesh vertex",
+    do: (state) => {
+      const part = state.parts[partId];
+      if (!part?.mesh || vertexIndex < 0 || vertexIndex * 2 + 1 >= part.mesh.vertices.length) return state;
+      previous = part.mesh.vertices;
+      const vertices = [...part.mesh.vertices];
+      vertices[vertexIndex * 2] = point[0];
+      vertices[vertexIndex * 2 + 1] = point[1];
+      return { ...markDirty(state, partId, "parts"), parts: { ...state.parts, [partId]: { ...part, mesh: { ...part.mesh, vertices } } } };
+    },
+    undo: (state) => {
+      const part = state.parts[partId];
+      return previous && part?.mesh ? { ...markDirty(state, partId, "parts"), parts: { ...state.parts, [partId]: { ...part, mesh: { ...part.mesh, vertices: previous } } } } : state;
+    }
+  };
+}
+
+export function createSetMeshSkinCommand(partId: string, skin: NonNullable<MeshShape["skin"]>, label = "Update mesh weights"): EditorCommand {
+  let previous: NonNullable<MeshShape["skin"]> | undefined;
+  return {
+    id: `set-mesh-skin:${partId}`,
+    label,
+    do: (state) => {
+      const part = state.parts[partId];
+      if (!part?.mesh || skin.length !== part.mesh.vertices.length / 2) return state;
+      previous = part.mesh.skin ?? [];
+      return { ...markDirty(state, partId, "parts"), parts: { ...state.parts, [partId]: { ...part, mesh: { ...part.mesh, skin: normalizeMeshSkin(skin) } } } };
+    },
+    undo: (state) => {
+      const part = state.parts[partId];
+      return previous && part?.mesh ? { ...markDirty(state, partId, "parts"), parts: { ...state.parts, [partId]: { ...part, mesh: { ...part.mesh, skin: previous } } } } : state;
+    }
+  };
+}
+
+export function createClearPartDeformKeysCommand(partId: string): EditorCommand {
+  let previous: Readonly<Record<string, AnimationClip>> | undefined;
+  return {
+    id: `clear-part-deform:${partId}`,
+    label: "Clear deform keys",
+    do: (state) => {
+      previous = state.animations;
+      const trackId = `${partId}.deform`;
+      return {
+        ...markDirty(state, partId, "animations"),
+        animations: Object.fromEntries(Object.entries(state.animations).map(([clipId, clip]) => {
+          const { [trackId]: _removed, ...tracks } = clip.tracks;
+          return [clipId, { ...clip, tracks }];
+        }))
+      };
+    },
+    undo: (state) => previous ? { ...markDirty(state, partId, "animations"), animations: previous } : state
   };
 }
 
@@ -1224,7 +1785,7 @@ export function createAddKeyframeCommand(clipId: string, trackId: string, keyfra
   };
 }
 
-export function createSetKeyframeAtTimeCommand(clipId: string, trackId: string, time: number, value: number, interpolation: Keyframe["interpolation"] = "linear"): EditorCommand {
+export function createSetKeyframeAtTimeCommand(clipId: string, trackId: string, time: number, value: JsonValue, interpolation: Keyframe["interpolation"] = "linear"): EditorCommand {
   let previous: readonly Keyframe[] | undefined;
   let hadTrack = false;
   const frameEpsilon = 0.000001;
@@ -1258,6 +1819,46 @@ export function createSetKeyframeAtTimeCommand(clipId: string, trackId: string, 
       if (hadTrack) {
         return updateClipTrack(state, clipId, trackId, () => previous ?? []);
       }
+      const { [trackId]: _removed, ...tracks } = clip.tracks;
+      return { ...markDirty(state, clipId, "animations"), animations: { ...state.animations, [clipId]: { ...clip, tracks } } };
+    }
+  };
+}
+
+export function createReplaceKeyframeRangeCommand(
+  clipId: string,
+  trackId: string,
+  startTime: number,
+  endTime: number,
+  values: readonly { readonly time: number; readonly value: JsonValue; readonly interpolation?: Keyframe["interpolation"] }[]
+): EditorCommand {
+  let previous: readonly Keyframe[] | undefined;
+  let hadTrack = false;
+  const frameEpsilon = 0.000001;
+
+  return {
+    id: `replace-key-range:${clipId}:${trackId}:${startTime}:${endTime}`,
+    label: "Replace keyframe range",
+    do: (state) => {
+      const clip = state.animations[clipId];
+      if (!clip) return state;
+      hadTrack = Object.prototype.hasOwnProperty.call(clip.tracks, trackId);
+      previous = clip.tracks[trackId];
+      const snappedStart = snapKeyframe(state, { id: "range-start", time: startTime, value: null, interpolation: "step" }).time;
+      const snappedEnd = snapKeyframe(state, { id: "range-end", time: endTime, value: null, interpolation: "step" }).time;
+      const replacement = values.map((value, index) => {
+        const snapped = snapKeyframe(state, { id: "range-key", time: value.time, value: value.value, interpolation: value.interpolation ?? "step" });
+        return { ...snapped, id: `${trackId}-stream-${index}-${snapped.time.toFixed(3).replace(/[^a-zA-Z0-9_-]/g, "_")}` };
+      });
+      return updateClipTrack(state, clipId, trackId, (keys) => [
+        ...keys.filter((key) => key.time < snappedStart - frameEpsilon || key.time > snappedEnd + frameEpsilon),
+        ...replacement
+      ].sort((a, b) => a.time - b.time));
+    },
+    undo: (state) => {
+      const clip = state.animations[clipId];
+      if (!clip) return state;
+      if (hadTrack) return updateClipTrack(state, clipId, trackId, () => previous ?? []);
       const { [trackId]: _removed, ...tracks } = clip.tracks;
       return { ...markDirty(state, clipId, "animations"), animations: { ...state.animations, [clipId]: { ...clip, tracks } } };
     }
@@ -2030,11 +2631,12 @@ export function createUpdateProceduralCommand(next: Partial<ProceduralPresetStat
     label: "Update procedural preset",
     do: (state) => {
       previous = state.procedural;
+      const affectedBoneTransforms = next.breathing?.affectedBoneTransforms ?? state.procedural.breathing.affectedBoneTransforms;
       return {
         ...markDirty(state, "procedural"),
         procedural: {
           inputs: { ...state.procedural.inputs, ...next.inputs },
-          breathing: { ...state.procedural.breathing, ...next.breathing },
+          breathing: { ...state.procedural.breathing, ...next.breathing, affectedBoneTransforms, affectedBones: Object.keys(affectedBoneTransforms) },
           secondaryMotion: { ...state.procedural.secondaryMotion, ...next.secondaryMotion },
           squashStretch: { ...state.procedural.squashStretch, ...next.squashStretch },
           footIk: { ...state.procedural.footIk, ...next.footIk }
@@ -2153,6 +2755,7 @@ function removeBone(state: EditorProjectState, boneId: string, fallbackSelection
   const { [boneId]: _removedBone, ...bones } = state.bones;
   const { [boneId]: _removedParent, ...parents } = state.parents;
   const { [boneId]: _removedMetadata, ...boneMetadata } = state.boneMetadata;
+  const { [boneId]: _removedLength, ...boneLengths } = state.boneLengths;
   let dirtyState = markDirty(state, boneId, "bones");
   for (const partId of affectedPartIds) {
     dirtyState = markDirty(dirtyState, partId, "parts");
@@ -2163,7 +2766,7 @@ function removeBone(state: EditorProjectState, boneId: string, fallbackSelection
   for (const poseId of affectedPoseIds) {
     dirtyState = markDirty(dirtyState, poseId, "poses");
   }
-  if (state.procedural.breathing.affectedBones.includes(boneId) || state.procedural.secondaryMotion.target === boneId || state.procedural.squashStretch.targetBone === boneId || state.procedural.footIk.feet.includes(boneId)) {
+  if (state.procedural.breathing.affectedBoneTransforms[boneId] || state.procedural.secondaryMotion.target === boneId || state.procedural.squashStretch.targetBone === boneId || state.procedural.footIk.feet.includes(boneId)) {
     dirtyState = markDirty(dirtyState, "procedural", "procedural");
   }
   return {
@@ -2173,7 +2776,11 @@ function removeBone(state: EditorProjectState, boneId: string, fallbackSelection
     parents: Object.fromEntries(Object.entries(parents).map(([childId, parentId]) => [childId, parentId === boneId ? fallbackBoneId : parentId])),
     bones,
     boneMetadata,
+    boneLengths,
+    topology: removeTopologyBone(state.topology, boneId),
     parts: Object.fromEntries(Object.entries(state.parts).map(([partId, part]) => [partId, part.boneId === boneId ? { ...part, boneId: fallbackBoneId } : part])),
+    visualSlots: Object.fromEntries(Object.entries(state.visualSlots).map(([slotId, slot]) => [slotId, slot.boneId === boneId ? { ...slot, boneId: fallbackBoneId } : slot])),
+    ikChains: Object.fromEntries(Object.entries(state.ikChains).filter(([, chain]) => chain.rootBoneId !== boneId && chain.middleBoneId !== boneId && chain.endBoneId !== boneId)),
     animations: Object.fromEntries(
       Object.entries(state.animations).map(([clipId, clip]) => [
         clipId,
@@ -2201,6 +2808,7 @@ function renameBone(state: EditorProjectState, boneId: string, nextId: string): 
   const { [boneId]: _removedBone, ...bones } = state.bones;
   const { [boneId]: parent, ...parents } = state.parents;
   const { [boneId]: metadata, ...boneMetadata } = state.boneMetadata;
+  const { [boneId]: length, ...boneLengths } = state.boneLengths;
   const dirtyState = renameDirtyRefs(markDirty(state, nextId, "bones"), boneId, nextId);
   return {
     ...dirtyState,
@@ -2209,7 +2817,18 @@ function renameBone(state: EditorProjectState, boneId: string, nextId: string): 
     parents: Object.fromEntries(Object.entries({ ...parents, [nextId]: parent ?? null }).map(([child, value]) => [child, value === boneId ? nextId : value])),
     bones: { ...bones, [nextId]: current },
     boneMetadata: metadata ? { ...boneMetadata, [nextId]: metadata } : boneMetadata,
+    boneLengths: { ...boneLengths, [nextId]: length ?? 0 },
+    topology: renameTopologyBone(state.topology, boneId, nextId),
     parts: Object.fromEntries(Object.entries(state.parts).map(([partId, part]) => [partId, part.boneId === boneId ? { ...part, boneId: nextId } : part])),
+    visualSlots: Object.fromEntries(Object.entries(state.visualSlots).map(([slotId, slot]) => [slotId, slot.boneId === boneId ? { ...slot, boneId: nextId } : slot])),
+    ikChains: Object.fromEntries(
+      Object.entries(state.ikChains).map(([chainId, chain]) => [chainId, {
+        ...chain,
+        rootBoneId: chain.rootBoneId === boneId ? nextId : chain.rootBoneId,
+        middleBoneId: chain.middleBoneId === boneId ? nextId : chain.middleBoneId,
+        endBoneId: chain.endBoneId === boneId ? nextId : chain.endBoneId
+      }])
+    ),
     animations: Object.fromEntries(
       Object.entries(state.animations).map(([clipId, clip]) => [
         clipId,
@@ -2290,7 +2909,7 @@ function renameProceduralBoneRefs(procedural: ProceduralPresetState, boneId: str
     ...procedural,
     breathing: {
       ...procedural.breathing,
-      affectedBones: procedural.breathing.affectedBones.map(rename),
+      affectedBones: Object.keys(procedural.breathing.affectedBoneTransforms).map(rename),
       affectedBoneTransforms: Object.fromEntries(Object.entries(procedural.breathing.affectedBoneTransforms).map(([id, transform]) => [rename(id), transform]))
     },
     secondaryMotion: { ...procedural.secondaryMotion, target: rename(procedural.secondaryMotion.target) },
@@ -2566,4 +3185,109 @@ function renameAnimation(state: EditorProjectState, clipId: string, nextId: stri
       states: state.stateMachine.states.map((stateItem) => (stateItem.clipId === clipId ? { ...stateItem, clipId: nextId } : stateItem))
     }
   };
+}
+
+function addJointToTopology(topology: EditorRigTopology, boneId: string): EditorRigTopology {
+  if (topology.joints[boneId]) return topology;
+  return {
+    ...topology,
+    joints: { ...topology.joints, [boneId]: { id: boneId, name: humanizeEditorId(boneId), boneId } }
+  };
+}
+
+function ensureTopologyGroup(topology: EditorRigTopology, groupId: string): EditorRigTopology {
+  if (topology.groups[groupId]) return topology;
+  return {
+    ...topology,
+    groups: { ...topology.groups, [groupId]: { id: groupId, name: humanizeEditorId(groupId), boneIds: [] } }
+  };
+}
+
+function connectTopologyJoints(topology: EditorRigTopology, startJointId: string, endJointId: string, groupId: string): EditorRigTopology {
+  const group = topology.groups[groupId] ?? { id: groupId, name: humanizeEditorId(groupId), boneIds: [] };
+  const id = `${startJointId}--${endJointId}`;
+  const existingSegments = Object.fromEntries(Object.entries(topology.segments).filter(([, segment]) => segment.endJointId !== endJointId));
+  return {
+    ...topology,
+    segments: {
+      ...existingSegments,
+      [id]: { id, name: humanizeEditorId(endJointId), startJointId, endJointId, boneId: endJointId, groupId }
+    },
+    groups: {
+      ...topology.groups,
+      [groupId]: { ...group, boneIds: group.boneIds.includes(endJointId) ? group.boneIds : [...group.boneIds, endJointId] }
+    },
+    activeGroupId: groupId
+  };
+}
+
+function removeTopologyBone(topology: EditorRigTopology, boneId: string): EditorRigTopology {
+  const joints = Object.fromEntries(Object.entries(topology.joints).filter(([id]) => id !== boneId));
+  const segments = Object.fromEntries(Object.entries(topology.segments).filter(([, segment]) => segment.startJointId !== boneId && segment.endJointId !== boneId && segment.boneId !== boneId));
+  const groups = Object.fromEntries(Object.entries(topology.groups).map(([id, group]) => [id, { ...group, boneIds: group.boneIds.filter((item) => item !== boneId) }]));
+  return { ...topology, joints, segments, groups };
+}
+
+function renameTopologyBone(topology: EditorRigTopology, boneId: string, nextId: string): EditorRigTopology {
+  const joints = Object.fromEntries(Object.entries(topology.joints).map(([id, joint]) => {
+    const nextJointId = id === boneId ? nextId : id;
+    return [nextJointId, joint.boneId === boneId ? { ...joint, id: nextJointId, name: humanizeEditorId(nextId), boneId: nextId } : joint];
+  }));
+  const segments = Object.fromEntries(Object.values(topology.segments).map((segment) => {
+    const next = {
+      ...segment,
+      startJointId: segment.startJointId === boneId ? nextId : segment.startJointId,
+      endJointId: segment.endJointId === boneId ? nextId : segment.endJointId,
+      boneId: segment.boneId === boneId ? nextId : segment.boneId
+    };
+    const id = `${next.startJointId}--${next.endJointId}`;
+    return [id, { ...next, id }];
+  }));
+  const groups = Object.fromEntries(Object.entries(topology.groups).map(([id, group]) => [id, { ...group, boneIds: group.boneIds.map((item) => item === boneId ? nextId : item) }]));
+  return { ...topology, joints, segments, groups };
+}
+
+function wouldCreateCycle(parents: Readonly<Record<string, string | null>>, boneId: string, parentId: string): boolean {
+  let cursor: string | null | undefined = parentId;
+  while (cursor) {
+    if (cursor === boneId) return true;
+    cursor = parents[cursor];
+  }
+  return false;
+}
+
+function calculateBoneWorldPosition(state: EditorProjectState, boneId: string): readonly [number, number] {
+  const transform = state.bones[boneId];
+  if (!transform) return [0, 0];
+  const parentId = state.parents[boneId];
+  if (!parentId) return [transform.x, transform.y];
+  const parentPosition = calculateBoneWorldPosition(state, parentId);
+  const parentRotation = calculateBoneWorldRotation(state, parentId);
+  const cos = Math.cos(parentRotation);
+  const sin = Math.sin(parentRotation);
+  return [parentPosition[0] + transform.x * cos - transform.y * sin, parentPosition[1] + transform.x * sin + transform.y * cos];
+}
+
+function calculateBoneWorldRotation(state: EditorProjectState, boneId: string): number {
+  const transform = state.bones[boneId];
+  if (!transform) return 0;
+  const parentId = state.parents[boneId];
+  return transform.rotation + (parentId ? calculateBoneWorldRotation(state, parentId) : 0);
+}
+
+function hasPartDeformTracks(state: EditorProjectState, partId: string): boolean {
+  const trackId = `${partId}.deform`;
+  return Object.values(state.animations).some((clip) => (clip.tracks[trackId]?.length ?? 0) > 0);
+}
+
+function normalizeMeshSkin(skin: NonNullable<MeshShape["skin"]>): NonNullable<MeshShape["skin"]> {
+  return skin.map((influences) => {
+    const strongest = [...influences]
+      .filter((influence) => Number.isFinite(influence.weight) && influence.weight > 0)
+      .sort((left, right) => right.weight - left.weight)
+      .slice(0, 4);
+    const total = strongest.reduce((sum, influence) => sum + influence.weight, 0);
+    if (total <= 0) return [];
+    return strongest.map((influence) => ({ ...influence, weight: influence.weight / total }));
+  });
 }

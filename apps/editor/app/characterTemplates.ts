@@ -1,8 +1,13 @@
 import type { PathCommand } from "@bones/schema";
 import pulseFighterSource from "../public/assets/fighters/pulse/pulse.source.rig.json" with { type: "json" };
+import miloReporterSource from "../public/assets/mascots/milo-reporter/milo-reporter.source.rig.json" with { type: "json" };
 import { fromSourceProject } from "./editorSourceProject.ts";
 import {
   cleanDirtyScopes,
+  createDefaultEditorIkChains,
+  createEditorAppearance,
+  createEditorTopology,
+  createProjectIdentity,
   initialAutosaveState,
   initialEditorProject,
   type AnimationClip,
@@ -12,7 +17,7 @@ import {
   type ShapePart
 } from "./editorState.ts";
 
-export type CreationTemplate = CharacterKind | "pulse";
+export type CreationTemplate = CharacterKind | "pulse" | "milo-reporter";
 
 export const FIGHTER_PRESETS = [{ id: "pulse", name: "Pulse", archetype: "Balanced fighter" }] as const;
 
@@ -28,8 +33,12 @@ export const DOG_TEMPLATE_REFERENCE = {
 } as const;
 
 export function createHumanCharacterProject(name: string): EditorProjectState {
+  const project = structuredClone(initialEditorProject);
   return {
-    ...structuredClone(initialEditorProject),
+    ...project,
+    ...createProjectIdentity(),
+    ...createEditorAppearance(project.parts),
+    ikChains: createDefaultEditorIkChains(project.bones),
     name: characterName(name, "New Human"),
     characterKind: "human"
   };
@@ -42,13 +51,25 @@ export function createFighterCharacterProject(preset: "pulse", name: string): Ed
   const project = fromSourceProject(pulseFighterSource);
   return {
     ...project,
+    ...createProjectIdentity(),
     name: characterName(name, "Pulse"),
     characterKind: "human"
   };
 }
 
+export function createMiloReporterProject(name: string): EditorProjectState {
+  const project = fromSourceProject(miloReporterSource);
+  return {
+    ...project,
+    ...createProjectIdentity(),
+    name: characterName(name, "Milo Reporter"),
+    characterKind: "cat"
+  };
+}
+
 export function createCharacterProject(template: CreationTemplate, name: string): EditorProjectState {
   if (template === "pulse") return createFighterCharacterProject(template, name);
+  if (template === "milo-reporter" || template === "cat") return createMiloReporterProject(name);
   return template === "dog" ? createDogCharacterProject(name) : createHumanCharacterProject(name);
 }
 
@@ -126,8 +147,10 @@ export function createDogCharacterProject(name: string): EditorProjectState {
   ];
 
   const animations = createDogAnimations();
+  const partMap = Object.fromEntries(parts.map((part) => [part.id, part]));
 
   return {
+    ...createProjectIdentity(),
     name: projectName,
     characterKind: "dog",
     selectedBoneId: "torso",
@@ -187,7 +210,32 @@ export function createDogCharacterProject(name: string): EditorProjectState {
       foreUpperBack: { mirrorGroup: "fore-legs", tags: ["leg", "back-layer"] },
       foreUpperFront: { mirrorGroup: "fore-legs", tags: ["leg", "front-layer"] }
     },
-    parts: Object.fromEntries(parts.map((part) => [part.id, part])),
+    boneLengths: Object.fromEntries(hierarchy.map((boneId) => [boneId, 0])),
+    topology: createEditorTopology(hierarchy, {
+      root: null,
+      torso: "root",
+      chest: "torso",
+      neck: "chest",
+      head: "neck",
+      ear: "head",
+      tailBase: "torso",
+      tailTip: "tailBase",
+      hindUpperBack: "torso",
+      hindLowerBack: "hindUpperBack",
+      hindPawBack: "hindLowerBack",
+      foreUpperBack: "chest",
+      foreLowerBack: "foreUpperBack",
+      forePawBack: "foreLowerBack",
+      hindUpperFront: "torso",
+      hindLowerFront: "hindUpperFront",
+      hindPawFront: "hindLowerFront",
+      foreUpperFront: "chest",
+      foreLowerFront: "foreUpperFront",
+      forePawFront: "foreLowerFront"
+    }),
+    parts: partMap,
+    ...createEditorAppearance(partMap),
+    ikChains: {},
     poses: {},
     poseClipboard: null,
     animations,

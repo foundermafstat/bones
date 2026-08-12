@@ -1,0 +1,522 @@
+{
+  "expectedParts": 51,
+  "actualParts": 51,
+  "files": [
+    {
+      "file": "body_lower_coat.png",
+      "size": [
+        236,
+        232
+      ],
+      "visiblePixels": 42591,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "chest_upper_coat_v5.png",
+      "size": [
+        428,
+        512
+      ],
+      "visiblePixels": 163490,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "coat_flap_left.png",
+      "size": [
+        153,
+        262
+      ],
+      "visiblePixels": 19883,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "coat_flap_right.png",
+      "size": [
+        142,
+        260
+      ],
+      "visiblePixels": 18575,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "collar_left.png",
+      "size": [
+        148,
+        229
+      ],
+      "visiblePixels": 12751,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "collar_right.png",
+      "size": [
+        148,
+        228
+      ],
+      "visiblePixels": 12831,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "ear_left.png",
+      "size": [
+        133,
+        204
+      ],
+      "visiblePixels": 13913,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "ear_right.png",
+      "size": [
+        132,
+        204
+      ],
+      "visiblePixels": 13883,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "eyes_angry.png",
+      "size": [
+        447,
+        363
+      ],
+      "visiblePixels": 48016,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "eyes_blink.png",
+      "size": [
+        447,
+        363
+      ],
+      "visiblePixels": 50019,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "eyes_happy.png",
+      "size": [
+        447,
+        363
+      ],
+      "visiblePixels": 50396,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "eyes_neutral.png",
+      "size": [
+        447,
+        363
+      ],
+      "visiblePixels": 51666,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "eyes_sad.png",
+      "size": [
+        447,
+        363
+      ],
+      "visiblePixels": 56191,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "eyes_surprised.png",
+      "size": [
+        447,
+        363
+      ],
+      "visiblePixels": 55627,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "forearm_left.png",
+      "size": [
+        172,
+        318
+      ],
+      "visiblePixels": 40404,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "forearm_right.png",
+      "size": [
+        173,
+        317
+      ],
+      "visiblePixels": 40113,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "head_shell_v5.png",
+      "size": [
+        512,
+        454
+      ],
+      "visiblePixels": 157854,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "jaw_chin.png",
+      "size": [
+        147,
+        91
+      ],
+      "visiblePixels": 7150,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "mouth_angry_ai.png",
+      "size": [
+        248,
+        236
+      ],
+      "visiblePixels": 26976,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "mouth_angry_e.png",
+      "size": [
+        248,
+        236
+      ],
+      "visiblePixels": 23398,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "mouth_angry_fv.png",
+      "size": [
+        248,
+        236
+      ],
+      "visiblePixels": 23174,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "mouth_angry_mbp.png",
+      "size": [
+        248,
+        236
+      ],
+      "visiblePixels": 23510,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "mouth_angry_ou.png",
+      "size": [
+        248,
+        236
+      ],
+      "visiblePixels": 22479,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "mouth_happy_ai.png",
+      "size": [
+        248,
+        236
+      ],
+      "visiblePixels": 24280,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "mouth_happy_e.png",
+      "size": [
+        248,
+        236
+      ],
+      "visiblePixels": 24065,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "mouth_happy_fv.png",
+      "size": [
+        248,
+        236
+      ],
+      "visiblePixels": 22501,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "mouth_happy_mbp.png",
+      "size": [
+        248,
+        236
+      ],
+      "visiblePixels": 22760,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "mouth_happy_ou.png",
+      "size": [
+        248,
+        236
+      ],
+      "visiblePixels": 21766,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "mouth_neutral_ai.png",
+      "size": [
+        248,
+        236
+      ],
+      "visiblePixels": 24199,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "mouth_neutral_e.png",
+      "size": [
+        248,
+        236
+      ],
+      "visiblePixels": 22950,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "mouth_neutral_fv.png",
+      "size": [
+        248,
+        236
+      ],
+      "visiblePixels": 22664,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "mouth_neutral_mbp.png",
+      "size": [
+        248,
+        236
+      ],
+      "visiblePixels": 22777,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "mouth_neutral_ou.png",
+      "size": [
+        248,
+        236
+      ],
+      "visiblePixels": 21864,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "mouth_sad_ai.png",
+      "size": [
+        248,
+        236
+      ],
+      "visiblePixels": 24799,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "mouth_sad_e.png",
+      "size": [
+        248,
+        236
+      ],
+      "visiblePixels": 22885,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "mouth_sad_fv.png",
+      "size": [
+        248,
+        236
+      ],
+      "visiblePixels": 23062,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "mouth_sad_mbp.png",
+      "size": [
+        248,
+        236
+      ],
+      "visiblePixels": 23206,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "mouth_sad_ou.png",
+      "size": [
+        248,
+        236
+      ],
+      "visiblePixels": 21785,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "mouth_surprised_round.png",
+      "size": [
+        248,
+        236
+      ],
+      "visiblePixels": 28420,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "neck_ruff.png",
+      "size": [
+        184,
+        184
+      ],
+      "visiblePixels": 16353,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "paw_left.png",
+      "size": [
+        205,
+        230
+      ],
+      "visiblePixels": 21214,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "paw_open_left.png",
+      "size": [
+        205,
+        230
+      ],
+      "visiblePixels": 28262,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "paw_open_right.png",
+      "size": [
+        200,
+        231
+      ],
+      "visiblePixels": 28341,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "paw_right.png",
+      "size": [
+        200,
+        231
+      ],
+      "visiblePixels": 21305,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "scarf_center.png",
+      "size": [
+        198,
+        251
+      ],
+      "visiblePixels": 29249,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "shoulder_left.png",
+      "size": [
+        184,
+        359
+      ],
+      "visiblePixels": 49106,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "shoulder_right.png",
+      "size": [
+        184,
+        359
+      ],
+      "visiblePixels": 48752,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "upper_arm_left.png",
+      "size": [
+        179,
+        414
+      ],
+      "visiblePixels": 56879,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "upper_arm_right.png",
+      "size": [
+        179,
+        411
+      ],
+      "visiblePixels": 56341,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "whiskers_left.png",
+      "size": [
+        47,
+        57
+      ],
+      "visiblePixels": 709,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    },
+    {
+      "file": "whiskers_right.png",
+      "size": [
+        42,
+        56
+      ],
+      "visiblePixels": 632,
+      "greenFringePixels": 0,
+      "transparentCorners": true
+    }
+  ],
+  "facialAlignment": {
+    "mouthCanvasEqual": true,
+    "noseAnchorEqual": true
+  },
+  "ok": true,
+  "failures": []
+}

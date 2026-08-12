@@ -21,6 +21,8 @@ import type {
   BoneTransform,
   CharacterKind,
   DirtyScopes,
+  EditorIkChain,
+  EditorRigTopology,
   EditorProjectState,
   EditorTransition,
   Keyframe,
@@ -29,28 +31,35 @@ import type {
   ShapePart,
   TimelineState
 } from "./editorState";
-import { initialEditorProject } from "./editorState.ts";
-
-const projectId = "shadow-hero";
-const rigId = "shadow-hero-rig";
-const stateMachineId = "shadow-hero-state-machine";
+import { createDefaultEditorIkChains, createEditorAppearance, createEditorTopology, hasAnimatedDrawOrderTracks, initialEditorProject } from "./editorState.ts";
 
 export function toSourceProject(project: EditorProjectState): RigProject {
+  const canUseSlotModel = Object.keys(project.visualSlots).length > 0 || !hasAnimatedDrawOrderTracks(project);
+  const appearance = Object.keys(project.visualSlots).length ? project : { ...project, ...createEditorAppearance(project.parts) };
   const source: RigProject = {
     schemaVersion: BONES_SCHEMA_VERSION,
     runtimeTarget: BONES_RUNTIME_TARGET,
-    id: projectId,
-    projectId,
+    id: project.projectId,
+    projectId: project.projectId,
     name: project.name,
     units: "pixels",
     defaultFrameRate: 60,
     rigs: [
       {
-        id: rigId,
+        id: project.rigId,
         name: project.name,
         rootBoneId: project.hierarchy[0] ?? "root",
         bones: project.hierarchy.map((boneId) => toSourceBone(project, boneId)),
         parts: Object.values(project.parts).map(toSourcePart),
+        ...(canUseSlotModel ? {
+          visualSlots: Object.values(appearance.visualSlots).map((slot) => ({ id: slot.id, name: slot.name, boneId: slot.boneId, drawOrder: slot.drawOrder, partIds: [...slot.partIds] })),
+          skins: Object.values(appearance.skins).map((skin) => ({
+            id: skin.id,
+            name: skin.name,
+            attachments: Object.entries(skin.attachments).flatMap(([slotId, partId]) => (partId ? [{ slotId, partId }] : []))
+          })),
+          defaultSkinId: appearance.activeSkinId
+        } : {}),
         editor: {
           custom: {
             selectedBoneId: project.selectedBoneId,
@@ -60,18 +69,21 @@ export function toSourceProject(project: EditorProjectState): RigProject {
             dirtyScopes: dirtyScopesToJson(project.dirtyScopes),
             autosave: autosaveToJson(project.autosave),
             timeline: timelineToJson(project.timeline),
-            procedural: proceduralToJson(project.procedural)
+            procedural: proceduralToJson(project.procedural),
+            activeSkinId: appearance.activeSkinId,
+            ikChains: Object.values(project.ikChains).map((chain) => ({ ...chain })),
+            topology: topologyToJson(project.topology)
           }
         }
       }
     ],
     animations: Object.values(project.animations).map(toSourceAnimationClip),
-    poses: Object.values(project.poses).map((pose) => toSourcePose(pose, rigId)),
+    poses: Object.values(project.poses).map((pose) => toSourcePose(pose, project.rigId)),
     proceduralPresets: proceduralPresetsToSource(project.procedural),
     stateMachines: [
       {
-        id: stateMachineId,
-        name: "Shadow Hero State Machine",
+        id: project.stateMachineId,
+        name: `${project.name} State Machine`,
         initialStateId: project.stateMachine.initialStateId,
         states: project.stateMachine.states.map((state) => ({ id: state.id, name: state.id, clipId: state.clipId, ...(state.blendTree ? { blendTree: state.blendTree } : {}), editor: { tags: state.tags ?? [] } })),
         transitions: project.stateMachine.transitions.map(toSourceTransition),
@@ -119,11 +131,36 @@ export function fromSourceProject(sourceInput: unknown): EditorProjectState {
   );
   const parents = Object.fromEntries(rig.bones.map((bone) => [bone.id, bone.parentId ?? null]));
   const parts = Object.fromEntries((rig.parts ?? []).map((part) => [part.id, fromSourcePart(part)]));
+  const animations = Object.fromEntries((source.animations ?? []).map((clip) => [clip.id, fromSourceAnimationClip(clip)]));
+  const legacyAppearance = createEditorAppearance(parts);
+  const legacyDrawOrderBlocked = !rig.visualSlots?.length && hasAnimatedDrawOrderTracks({ animations });
+  const visualSlots = rig.visualSlots?.length
+    ? Object.fromEntries(rig.visualSlots.map((slot) => [slot.id, {
+        id: slot.id,
+        name: slot.name,
+        boneId: slot.boneId,
+        drawOrder: slot.drawOrder,
+        partIds: [...new Set([
+          ...(slot.partIds ?? []),
+          ...(rig.skins ?? []).flatMap((skin) => skin.attachments.filter((attachment) => attachment.slotId === slot.id).map((attachment) => attachment.partId))
+        ])]
+      }]))
+    : legacyDrawOrderBlocked ? {} : legacyAppearance.visualSlots;
+  const skins = rig.skins?.length
+    ? Object.fromEntries(rig.skins.map((skin) => [skin.id, { id: skin.id, name: skin.name, attachments: Object.fromEntries(skin.attachments.map((attachment) => [attachment.slotId, attachment.partId])) }]))
+    : legacyDrawOrderBlocked ? { default: { id: "default", name: "Legacy", attachments: {} } } : legacyAppearance.skins;
+  const requestedSkinId = stringValue(rig.editor?.custom?.activeSkinId) ?? rig.defaultSkinId;
+  const activeSkinId = requestedSkinId && skins[requestedSkinId] ? requestedSkinId : Object.keys(skins)[0] ?? "default";
+  const ikChains = readEditorIkChains(rig.editor?.custom?.ikChains, bones);
   const machine = source.stateMachines?.[0];
   const procedural = readProcedural(rig.editor?.custom?.procedural ?? source.editor?.custom?.procedural);
+  const topology = readEditorTopology(rig.editor?.custom?.topology, hierarchy, parents);
 
   return {
     ...initialEditorProject,
+    projectId: source.id,
+    rigId: rig.id,
+    stateMachineId: machine?.id ?? `${source.id}-state-machine`,
     name: source.name,
     characterKind: readCharacterKind(source.editor?.custom?.characterKind),
     selectedBoneId: stringValue(rig.editor?.custom?.selectedBoneId) ?? rig.rootBoneId,
@@ -131,9 +168,15 @@ export function fromSourceProject(sourceInput: unknown): EditorProjectState {
     parents,
     bones,
     boneMetadata,
+    boneLengths: Object.fromEntries(rig.bones.map((bone) => [bone.id, bone.length ?? 0])),
+    topology,
     parts,
+    visualSlots,
+    skins,
+    activeSkinId,
+    ikChains,
     poses: Object.fromEntries((source.poses ?? []).map((pose) => [pose.id, fromSourcePose(pose)])),
-    animations: Object.fromEntries((source.animations ?? []).map((clip) => [clip.id, fromSourceAnimationClip(clip)])),
+    animations,
     stateMachine: machine
       ? {
           initialStateId: machine.initialStateId,
@@ -162,6 +205,31 @@ export function fromSourceProject(sourceInput: unknown): EditorProjectState {
   };
 }
 
+function readEditorIkChains(value: unknown, bones: Readonly<Record<string, BoneTransform>>): Readonly<Record<string, EditorIkChain>> {
+  if (!Array.isArray(value)) return createDefaultEditorIkChains(bones);
+  const chains = value.flatMap((item): EditorIkChain[] => {
+    if (!item || typeof item !== "object") return [];
+    const source = item as Record<string, unknown>;
+    const id = stringValue(source.id);
+    const name = stringValue(source.name);
+    const rootBoneId = stringValue(source.rootBoneId);
+    const middleBoneId = stringValue(source.middleBoneId);
+    const endBoneId = stringValue(source.endBoneId);
+    if (!id || !name || !rootBoneId || !middleBoneId || !endBoneId || !bones[rootBoneId] || !bones[middleBoneId] || !bones[endBoneId]) return [];
+    return [{
+      id,
+      name,
+      rootBoneId,
+      middleBoneId,
+      endBoneId,
+      bendDirection: source.bendDirection === -1 ? -1 : 1,
+      poleAngle: typeof source.poleAngle === "number" ? source.poleAngle : 0,
+      stretch: source.stretch === true
+    }];
+  });
+  return Object.fromEntries(chains.map((chain) => [chain.id, chain]));
+}
+
 function toSourceBone(project: EditorProjectState, boneId: string): BoneDefinition {
   const metadata = project.boneMetadata[boneId];
   return {
@@ -169,6 +237,7 @@ function toSourceBone(project: EditorProjectState, boneId: string): BoneDefiniti
     name: boneId,
     ...(project.parents[boneId] ? { parentId: project.parents[boneId] ?? undefined } : {}),
     local: toTransform(project.bones[boneId] ?? identityTransform()),
+    ...(project.boneLengths[boneId] !== undefined ? { length: project.boneLengths[boneId] } : {}),
     ...(metadata?.mirrorGroup ? { mirrorGroup: metadata.mirrorGroup } : {}),
     ...(metadata?.tags?.length ? { tags: metadata.tags } : {}),
     ...(metadata?.locked ? { inheritRotation: false, inheritScale: false } : {}),
@@ -195,6 +264,9 @@ function toSourcePart(part: ShapePart): PartDefinition {
       width: part.width ?? null,
       anchor: part.anchor ? [...part.anchor] : null,
       offset: part.offset ? [...part.offset] : null,
+      rotation: part.rotation ?? null,
+      scale: part.scale ? [...part.scale] : null,
+      opacity: part.opacity ?? null,
       assetPath: part.assetPath ?? null
     }
   };
@@ -206,7 +278,8 @@ function toSourcePart(part: ShapePart): PartDefinition {
     boneId: part.boneId,
     type: exportedType,
     drawOrder: part.zIndex ?? 0,
-    local: part.pathCommands ? partLocalTransform(part) : identityTransform(),
+    opacity: part.opacity ?? 1,
+    local: partLocalTransform(part),
     fill: { type: "solid", color: "#050505", alpha: 1 },
     ...(exportedType === "path" ? { path: { closed: true, commands: part.pathCommands ?? pointsToPath(part.points) } } : {}),
     ...(exportedType === "procedural" ? { procedural: { preset: part.preset ?? "organic-blob" } } : {}),
@@ -222,6 +295,9 @@ function fromSourcePart(part: PartDefinition): ShapePart {
   const width = numberValue(custom?.width);
   const anchor = readNumberPair(custom?.anchor);
   const offset = readNumberPair(custom?.offset);
+  const scale = readNumberPair(custom?.scale);
+  const rotation = numberValue(custom?.rotation) ?? part.local?.rotation ?? part.transform?.rotation;
+  const opacity = numberValue(custom?.opacity) ?? part.opacity;
   const svgViewBox = readViewBox(custom?.svgViewBox);
   const pathCommands = readPathCommands(custom?.pathCommands) ?? part.path?.commands;
   return {
@@ -238,6 +314,9 @@ function fromSourcePart(part: PartDefinition): ShapePart {
     ...(width ? { width } : {}),
     ...(anchor ? { anchor } : {}),
     ...(offset ? { offset } : {}),
+    ...(rotation !== undefined ? { rotation } : {}),
+    ...(scale ? { scale } : part.local ? { scale: [part.local.scaleX, part.local.scaleY] as const } : {}),
+    ...(opacity !== undefined ? { opacity } : {}),
     zIndex: part.drawOrder ?? 0
   };
 }
@@ -304,7 +383,7 @@ function toSourceTrack(trackId: string, keyframes: readonly Keyframe[]): Animati
   const splitIndex = trackId.lastIndexOf(".");
   const targetId = splitIndex > 0 ? trackId.slice(0, splitIndex) : trackId;
   const property = splitIndex > 0 ? trackId.slice(splitIndex + 1) : "x";
-  const target = parseTrackTarget(targetId);
+  const target = parseTrackTarget(targetId, property);
   return {
     id: trackId,
     target,
@@ -397,13 +476,13 @@ function toSourceTrackProperty(property: string): AnimationTrackProperty {
   if (property === "skewY") {
     return "transform.skewY";
   }
-  if (property === "visible" || property === "opacity" || property === "drawOrder" || property === "deform") {
+  if (property === "visible" || property === "opacity" || property === "drawOrder" || property === "deform" || property === "attachment") {
     return property;
   }
   return "transform.x";
 }
 
-function parseTrackTarget(value: string): AnimationTrack["target"] {
+function parseTrackTarget(value: string, property?: string): AnimationTrack["target"] {
   const splitIndex = value.indexOf(":");
   if (splitIndex > 0) {
     const kind = value.slice(0, splitIndex);
@@ -411,11 +490,14 @@ function parseTrackTarget(value: string): AnimationTrack["target"] {
       return { kind, id: value.slice(splitIndex + 1) };
     }
   }
+  if (property === "visible" || property === "opacity" || property === "drawOrder" || property === "deform") {
+    return { kind: "part", id: value };
+  }
   return { kind: "bone", id: value };
 }
 
 function isTrackTargetKind(value: string): value is AnimationTrackTargetKind {
-  return value === "bone" || value === "part" || value === "project" || value === "stateMachine";
+  return value === "bone" || value === "part" || value === "slot" || value === "project" || value === "stateMachine";
 }
 
 function orderBones(bones: readonly BoneDefinition[], rootBoneId: string): string[] {
@@ -465,19 +547,22 @@ function identityTransform(): Transform2D {
 }
 
 function partLocalTransform(part: ShapePart): Transform2D {
+  const offset = part.offset ?? [0, 0];
+  const explicitScale = part.scale;
   if (!part.svgViewBox || !part.width) {
-    return identityTransform();
+    return { x: offset[0], y: offset[1], rotation: part.rotation ?? 0, scaleX: explicitScale?.[0] ?? 1, scaleY: explicitScale?.[1] ?? 1 };
   }
   const [, , width, height] = part.svgViewBox;
-  const scale = width > 0 ? part.width / width : 1;
+  const fittedScale = width > 0 ? part.width / width : 1;
   const anchor = part.anchor ?? [0, 0];
-  const offset = part.offset ?? [0, 0];
+  const scaleX = (explicitScale?.[0] ?? 1) * fittedScale;
+  const scaleY = (explicitScale?.[1] ?? 1) * fittedScale;
   return {
-    x: offset[0] - anchor[0] * width * scale,
-    y: offset[1] - anchor[1] * height * scale,
-    rotation: 0,
-    scaleX: scale,
-    scaleY: scale
+    x: offset[0] - anchor[0] * width * scaleX,
+    y: offset[1] - anchor[1] * height * scaleY,
+    rotation: part.rotation ?? 0,
+    scaleX,
+    scaleY
   };
 }
 
@@ -488,7 +573,7 @@ function proceduralToJson(procedural: ProceduralPresetState) {
       enabled: procedural.breathing.enabled,
       frequency: procedural.breathing.frequency,
       amplitude: procedural.breathing.amplitude,
-      affectedBones: [...procedural.breathing.affectedBones],
+      affectedBones: Object.keys(procedural.breathing.affectedBoneTransforms),
       affectedBoneTransforms: boneTransformPatchesToJson(procedural.breathing.affectedBoneTransforms)
     },
     secondaryMotion: {
@@ -576,6 +661,53 @@ function autosaveToJson(autosave: AutosaveState) {
   };
 }
 
+function topologyToJson(topology: EditorRigTopology) {
+  return {
+    joints: Object.values(topology.joints).map((joint) => ({ ...joint })),
+    segments: Object.values(topology.segments).map((segment) => ({ ...segment })),
+    groups: Object.values(topology.groups).map((group) => ({ ...group, boneIds: [...group.boneIds] })),
+    activeGroupId: topology.activeGroupId
+  };
+}
+
+function readEditorTopology(value: unknown, hierarchy: readonly string[], parents: Readonly<Record<string, string | null>>): EditorRigTopology {
+  if (!isRecord(value)) return createEditorTopology(hierarchy, parents);
+  const fallback = createEditorTopology(hierarchy, parents);
+  const groups = Array.isArray(value.groups)
+    ? value.groups.flatMap((item) => {
+        if (!isRecord(item)) return [];
+        const id = stringValue(item.id);
+        const name = stringValue(item.name);
+        if (!id || !name) return [];
+        return [{ id, name, boneIds: (readStringArray(item.boneIds) ?? []).filter((boneId) => hierarchy.includes(boneId)), ...(item.locked === true ? { locked: true } : {}), ...(item.hidden === true ? { hidden: true } : {}) }];
+      })
+    : Object.values(fallback.groups);
+  const topology = createEditorTopology(hierarchy, parents, groups.length ? groups : Object.values(fallback.groups));
+  const joints = Array.isArray(value.joints)
+    ? Object.fromEntries(value.joints.flatMap((item) => {
+        if (!isRecord(item)) return [];
+        const id = stringValue(item.id);
+        const boneId = stringValue(item.boneId);
+        if (!id || !boneId || !hierarchy.includes(boneId)) return [];
+        return [[id, { id, boneId, name: stringValue(item.name) ?? boneId }]];
+      }))
+    : topology.joints;
+  const segments = Array.isArray(value.segments)
+    ? Object.fromEntries(value.segments.flatMap((item) => {
+        if (!isRecord(item)) return [];
+        const id = stringValue(item.id);
+        const startJointId = stringValue(item.startJointId);
+        const endJointId = stringValue(item.endJointId);
+        const boneId = stringValue(item.boneId);
+        const groupId = stringValue(item.groupId);
+        if (!id || !startJointId || !endJointId || !boneId || !groupId || !joints[startJointId] || !joints[endJointId] || !topology.groups[groupId]) return [];
+        return [[id, { id, startJointId, endJointId, boneId, groupId, name: stringValue(item.name) ?? boneId }]];
+      }))
+    : topology.segments;
+  const activeGroupId = stringValue(value.activeGroupId);
+  return { ...topology, joints, segments, activeGroupId: activeGroupId && topology.groups[activeGroupId] ? activeGroupId : topology.activeGroupId };
+}
+
 function poseDeformsToJson(deforms: Readonly<Record<string, readonly (readonly [number, number])[]>>) {
   return Object.fromEntries(Object.entries(deforms).map(([partId, points]) => [partId, points.map((point) => [point[0], point[1]])]));
 }
@@ -605,13 +737,33 @@ function readProcedural(value: unknown): ProceduralPresetState {
   if (!isRecord(value)) {
     return initialEditorProject.procedural;
   }
+  const breathingValue = isRecord(value.breathing) ? value.breathing : undefined;
+  const affectedBoneTransforms = readBoneTransformPatches(breathingValue?.affectedBoneTransforms);
   return {
     inputs: isRecord(value.inputs) ? { ...initialEditorProject.procedural.inputs, ...value.inputs } : initialEditorProject.procedural.inputs,
-    breathing: isRecord(value.breathing) ? { ...initialEditorProject.procedural.breathing, ...value.breathing } : initialEditorProject.procedural.breathing,
+    breathing: breathingValue ? {
+      enabled: breathingValue.enabled === true,
+      frequency: numberValue(breathingValue.frequency) ?? initialEditorProject.procedural.breathing.frequency,
+      amplitude: numberValue(breathingValue.amplitude) ?? initialEditorProject.procedural.breathing.amplitude,
+      affectedBones: Object.keys(affectedBoneTransforms),
+      affectedBoneTransforms
+    } : initialEditorProject.procedural.breathing,
     secondaryMotion: isRecord(value.secondaryMotion) ? { ...initialEditorProject.procedural.secondaryMotion, ...value.secondaryMotion } : initialEditorProject.procedural.secondaryMotion,
     squashStretch: isRecord(value.squashStretch) ? { ...initialEditorProject.procedural.squashStretch, ...value.squashStretch } : initialEditorProject.procedural.squashStretch,
     footIk: isRecord(value.footIk) ? { ...initialEditorProject.procedural.footIk, ...value.footIk } : initialEditorProject.procedural.footIk
   };
+}
+
+function readBoneTransformPatches(value: unknown): ProceduralPresetState["breathing"]["affectedBoneTransforms"] {
+  if (!isRecord(value)) return {};
+  return Object.fromEntries(Object.entries(value).flatMap(([boneId, patch]) => {
+    if (!isRecord(patch)) return [];
+    const transform = Object.fromEntries(["x", "y", "rotation", "scaleX", "scaleY"].flatMap((property) => {
+      const amount = numberValue(patch[property]);
+      return amount === undefined ? [] : [[property, amount]];
+    }));
+    return [[boneId, transform]];
+  }));
 }
 
 function readDirtyScopes(value: unknown): DirtyScopes {
@@ -764,7 +916,7 @@ function stringValue(value: unknown): string | undefined {
 }
 
 function readCharacterKind(value: unknown): CharacterKind {
-  return value === "dog" ? "dog" : "human";
+  return value === "dog" || value === "cat" ? value : "human";
 }
 
 function numberValue(value: unknown): number | undefined {

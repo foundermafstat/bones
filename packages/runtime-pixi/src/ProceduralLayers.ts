@@ -80,6 +80,26 @@ export class ProceduralLayerStack {
     return this.output;
   }
 
+  sampleAt(time: number, params: AnimationParameters = {}, statefulDelta?: number): AnimationSample {
+    this.time = Math.max(0, time);
+    this.output.localTime = this.time;
+    this.output.normalizedTime = 0;
+    this.output.values.length = 0;
+    if (statefulDelta === undefined) this.resetStateful();
+    for (const layer of this.layers) {
+      if (layer.type === "breathing" && layer.enabled) this.applyBreathing(layer);
+      else if (statefulDelta !== undefined && layer.type === "secondaryMotion") this.applySecondary(layer, statefulDelta, params);
+      else if (statefulDelta !== undefined && layer.type === "squashStretch") this.applySquash(layer, statefulDelta, params);
+    }
+    return this.output;
+  }
+
+  private resetStateful(): void {
+    this.secondary.clear();
+    this.triggers.length = 0;
+    this.previousConditions.clear();
+  }
+
   private applyBreathing(layer: BreathingLayerConfig): void {
     const wave = Math.sin(this.time * Math.PI * 2 * layer.frequency) * layer.amplitude;
     for (const [boneId, properties] of Object.entries(layer.affectedBones)) {

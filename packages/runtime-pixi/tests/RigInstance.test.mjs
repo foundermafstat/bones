@@ -82,6 +82,55 @@ test("RigInstance creates Pixi Container hierarchy and default transforms", () =
   assert.equal(part.children[0], instance.parts[0].renderable);
 });
 
+test("orders child bone containers by their highest descendant part draw order", () => {
+  const instance = new RigInstance({
+    ...compiledFixture,
+    rig: {
+      ...compiledFixture.rig,
+      bones: [
+        { id: 0, parent: -1, local: [0, 0, 0, 1, 1, 0, 0], length: 0 },
+        { id: 1, parent: 0, local: [0, 0, 0, 1, 1, 0, 0], length: 0 },
+        { id: 2, parent: 1, local: [0, 0, 0, 1, 1, 0, 0], length: 0 }
+      ],
+      parts: [
+        { ...compiledFixture.rig.parts[0], id: 0, bone: 1, drawOrder: 4 },
+        { ...compiledFixture.rig.parts[0], id: 1, bone: 2, drawOrder: 24 }
+      ]
+    }
+  });
+  assert.equal(instance.getBoneContainer(1).sortableChildren, true);
+  assert.equal(instance.getBoneContainer(2).zIndex, 24);
+  assert.ok(instance.getBoneContainer(2).zIndex > instance.getPartContainer(0).zIndex);
+});
+
+test("shows exactly one attachment per visual slot and restores the skin fallback", () => {
+  const alternate = { ...compiledFixture.rig.parts[0], id: 1, local: [3, 2, 0.1, 1, 1, 0, 0] };
+  const instance = new RigInstance({
+    ...compiledFixture,
+    compiledFormatVersion: "1.1.0",
+    rig: {
+      ...compiledFixture.rig,
+      parts: [compiledFixture.rig.parts[0], alternate],
+      visualSlots: [{ id: "eyes", bone: 1, drawOrder: 20, partIds: [0, 1] }],
+      skins: [{ id: "default", name: "Default", attachments: [{ slot: 0, part: 0 }] }],
+      defaultSkinId: "default"
+    }
+  });
+
+  assert.equal(instance.getPartContainer(0).visible, true);
+  assert.equal(instance.getPartContainer(1).visible, false);
+  instance.applySample({
+    localTime: 0,
+    normalizedTime: 0,
+    values: [{ targetKind: "slot", target: 0, property: "attachment", value: 1 }]
+  });
+  assert.equal(instance.getPartContainer(0).visible, false);
+  assert.equal(instance.getPartContainer(1).visible, true);
+  instance.applySample({ localTime: 0, normalizedTime: 0, values: [] });
+  assert.equal(instance.getPartContainer(0).visible, true);
+  assert.equal(instance.getPartContainer(1).visible, false);
+});
+
 test("update stores params and reapplies default transforms without animation", () => {
   const instance = new RigInstance(compiledFixture);
   const body = instance.getBoneContainer(1);
