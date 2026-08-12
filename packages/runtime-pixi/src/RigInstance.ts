@@ -81,6 +81,7 @@ export class RigInstance {
 
     this.parts = this.compiled.rig.parts.map((part) => {
       const rendered = createPartRenderable(part);
+      const skinned = requiresRuntimeSkinning(part);
       const container = namedContainer(`part:${part.id}`);
       if (rendered) {
         container.addChild(rendered.renderable);
@@ -100,8 +101,8 @@ export class RigInstance {
           ...(rendered.graphicsContext ? { graphicsContext: rendered.graphicsContext } : {}),
           ...(rendered.meshBaseVertices ? { meshBaseVertices: rendered.meshBaseVertices } : {}),
           ...(rendered.meshPositions ? { meshPositions: rendered.meshPositions } : {}),
-          ...(part.mesh?.skin?.length && rendered.meshPositions ? { meshDeformOffsets: new Float32Array(rendered.meshPositions.length) } : {}),
-          ...(part.mesh?.skin?.length ? { skinned: true } : {})
+          ...(skinned && rendered.meshPositions ? { meshDeformOffsets: new Float32Array(rendered.meshPositions.length) } : {}),
+          ...(skinned ? { skinned: true } : {})
         };
       }
       return runtimePart;
@@ -559,6 +560,29 @@ export class RigInstance {
       this.boneWorldMatrices.set(bone.id, parent ? multiplyMatrices(parent, local) : local);
     }
   }
+}
+
+function requiresRuntimeSkinning(part: RuntimeCompiledRig["rig"]["parts"][number]): boolean {
+  const vertices = part.mesh?.vertices;
+  const skin = part.mesh?.skin;
+  if (!vertices || !skin?.length) {
+    return false;
+  }
+  if (skin.length * 2 !== vertices.length) {
+    return true;
+  }
+
+  const rigidlyBoundToPartBone = skin.every((influences, vertexIndex) => {
+    if (influences.length !== 1) {
+      return false;
+    }
+    const influence = influences[0]!;
+    return influence.bone === part.bone
+      && influence.weight === 1
+      && Math.abs(influence.x - vertices[vertexIndex * 2]!) < 1e-6
+      && Math.abs(influence.y - vertices[vertexIndex * 2 + 1]!) < 1e-6;
+  });
+  return !rigidlyBoundToPartBone;
 }
 
 function toRigStateMachineUpdate(state: StateMachineEvaluation, transitionWeight: number): RigStateMachineUpdate {

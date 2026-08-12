@@ -59,6 +59,7 @@ import {
   createSetMeshVertexCommand,
   createSetPartMeshCommand,
   createSetKeyframeAtTimeCommand,
+  createSetFacialGazeCommand,
   createReplaceKeyframeRangeCommand,
   createSetTimelineAutoKeyCommand,
   createSetVisualSlotOrderCommand,
@@ -88,6 +89,8 @@ type StudioWorkspace = "Select" | "Skeleton" | "Artwork" | "Face" | "Pose" | "Pr
 type TrackFilter = "all" | "selected";
 type SkeletonTool = "select" | "joint" | "bone" | "pan";
 type ArtworkMode = "place" | "bind" | "mesh" | "weights" | "deform";
+type FaceMode = "eyes" | "mouth";
+type EyeSide = "left" | "right";
 
 interface TimelineViewportPreferences {
   readonly height: number;
@@ -217,7 +220,10 @@ export function StudioEditor(props: StudioEditorProps) {
   const [uiPreferences, setUiPreferences] = useState<StudioUiPreferences>(defaultStudioUiPreferences);
   const [preferencesReady, setPreferencesReady] = useState(false);
   const [selectedSlotId, setSelectedSlotId] = useState(() => project.visualSlots.right_hand_1?.id ?? project.visualSlots.upperArmFrontShape?.id ?? "");
-  const [selectedFaceSlotId, setSelectedFaceSlotId] = useState(() => project.visualSlots.eyes?.id ?? project.visualSlots.mouth?.id ?? "eyes");
+  const [selectedFaceSlotId, setSelectedFaceSlotId] = useState(() => project.facialRig?.expressionSlots.left ?? project.visualSlots.eyes?.id ?? project.visualSlots.mouth?.id ?? "eyes");
+  const [faceMode, setFaceMode] = useState<FaceMode>("eyes");
+  const [selectedEyeSide, setSelectedEyeSide] = useState<EyeSide>("left");
+  const [linkedEyes, setLinkedEyes] = useState(() => project.facialRig?.linkedByDefault ?? true);
   const [speechEmotion, setSpeechEmotion] = useState("neutral");
   const [speechFrameStep, setSpeechFrameStep] = useState(4);
   const [selectedChainId, setSelectedChainId] = useState("");
@@ -255,6 +261,13 @@ export function StudioEditor(props: StudioEditorProps) {
     }
   }, [preferencesReady, uiPreferences]);
 
+  useEffect(() => {
+    setLinkedEyes(project.facialRig?.linkedByDefault ?? true);
+    setSelectedEyeSide("left");
+    setFaceMode("eyes");
+    setSelectedFaceSlotId(project.facialRig?.expressionSlots.left ?? project.visualSlots.eyes?.id ?? project.visualSlots.mouth?.id ?? "eyes");
+  }, [project.projectId]);
+
   const fallbackAppearance = useMemo(() => createEditorAppearance(project.parts), [project.parts]);
   const hasSlotModel = Object.keys(project.visualSlots).length > 0;
   const slotModelBlocked = !hasSlotModel && hasAnimatedDrawOrderTracks(project);
@@ -263,8 +276,20 @@ export function StudioEditor(props: StudioEditorProps) {
   const activeSkinId = skins[project.activeSkinId] ? project.activeSkinId : Object.keys(skins)[0] ?? "default";
   const activeSkin = skins[activeSkinId];
   const orderedSlots = useMemo(() => Object.values(visualSlots).sort((a, b) => a.drawOrder - b.drawOrder), [visualSlots]);
-  const faceSlots = useMemo(() => [visualSlots.eyes, visualSlots.mouth].filter((slot): slot is EditorVisualSlot => Boolean(slot)), [visualSlots]);
+  const facialRig = project.facialRig;
+  const faceSlots = useMemo(() => {
+    if (!facialRig) return [visualSlots.eyes, visualSlots.mouth].filter((slot): slot is EditorVisualSlot => Boolean(slot));
+    return [
+      visualSlots[facialRig.expressionSlots.left],
+      visualSlots[facialRig.expressionSlots.right],
+      visualSlots[facialRig.pupilSlots.left],
+      visualSlots[facialRig.pupilSlots.right],
+      visualSlots.mouth
+    ].filter((slot): slot is EditorVisualSlot => Boolean(slot));
+  }, [facialRig, visualSlots]);
   const selectedFaceSlot = visualSlots[selectedFaceSlotId] ?? faceSlots[0];
+  const selectedEyeExpressionSlot = facialRig ? visualSlots[facialRig.expressionSlots[selectedEyeSide]] : visualSlots.eyes;
+  const selectedEyePupilSlot = facialRig ? visualSlots[facialRig.pupilSlots[selectedEyeSide]] : undefined;
   const layerGroups = useMemo(() => createLayerGroups(orderedSlots), [orderedSlots]);
   const selectedSlot = visualSlots[selectedSlotId] ?? orderedSlots[orderedSlots.length - 1];
   const selectedLayerGroup = layerGroups.find((group) => group.slots.some((slot) => slot.id === selectedSlot?.id));
@@ -293,23 +318,39 @@ export function StudioEditor(props: StudioEditorProps) {
   const selectedBoneGroup = skeletonGroups.find((group) => group.boneIds.includes(selectedBoneId));
   const viewBox = useMemo(() => calculateRigViewBox(project, worldBones), [project, worldBones]);
   const activeTracks = useMemo(() => activeClip ? Object.entries(activeClip.tracks) : [], [activeClip]);
-  const selectedTimelineTargets = useMemo(
-    () => workspace === "Face" && selectedFaceSlot ? [`slot:${selectedFaceSlot.id}`] : selectedChain ? [selectedChain.rootBoneId, selectedChain.middleBoneId, selectedChain.endBoneId] : [selectedBoneId],
-    [selectedBoneId, selectedChain, selectedFaceSlot, workspace]
-  );
+  const selectedTimelineTargets = useMemo(() => {
+    if (workspace === "Face") {
+      if (facialRig && faceMode === "eyes") {
+        return [
+          `slot:${facialRig.expressionSlots.left}`,
+          `slot:${facialRig.expressionSlots.right}`,
+          `slot:${facialRig.pupilSlots.left}`,
+          `slot:${facialRig.pupilSlots.right}`,
+          facialRig.eyeAimBones.left,
+          facialRig.eyeAimBones.right,
+          ...(facialRig.irisParallaxParts ? [`part:${facialRig.irisParallaxParts.left}`, `part:${facialRig.irisParallaxParts.right}`] : [])
+        ];
+      }
+      return selectedFaceSlot ? [`slot:${selectedFaceSlot.id}`] : [];
+    }
+    return selectedChain ? [selectedChain.rootBoneId, selectedChain.middleBoneId, selectedChain.endBoneId] : [selectedBoneId];
+  }, [faceMode, facialRig, selectedBoneId, selectedChain, selectedFaceSlot, workspace]);
   const timelineBoneGroups = useMemo(
     () => createTimelineBoneGroups(project, activeTracks),
     [activeTracks, project]
   );
   const selectTimelineBone = useCallback((boneId: string) => {
     if (boneId.startsWith("slot:")) {
-      setSelectedFaceSlotId(boneId.slice("slot:".length));
+      const slotId = boneId.slice("slot:".length);
+      setSelectedFaceSlotId(slotId);
+      setFaceMode(slotId === "mouth" ? "mouth" : "eyes");
       return;
     }
+    if (facialRig && Object.values(facialRig.eyeAimBones).includes(boneId)) setFaceMode("eyes");
     onSelectBone(boneId);
     const boundSlot = orderedSlots.find((slot) => slot.boneId === boneId);
     if (boundSlot) setSelectedSlotId(boundSlot.id);
-  }, [onSelectBone, orderedSlots]);
+  }, [facialRig, onSelectBone, orderedSlots]);
 
   const activateWorkspace = useCallback((nextWorkspace: StudioWorkspace) => {
     if (nextWorkspace === "Advanced") {
@@ -346,6 +387,35 @@ export function StudioEditor(props: StudioEditorProps) {
   const setFaceAttachment = (partId: string) => {
     if (!activeClip || !selectedFaceSlot) return;
     onRunCommand(createSetKeyframeAtTimeCommand(activeClip.id, `slot:${selectedFaceSlot.id}.attachment`, currentTime, partId, "step"));
+  };
+
+  const setEyeAttachment = (kind: "expression" | "pupil", partId: string) => {
+    if (!activeClip || !facialRig) return;
+    const mapping = kind === "expression" ? facialRig.expressionSlots : facialRig.pupilSlots;
+    const sides: readonly EyeSide[] = linkedEyes ? ["left", "right"] : [selectedEyeSide];
+    const commands = sides.flatMap((side) => {
+      const slot = visualSlots[mapping[side]];
+      if (!slot) return [];
+      const sidePartId = replaceFacialPartSide(partId, selectedEyeSide, side);
+      if (!slot.partIds.includes(sidePartId)) return [];
+      return [createSetKeyframeAtTimeCommand(activeClip.id, `slot:${slot.id}.attachment`, currentTime, sidePartId, "step")];
+    });
+    if (commands.length) onRunCommand(commands.length === 1 ? commands[0]! : createGroupedCommand(`Set ${kind} for linked eyes`, commands));
+  };
+
+  const setGaze = (xFactor: number, yFactor: number) => {
+    if (!activeClip || !facialRig) return;
+    const activeExpressions = Object.fromEntries((["left", "right"] as const).map((side) => {
+      const slot = visualSlots[facialRig.expressionSlots[side]];
+      const partId = slot && activeClip
+        ? sampleAttachmentAt(activeClip.tracks[`slot:${slot.id}.attachment`] ?? [], currentTime) ?? activeSkin?.attachments[slot.id] ?? null
+        : null;
+      return [side, partId];
+    })) as Record<EyeSide, string | null>;
+    const selectedBounds = facialRig.gazeBoundsByExpression?.[activeExpressions[selectedEyeSide] ?? ""] ?? facialRig.gazeBounds;
+    const x = xFactor < 0 ? -selectedBounds.x[0] * xFactor : selectedBounds.x[1] * xFactor;
+    const y = yFactor < 0 ? -selectedBounds.y[0] * yFactor : selectedBounds.y[1] * yFactor;
+    onRunCommand(createSetFacialGazeCommand(facialRig, activeClip.id, currentTime, selectedEyeSide, linkedEyes, x, y, activeExpressions));
   };
 
   const generateSpeechStream = () => {
@@ -655,6 +725,12 @@ export function StudioEditor(props: StudioEditorProps) {
       ?? activeSkin?.attachments[selectedFaceSlot.id]
       ?? null
     : null;
+  const activeEyeExpressionPartId = selectedEyeExpressionSlot && activeClip
+    ? sampleAttachmentAt(activeClip.tracks[`slot:${selectedEyeExpressionSlot.id}.attachment`] ?? [], currentTime) ?? activeSkin?.attachments[selectedEyeExpressionSlot.id] ?? null
+    : null;
+  const activeEyePupilPartId = selectedEyePupilSlot && activeClip
+    ? sampleAttachmentAt(activeClip.tracks[`slot:${selectedEyePupilSlot.id}.attachment`] ?? [], currentTime) ?? activeSkin?.attachments[selectedEyePupilSlot.id] ?? null
+    : null;
   const showRigOverlay = workspace === "Select" || workspace === "Skeleton" || workspace === "Pose" || (workspace === "Artwork" && (artworkMode === "bind" || artworkMode === "weights"));
   const inspectorDefaultOpen = useCallback((title: string) => {
     if (workspace === "Artwork") return title === "Transform" || title === "Appearance" || title === "Layer" || (artworkMode === "bind" && title === "Binding") || (artworkMode === "mesh" && title === "Mesh topology") || (artworkMode === "weights" && title === "Weights") || (artworkMode === "deform" && (title === "Vertex Deform" || title === "Breathing"));
@@ -742,16 +818,52 @@ export function StudioEditor(props: StudioEditorProps) {
           {workspace === "Face" ? (
             <div className="bones-face-panel">
               <div className="bones-face-tabs" role="tablist" aria-label="Facial slots">
-                {faceSlots.map((slot) => <button key={slot.id} className={selectedFaceSlot?.id === slot.id ? "is-active" : ""} onClick={() => setSelectedFaceSlotId(slot.id)}>{slot.name}</button>)}
+                {facialRig ? (
+                  <>
+                    <button className={faceMode === "eyes" ? "is-active" : ""} onClick={() => { setFaceMode("eyes"); setSelectedFaceSlotId(facialRig.expressionSlots[selectedEyeSide]); }}>Eyes</button>
+                    <button className={faceMode === "mouth" ? "is-active" : ""} onClick={() => { setFaceMode("mouth"); if (visualSlots.mouth) setSelectedFaceSlotId(visualSlots.mouth.id); }}>Mouth</button>
+                  </>
+                ) : faceSlots.map((slot) => <button key={slot.id} className={selectedFaceSlot?.id === slot.id ? "is-active" : ""} onClick={() => setSelectedFaceSlotId(slot.id)}>{slot.name}</button>)}
               </div>
-              <div className="bones-face-grid">
-                {(selectedFaceSlot?.partIds ?? []).map((partId) => {
-                  const part = project.parts[partId];
-                  const source = part?.assetUrl ?? part?.assetPath;
-                  return <button key={partId} className={activeFacePartId === partId ? "is-active" : ""} aria-label={`Set ${humanize(partId)}`} onClick={() => setFaceAttachment(partId)}>{source ? <img src={source} alt="" /> : <ImageIcon />}<span>{humanize(partId.replace(/^(eyes_|mouth_)/, ""))}</span></button>;
-                })}
-              </div>
-              {selectedFaceSlot?.id === "mouth" ? (
+              {facialRig && faceMode === "eyes" ? (
+                <>
+                  <div className="bones-eye-controls">
+                    <div className="bones-eye-side-tabs" role="group" aria-label="Eye side">
+                      {(["left", "right"] as const).map((side) => <button key={side} className={selectedEyeSide === side ? "is-active" : ""} disabled={linkedEyes && side === "right"} onClick={() => { setSelectedEyeSide(side); setSelectedFaceSlotId(facialRig.expressionSlots[side]); }}>{humanize(side)}</button>)}
+                    </div>
+                    <label className="bones-eye-link"><Switch checked={linkedEyes} onCheckedChange={setLinkedEyes} />{linkedEyes ? "Linked" : "Unlocked"}</label>
+                  </div>
+                  <strong className="bones-face-subheading">Expression</strong>
+                  <div className="bones-face-grid">
+                    {(selectedEyeExpressionSlot?.partIds ?? []).map((partId) => {
+                      const part = project.parts[partId];
+                      const source = part?.assetUrl ?? part?.assetPath;
+                      return <button key={partId} className={activeEyeExpressionPartId === partId ? "is-active" : ""} aria-label={`Set ${humanize(partId)}`} onClick={() => setEyeAttachment("expression", partId)}>{source ? <img src={source} alt="" /> : <ImageIcon />}<span>{humanize(partId.replace(/^eyelid_(left|right)_/, ""))}</span></button>;
+                    })}
+                  </div>
+                  <strong className="bones-face-subheading">Pupil shape</strong>
+                  <div className="bones-face-grid bones-pupil-grid">
+                    {(selectedEyePupilSlot?.partIds ?? []).map((partId) => {
+                      const part = project.parts[partId];
+                      const source = part?.assetUrl ?? part?.assetPath;
+                      return <button key={partId} className={activeEyePupilPartId === partId ? "is-active" : ""} aria-label={`Set ${humanize(partId)}`} onClick={() => setEyeAttachment("pupil", partId)}>{source ? <img src={source} alt="" /> : <ImageIcon />}<span>{humanize(partId.replace(/^pupil_(left|right)_/, ""))}</span></button>;
+                    })}
+                  </div>
+                  <strong className="bones-face-subheading">Gaze</strong>
+                  <div className="bones-gaze-pad" aria-label="Gaze direction">
+                    {([[-1, -1, "Up left"], [0, -1, "Up"], [1, -1, "Up right"], [-1, 0, "Left"], [0, 0, "Center"], [1, 0, "Right"], [-1, 1, "Down left"], [0, 1, "Down"], [1, 1, "Down right"]] as const).map(([x, y, label]) => <button key={label} aria-label={label} onClick={() => setGaze(x, y)}>{x === 0 && y === 0 ? "•" : `${x < 0 ? "←" : x > 0 ? "→" : ""}${y < 0 ? "↑" : y > 0 ? "↓" : ""}`}</button>)}
+                  </div>
+                </>
+              ) : (
+                <div className="bones-face-grid">
+                  {(selectedFaceSlot?.partIds ?? []).map((partId) => {
+                    const part = project.parts[partId];
+                    const source = part?.assetUrl ?? part?.assetPath;
+                    return <button key={partId} className={activeFacePartId === partId ? "is-active" : ""} aria-label={`Set ${humanize(partId)}`} onClick={() => setFaceAttachment(partId)}>{source ? <img src={source} alt="" /> : <ImageIcon />}<span>{humanize(partId.replace(/^(eyes_|mouth_)/, ""))}</span></button>;
+                  })}
+                </div>
+              )}
+              {(facialRig ? faceMode === "mouth" : selectedFaceSlot?.id === "mouth") ? (
                 <div className="bones-speech-stream">
                   <strong>Streaming speech</strong>
                   <Select value={speechEmotion} onValueChange={setSpeechEmotion}>
@@ -762,7 +874,7 @@ export function StudioEditor(props: StudioEditorProps) {
                   <Button size="sm" onClick={generateSpeechStream}><Play /> Generate to clip end</Button>
                 </div>
               ) : null}
-              <p className="bones-layer-note">Click a thumbnail to write a step attachment key at frame {Math.round(currentTime * frameRate)}. Undo/redo is supported.</p>
+              <p className="bones-layer-note">Attachments use step keys; gaze uses smooth numeric keys at frame {Math.round(currentTime * frameRate)}. Undo/redo is supported.</p>
             </div>
           ) : null}
           {workspace === "Select" ? (
@@ -946,7 +1058,7 @@ export function StudioEditor(props: StudioEditorProps) {
                 <>
                   <FieldGrid label="Position"><NumberField prefix="X" value={selectedAttachment?.offset?.[0] ?? 0} onCommit={(value) => updatePartTransform({ offset: [value, selectedAttachment?.offset?.[1] ?? 0] })} /><NumberField prefix="Y" value={selectedAttachment?.offset?.[1] ?? 0} onCommit={(value) => updatePartTransform({ offset: [selectedAttachment?.offset?.[0] ?? 0, value] })} /></FieldGrid>
                   <FieldGrid label="Rotation"><NumberField value={degrees(selectedAttachment?.rotation ?? 0)} suffix="°" onCommit={(value) => updatePartTransform({ rotation: radians(value) })} /></FieldGrid>
-                  <FieldGrid label="Scale"><NumberField prefix="X" value={selectedAttachment?.scale?.[0] ?? 1} onCommit={(value) => updatePartTransform({ scale: [value, selectedAttachment?.scale?.[1] ?? 1] })} /><NumberField prefix="Y" value={selectedAttachment?.scale?.[1] ?? 1} onCommit={(value) => updatePartTransform({ scale: [selectedAttachment?.scale?.[0] ?? 1, value] })} /></FieldGrid>
+                  <FieldGrid label={selectedAttachment?.aspectLocked ? "Scale 🔗" : "Scale"}><NumberField prefix="X" value={selectedAttachment?.scale?.[0] ?? 1} onCommit={(value) => updatePartTransform({ scale: selectedAttachment?.aspectLocked ? [value, value] : [value, selectedAttachment?.scale?.[1] ?? 1] })} /><NumberField prefix="Y" value={selectedAttachment?.scale?.[1] ?? 1} onCommit={(value) => updatePartTransform({ scale: selectedAttachment?.aspectLocked ? [value, value] : [selectedAttachment?.scale?.[0] ?? 1, value] })} /></FieldGrid>
                   <FieldGrid label="Pivot"><NumberField prefix="X" value={selectedAttachment?.pivot[0] ?? 0} onCommit={(value) => updatePartTransform({ pivot: [value, selectedAttachment?.pivot[1] ?? 0] })} /><NumberField prefix="Y" value={selectedAttachment?.pivot[1] ?? 0} onCommit={(value) => updatePartTransform({ pivot: [selectedAttachment?.pivot[0] ?? 0, value] })} /></FieldGrid>
                 </>
               ) : (
@@ -1607,11 +1719,18 @@ function createTimelineBoneGroups(project: EditorProjectState, tracks: readonly 
     return dot > 0 ? trackId.slice(0, dot) : trackId;
   }))];
   const groups = Object.values(project.topology.groups).map((group) => ({ id: group.id, label: group.name, boneIds: group.boneIds.filter((boneId) => Boolean(project.bones[boneId])) }));
-  const faceTargetIds = targetIds.filter((targetId) => targetId === "slot:eyes" || targetId === "slot:mouth");
+  const facialTargets = new Set<string>(["slot:eyes", "slot:mouth"]);
+  if (project.facialRig) {
+    Object.values(project.facialRig.expressionSlots).forEach((slotId) => facialTargets.add(`slot:${slotId}`));
+    Object.values(project.facialRig.pupilSlots).forEach((slotId) => facialTargets.add(`slot:${slotId}`));
+    Object.values(project.facialRig.eyeAimBones).forEach((boneId) => facialTargets.add(boneId));
+    Object.values(project.facialRig.irisParallaxParts ?? {}).forEach((partId) => facialTargets.add(`part:${partId}`));
+  }
+  const faceTargetIds = targetIds.filter((targetId) => facialTargets.has(targetId));
   if (faceTargetIds.length) groups.push({ id: "face", label: "Face", boneIds: faceTargetIds });
-  for (const partId of targetIds.filter((targetId) => Boolean(project.parts[targetId]))) {
+  for (const partId of targetIds.map((targetId) => targetId.startsWith("part:") ? targetId.slice("part:".length) : targetId).filter((targetId) => Boolean(project.parts[targetId]))) {
     const slot = Object.values(project.visualSlots).find((candidate) => Object.values(project.skins).some((skin) => skin.attachments[candidate.id] === partId));
-    groups.push({ id: `part:${partId}`, label: slot?.name ?? humanize(partId), boneIds: [partId] });
+    groups.push({ id: `part:${partId}`, label: slot?.name ?? humanize(partId), boneIds: [`part:${partId}`] });
   }
   const other = { id: "other-bones", label: "Other bones", boneIds: [] as string[] };
   for (const targetId of targetIds) {
@@ -1629,6 +1748,13 @@ function sampleAttachmentAt(keys: readonly Keyframe[], time: number): string | n
     if (key.value === null || typeof key.value === "string") value = key.value;
   }
   return value;
+}
+
+function replaceFacialPartSide(partId: string, from: EyeSide, to: EyeSide): string {
+  if (from === to) return partId;
+  return partId
+    .replace(`_${from}_`, `_${to}_`)
+    .replace(new RegExp(`_${from}$`), `_${to}`);
 }
 
 function findChainForBone(project: EditorProjectState, chains: Readonly<Record<string, EditorIkChain>>, boneId: string): EditorIkChain | undefined {

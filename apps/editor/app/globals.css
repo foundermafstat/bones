@@ -277,6 +277,16 @@ button:not(:disabled),
 .bones-face-grid button { display: grid; min-height: 88px; grid-template-rows: minmax(54px, 1fr) auto; gap: 5px; overflow: hidden; border: 1px solid var(--border); border-radius: 6px; background: color-mix(in oklab, var(--card) 88%, black); padding: 6px; font-size: 10px; color: var(--muted-foreground); }
 .bones-face-grid button.is-active { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); color: var(--foreground); }
 .bones-face-grid img { width: 100%; height: 58px; object-fit: contain; }
+.bones-eye-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bones-eye-side-tabs { display: grid; flex: 1; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+.bones-eye-side-tabs button, .bones-gaze-pad button { border: 1px solid var(--border); border-radius: 5px; background: transparent; padding: 6px; color: var(--muted-foreground); font-size: 11px; }
+.bones-eye-side-tabs button.is-active, .bones-gaze-pad button:hover { border-color: var(--primary); background: color-mix(in oklab, var(--primary) 16%, transparent); color: var(--foreground); }
+.bones-eye-side-tabs button:disabled { opacity: .45; }
+.bones-eye-link { display: flex; align-items: center; gap: 6px; color: var(--muted-foreground); font-size: 10px; }
+.bones-face-subheading { color: var(--muted-foreground); font-size: 10px; text-transform: uppercase; letter-spacing: .05em; }
+.bones-pupil-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); flex: 0 0 auto; overflow: visible; }
+.bones-gaze-pad { display: grid; width: 132px; align-self: center; grid-template-columns: repeat(3, 40px); gap: 6px; }
+.bones-gaze-pad button { height: 34px; padding: 0; font-size: 14px; }
 .bones-speech-stream { display: grid; gap: 7px; border-top: 1px solid var(--border); padding-top: 10px; font-size: 11px; }
 .bones-speech-stream label { display: grid; grid-template-columns: 1fr 72px; align-items: center; gap: 8px; color: var(--muted-foreground); }
 .bones-reporter-states { display: grid; gap: 6px; padding: 10px; }

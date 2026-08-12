@@ -48,6 +48,7 @@ import {
   createSetInitialStateCommand,
   createSetPathClosedCommand,
   createSetCurvePreviewCommand,
+  createSetFacialGazeCommand,
   createSetKeyframeAtTimeCommand,
   createSetStateMachineParameterCommand,
   createSetStateMachinePreviewCommand,
@@ -77,7 +78,7 @@ import {
 import { createProjectExportBundle, createRuntimeParityReport, EDITOR_DRAFT_KEY, EDITOR_DRAFT_META_KEY, loadDraftMeta, saveDraft, serializeEditorProject } from "../app/projectIo.ts";
 import { vectorizeSvgPart } from "../app/editorVectorImport.ts";
 import { createDogCharacterProject, createHumanCharacterProject } from "../app/characterTemplates.ts";
-import { fromSourceProject, toSourceProject } from "../app/editorSourceProject.ts";
+import { fromSourceProject, readEditorFacialRig, toSourceProject } from "../app/editorSourceProject.ts";
 import { classifyBrowserConsoleEntries } from "../../../scripts/editor-console-classifier.mjs";
 
 function freshContainer(project = structuredClone(initialEditorProject)) {
@@ -138,6 +139,81 @@ test("character kind survives source round-trip and legacy projects default to h
   const legacySource = structuredClone(source);
   delete legacySource.editor.custom.characterKind;
   assert.equal(fromSourceProject(legacySource).characterKind, "human");
+});
+
+test("independent facial rig metadata validates and survives source round-trip", () => {
+  const visualSlots = {
+    "eyes.left.expression": { id: "eyes.left.expression", name: "Left expression", boneId: "head", drawOrder: 20, partIds: ["headShape"] },
+    "eyes.right.expression": { id: "eyes.right.expression", name: "Right expression", boneId: "head", drawOrder: 21, partIds: ["bodyShape"] },
+    "eyes.left.pupil": { id: "eyes.left.pupil", name: "Left pupil", boneId: "head", drawOrder: 22, partIds: [] },
+    "eyes.right.pupil": { id: "eyes.right.pupil", name: "Right pupil", boneId: "head", drawOrder: 23, partIds: [] }
+  };
+  const facialRig = {
+    expressionSlots: { left: "eyes.left.expression", right: "eyes.right.expression" },
+    pupilSlots: { left: "eyes.left.pupil", right: "eyes.right.pupil" },
+    eyeAimBones: { left: "head", right: "body" },
+    gazeBounds: { x: [-8, 8], y: [-5, 5] },
+    gazeBoundsByExpression: {
+      headShape: { x: [-6, 6], y: [-4, 4] },
+      bodyShape: { x: [-3, 3], y: [-2, 2] }
+    },
+    linkedByDefault: true
+  };
+  const project = {
+    ...structuredClone(initialEditorProject),
+    visualSlots,
+    skins: { default: { id: "default", name: "Default", attachments: {} } },
+    activeSkinId: "default",
+    facialRig
+  };
+
+  const source = toSourceProject(project);
+  assert.deepEqual(source.rigs[0].editor.custom.facialRig, facialRig);
+  assert.deepEqual(fromSourceProject(source).facialRig, facialRig);
+  assert.deepEqual(readEditorFacialRig(facialRig, project.bones, visualSlots), facialRig);
+});
+
+test("expression-specific gaze bounds reject unknown attachments and unsafe ranges", () => {
+  const visualSlots = {
+    "eyes.left.expression": { id: "eyes.left.expression", name: "Left expression", boneId: "head", drawOrder: 20, partIds: ["headShape"] },
+    "eyes.right.expression": { id: "eyes.right.expression", name: "Right expression", boneId: "head", drawOrder: 21, partIds: ["bodyShape"] },
+    "eyes.left.pupil": { id: "eyes.left.pupil", name: "Left pupil", boneId: "head", drawOrder: 22, partIds: [] },
+    "eyes.right.pupil": { id: "eyes.right.pupil", name: "Right pupil", boneId: "head", drawOrder: 23, partIds: [] }
+  };
+  const facialRig = {
+    expressionSlots: { left: "eyes.left.expression", right: "eyes.right.expression" },
+    pupilSlots: { left: "eyes.left.pupil", right: "eyes.right.pupil" },
+    eyeAimBones: { left: "head", right: "body" },
+    gazeBounds: { x: [-8, 8], y: [-5, 5] },
+    linkedByDefault: true
+  };
+
+  assert.equal(readEditorFacialRig({ ...facialRig, gazeBoundsByExpression: { missing: { x: [-2, 2], y: [-1, 1] } } }, initialEditorProject.bones, visualSlots), undefined);
+  assert.equal(readEditorFacialRig({ ...facialRig, gazeBoundsByExpression: { headShape: { x: [2, -2], y: [-1, 1] } } }, initialEditorProject.bones, visualSlots), undefined);
+  assert.equal(readEditorFacialRig({ ...facialRig, gazeBoundsByExpression: { headShape: { x: [1, 2], y: [-1, 1] } } }, initialEditorProject.bones, visualSlots), undefined);
+});
+
+test("invalid facial metadata falls back without changing legacy paired-eye slots", () => {
+  const legacyProject = {
+    ...structuredClone(initialEditorProject),
+    visualSlots: { eyes: { id: "eyes", name: "Eyes", boneId: "head", drawOrder: 20, partIds: [] } },
+    skins: { default: { id: "default", name: "Default", attachments: {} } },
+    activeSkinId: "default"
+  };
+  const legacySource = toSourceProject(legacyProject);
+  const restoredLegacy = fromSourceProject(legacySource);
+  assert.equal(restoredLegacy.facialRig, undefined);
+  assert.ok(restoredLegacy.visualSlots.eyes);
+
+  const invalidSource = structuredClone(legacySource);
+  invalidSource.rigs[0].editor.custom.facialRig = {
+    expressionSlots: { left: "eyes", right: "missing-expression" },
+    pupilSlots: { left: "missing-pupil-left", right: "missing-pupil-right" },
+    eyeAimBones: { left: "head", right: "missing-eye-aim" },
+    gazeBounds: { x: [8, -8], y: [-5, 5] },
+    linkedByDefault: true
+  };
+  assert.equal(fromSourceProject(invalidSource).facialRig, undefined);
 });
 
 test("bone commands update dirty scopes and autosave state", () => {
@@ -565,6 +641,71 @@ test("timeline can set a keyed value at the current time without duplicates", ()
 
   const undone = undo(updated);
   assert.equal(undone.project.animations.idle.tracks["body.x"][0].value, 12);
+});
+
+test("linked facial gaze keys both eyes atomically and clamps to safe bounds", () => {
+  const facialRig = {
+    expressionSlots: { left: "eyes.left.expression", right: "eyes.right.expression" },
+    pupilSlots: { left: "eyes.left.pupil", right: "eyes.right.pupil" },
+    eyeAimBones: { left: "handBack", right: "handFront" },
+    gazeBounds: { x: [-8, 8], y: [-5, 5] },
+    linkedByDefault: true
+  };
+  const keyed = executeCommand(freshContainer(), createSetFacialGazeCommand(facialRig, "idle", 0.25, "left", true, 99, -99));
+
+  assert.equal(keyed.history.past.length, 1);
+  for (const boneId of ["handBack", "handFront"]) {
+    assert.deepEqual(keyed.project.animations.idle.tracks[`${boneId}.x`].map(({ value, interpolation }) => ({ value, interpolation })), [{ value: 8, interpolation: "linear" }]);
+    assert.deepEqual(keyed.project.animations.idle.tracks[`${boneId}.y`].map(({ value, interpolation }) => ({ value, interpolation })), [{ value: -5, interpolation: "linear" }]);
+  }
+
+  const undone = undo(keyed);
+  assert.equal(undone.project.animations.idle.tracks["handBack.x"], undefined);
+  assert.equal(undone.project.animations.idle.tracks["handBack.y"], undefined);
+  assert.equal(undone.project.animations.idle.tracks["handFront.x"], undefined);
+  assert.equal(undone.project.animations.idle.tracks["handFront.y"], undefined);
+});
+
+test("unlocked facial gaze keys and undoes only the selected eye", () => {
+  const facialRig = {
+    expressionSlots: { left: "eyes.left.expression", right: "eyes.right.expression" },
+    pupilSlots: { left: "eyes.left.pupil", right: "eyes.right.pupil" },
+    eyeAimBones: { left: "handBack", right: "handFront" },
+    gazeBounds: { x: [-8, 8], y: [-5, 5] },
+    linkedByDefault: true
+  };
+  const keyed = executeCommand(freshContainer(), createSetFacialGazeCommand(facialRig, "idle", 0.25, "right", false, -12, 7));
+
+  assert.equal(keyed.history.past.length, 1);
+  assert.equal(keyed.project.animations.idle.tracks["handBack.x"], undefined);
+  assert.equal(keyed.project.animations.idle.tracks["handBack.y"], undefined);
+  assert.equal(keyed.project.animations.idle.tracks["handFront.x"][0].value, -8);
+  assert.equal(keyed.project.animations.idle.tracks["handFront.y"][0].value, 5);
+
+  const undone = undo(keyed);
+  assert.equal(undone.project.animations.idle.tracks["handFront.x"], undefined);
+  assert.equal(undone.project.animations.idle.tracks["handFront.y"], undefined);
+});
+
+test("facial gaze moves iris inside the smaller parallax safe zone", () => {
+  const facialRig = {
+    expressionSlots: { left: "eyes.left.expression", right: "eyes.right.expression" },
+    pupilSlots: { left: "eyes.left.pupil", right: "eyes.right.pupil" },
+    eyeAimBones: { left: "handBack", right: "handFront" },
+    irisParallaxParts: { left: "bodyShape", right: "headShape" },
+    irisOrigins: { left: [-40, -15], right: [40, -15] },
+    irisParallax: 0.25,
+    gazeBounds: { x: [-8, 8], y: [-5, 5] },
+    linkedByDefault: true
+  };
+  const keyed = executeCommand(freshContainer(), createSetFacialGazeCommand(facialRig, "idle", 0.25, "left", true, 8, -5));
+  assert.equal(keyed.project.animations.idle.tracks["part:bodyShape.x"][0].value, -38);
+  assert.equal(keyed.project.animations.idle.tracks["part:bodyShape.y"][0].value, -16.25);
+  assert.equal(keyed.project.animations.idle.tracks["part:headShape.x"][0].value, 42);
+  assert.equal(keyed.history.past.length, 1);
+  const undone = undo(keyed);
+  assert.equal(undone.project.animations.idle.tracks["part:bodyShape.x"], undefined);
+  assert.equal(undone.project.animations.idle.tracks["part:headShape.y"], undefined);
 });
 
 test("timeline moves selected keys together with undo", () => {

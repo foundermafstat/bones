@@ -19,6 +19,33 @@ export interface BoneTransform {
 
 export type CharacterKind = "human" | "dog" | "cat";
 
+export interface EditorFacialSideMapping {
+  readonly left: string;
+  readonly right: string;
+}
+
+export interface EditorFacialGazeBounds {
+  readonly x: readonly [number, number];
+  readonly y: readonly [number, number];
+}
+
+export interface EditorFacialPointMapping {
+  readonly left: readonly [number, number];
+  readonly right: readonly [number, number];
+}
+
+export interface EditorFacialRig {
+  readonly expressionSlots: EditorFacialSideMapping;
+  readonly pupilSlots: EditorFacialSideMapping;
+  readonly eyeAimBones: EditorFacialSideMapping;
+  readonly irisParallaxParts?: EditorFacialSideMapping;
+  readonly irisOrigins?: EditorFacialPointMapping;
+  readonly irisParallax?: number;
+  readonly gazeBounds: EditorFacialGazeBounds;
+  readonly gazeBoundsByExpression?: Readonly<Record<string, EditorFacialGazeBounds>>;
+  readonly linkedByDefault: boolean;
+}
+
 export interface EditorProjectState {
   readonly projectId: string;
   readonly rigId: string;
@@ -36,6 +63,7 @@ export interface EditorProjectState {
   readonly visualSlots: Readonly<Record<string, EditorVisualSlot>>;
   readonly skins: Readonly<Record<string, EditorSkin>>;
   readonly activeSkinId: string;
+  readonly facialRig?: EditorFacialRig;
   readonly ikChains: Readonly<Record<string, EditorIkChain>>;
   readonly poses: Readonly<Record<string, PoseDefinition>>;
   readonly poseClipboard: PoseDefinition | null;
@@ -107,6 +135,8 @@ export interface ShapePart {
   readonly assetPath?: string;
   readonly assetUrl?: string;
   readonly svgViewBox?: readonly [number, number, number, number];
+  readonly intrinsicSize?: readonly [number, number];
+  readonly aspectLocked?: boolean;
   readonly width?: number;
   readonly anchor?: readonly [number, number];
   readonly offset?: readonly [number, number];
@@ -1823,6 +1853,39 @@ export function createSetKeyframeAtTimeCommand(clipId: string, trackId: string, 
       return { ...markDirty(state, clipId, "animations"), animations: { ...state.animations, [clipId]: { ...clip, tracks } } };
     }
   };
+}
+
+export function createSetFacialGazeCommand(
+  facialRig: EditorFacialRig,
+  clipId: string,
+  time: number,
+  side: "left" | "right",
+  linked: boolean,
+  x: number,
+  y: number,
+  expressionPartIds?: Partial<Record<"left" | "right", string | null>>
+): EditorCommand {
+  const sides: readonly ("left" | "right")[] = linked ? ["left", "right"] : [side];
+  const commands = sides.flatMap((targetSide) => {
+    const expressionPartId = expressionPartIds?.[targetSide];
+    const bounds = expressionPartId ? facialRig.gazeBoundsByExpression?.[expressionPartId] ?? facialRig.gazeBounds : facialRig.gazeBounds;
+    const clampedX = Math.min(bounds.x[1], Math.max(bounds.x[0], x));
+    const clampedY = Math.min(bounds.y[1], Math.max(bounds.y[0], y));
+    const boneId = facialRig.eyeAimBones[targetSide];
+    const pupilCommands = [
+      createSetKeyframeAtTimeCommand(clipId, `${boneId}.x`, time, clampedX, "linear"),
+      createSetKeyframeAtTimeCommand(clipId, `${boneId}.y`, time, clampedY, "linear")
+    ];
+    const irisPartId = facialRig.irisParallaxParts?.[targetSide];
+    const irisOrigin = facialRig.irisOrigins?.[targetSide];
+    const irisParallax = facialRig.irisParallax ?? 0;
+    return irisPartId && irisOrigin && irisParallax > 0 ? [
+      ...pupilCommands,
+      createSetKeyframeAtTimeCommand(clipId, `part:${irisPartId}.x`, time, irisOrigin[0] + clampedX * irisParallax, "linear"),
+      createSetKeyframeAtTimeCommand(clipId, `part:${irisPartId}.y`, time, irisOrigin[1] + clampedY * irisParallax, "linear")
+    ] : pupilCommands;
+  });
+  return createGroupedCommand(linked ? "Set linked facial gaze" : `Set ${side} facial gaze`, commands);
 }
 
 export function createReplaceKeyframeRangeCommand(

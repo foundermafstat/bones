@@ -131,7 +131,8 @@ import { fromSourceProject, toSourceProject } from "./editorSourceProject";
 import { createCharacterProject, type CreationTemplate } from "./characterTemplates";
 import { createDeflateZipBlob, type RuntimeArchiveEntry } from "./runtimeArchive";
 import { inspectSvgVector, vectorizeSvgPart } from "./editorVectorImport";
-import { connectProjectFolder, resolveProjectAssetUrl, writeProjectAsset } from "./localProjectAssets";
+import { connectProjectFolder, readRasterIntrinsicSize, resolveProjectAssetUrl, writeProjectAsset, type StoredProjectAsset } from "./localProjectAssets";
+import { createAspectLockedRasterPlacement } from "./rasterArtwork";
 import { createRemoteRevision, ensureRemoteProject, listRemoteProjects, listRemoteRevisions, loadRemoteProject, RemoteProjectConflictError, restoreRemoteRevision, saveRemoteProject, upsertRemoteAsset, type RemoteProjectSession, type RemoteProjectSummary } from "./projectPersistence";
 import { parseLdtkLevel } from "@bones/ldtk-adapter";
 import { createInitialControllerState, toAnimationParameters, updatePlatformerController, type PlatformerControllerState } from "@bones/platformer-preview";
@@ -327,7 +328,7 @@ function clipIdForControllerState(state: PlatformerControllerState, project: Edi
 const hybridZipFileNames = new Set(["manifest.json", DEFAULT_RUNTIME_BUNDLE_FILE, "hero.visual.compiled.json", "hero.path.runtime.rig.json"]);
 const guidedAssetByteLimit = 2 * 1024 * 1024;
 
-async function createUploadedPart(project: EditorProjectState, file: File, index: number, stored?: { readonly metadata: { readonly relativePath: string }; readonly objectUrl: string }): Promise<ShapePart> {
+async function createUploadedPart(project: EditorProjectState, file: File, index: number, stored?: StoredProjectAsset, target?: ShapePart): Promise<ShapePart> {
   const dataUrl = stored?.objectUrl ?? await readFileAsDataUrl(file);
   const assetPath = stored?.metadata.relativePath ?? dataUrl;
   const baseName = (file.name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9_-]/g, "-") || `part-${index + 1}`).toLowerCase();
@@ -343,30 +344,28 @@ async function createUploadedPart(project: EditorProjectState, file: File, index
     return { id, boneId, type: "svg", pivot: [0, 0], points: [], preset: undefined, assetPath, assetUrl: dataUrl, rotation: 0, scale: [1, 1], opacity: 1, zIndex };
   }
 
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, 240 / Math.max(bitmap.width, bitmap.height));
-  const width = Math.max(1, Math.round(bitmap.width * scale));
-  const height = Math.max(1, Math.round(bitmap.height * scale));
-  bitmap.close();
+  const intrinsicSize = stored?.metadata.width && stored.metadata.height
+    ? { width: stored.metadata.width, height: stored.metadata.height }
+    : await readRasterIntrinsicSize(file);
+  if (!intrinsicSize) throw new Error("Could not read PNG dimensions.");
+  const placement = createAspectLockedRasterPlacement(intrinsicSize, assetPath, target);
   return {
     id,
     boneId,
     type: "mesh",
-    pivot: [0, 0],
+    pivot: placement.pivot,
     points: [],
     preset: undefined,
     assetPath,
     assetUrl: dataUrl,
-    rotation: 0,
-    scale: [1, 1],
+    intrinsicSize: [intrinsicSize.width, intrinsicSize.height],
+    aspectLocked: true,
+    offset: placement.offset,
+    rotation: placement.rotation,
+    scale: placement.scale,
     opacity: 1,
     zIndex,
-    mesh: {
-      vertices: [-width / 2, -height / 2, width / 2, -height / 2, width / 2, height / 2, -width / 2, height / 2],
-      indices: [0, 1, 2, 0, 2, 3],
-      uvs: [0, 0, 1, 0, 1, 1, 0, 1],
-      texture: assetPath
-    }
+    mesh: placement.mesh
   };
 }
 
@@ -1240,7 +1239,10 @@ export default function EditorPage() {
       return;
     }
     try {
-      const uploaded = await createUploadedPart(editorState.project, file, 0, await storeArtworkFile(file));
+      const activeSkin = editorState.project.skins[editorState.project.activeSkinId];
+      const targetPartId = activeSkin?.attachments[slotId] ?? slot.partIds[0];
+      const targetPart = targetPartId ? editorState.project.parts[targetPartId] : undefined;
+      const uploaded = await createUploadedPart(editorState.project, file, 0, await storeArtworkFile(file), targetPart);
       const part: ShapePart = { ...uploaded, boneId: slot.boneId, zIndex: slot.drawOrder };
       runCommand(createGroupedCommand("Replace skin artwork", [
         createAddSvgPartCommand(part),

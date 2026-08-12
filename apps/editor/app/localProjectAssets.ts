@@ -18,6 +18,8 @@ export interface StoredProjectAsset {
   readonly objectUrl: string;
 }
 
+type ImageBitmapFactory = (image: ImageBitmapSource) => Promise<Pick<ImageBitmap, "width" | "height" | "close">>;
+
 export function supportsProjectFolders(): boolean {
   return typeof window !== "undefined" && typeof (window as DirectoryPickerWindow).showDirectoryPicker === "function";
 }
@@ -51,6 +53,7 @@ export async function connectProjectFolder(projectId: string, projectName: strin
 }
 
 export async function writeProjectAsset(projectId: string, projectName: string, file: File): Promise<StoredProjectAsset> {
+  const intrinsicSize = await readRasterIntrinsicSize(file);
   const project = await ensureProjectDirectory(projectId, projectName, true);
   const assets = await project.getDirectoryHandle("assets", { create: true });
   const assetId = globalThis.crypto.randomUUID();
@@ -61,16 +64,36 @@ export async function writeProjectAsset(projectId: string, projectName: string, 
   await writable.close();
   const checksum = await sha256(file);
   return {
-    metadata: {
-      id: assetId,
-      relativePath: `assets/${fileName}`,
-      originalName: file.name,
-      mimeType: file.type || mimeFromName(file.name),
-      byteSize: file.size,
-      checksum
-    },
+    metadata: buildProjectAssetMetadata(assetId, `assets/${fileName}`, file, checksum, intrinsicSize),
     objectUrl: URL.createObjectURL(file)
   };
+}
+
+export function buildProjectAssetMetadata(
+  id: string,
+  relativePath: string,
+  file: File,
+  checksum: string,
+  intrinsicSize?: { readonly width: number; readonly height: number }
+): ProjectAssetMetadata {
+  return {
+    id,
+    relativePath,
+    originalName: file.name,
+    mimeType: file.type || mimeFromName(file.name),
+    byteSize: file.size,
+    checksum,
+    ...(intrinsicSize ? { width: intrinsicSize.width, height: intrinsicSize.height } : {})
+  };
+}
+
+export async function readRasterIntrinsicSize(file: File, bitmapFactory: ImageBitmapFactory = globalThis.createImageBitmap): Promise<{ readonly width: number; readonly height: number } | undefined> {
+  if (file.type !== "image/png" && !file.name.toLowerCase().endsWith(".png")) return undefined;
+  const bitmap = await bitmapFactory(file);
+  const size = { width: bitmap.width, height: bitmap.height };
+  bitmap.close();
+  if (!Number.isFinite(size.width) || !Number.isFinite(size.height) || size.width <= 0 || size.height <= 0) throw new Error("PNG dimensions must be positive.");
+  return size;
 }
 
 export async function resolveProjectAssetUrl(projectId: string, projectName: string, relativePath: string): Promise<string> {

@@ -21,6 +21,7 @@ import type {
   BoneTransform,
   CharacterKind,
   DirtyScopes,
+  EditorFacialRig,
   EditorIkChain,
   EditorRigTopology,
   EditorProjectState,
@@ -72,7 +73,8 @@ export function toSourceProject(project: EditorProjectState): RigProject {
             procedural: proceduralToJson(project.procedural),
             activeSkinId: appearance.activeSkinId,
             ikChains: Object.values(project.ikChains).map((chain) => ({ ...chain })),
-            topology: topologyToJson(project.topology)
+            topology: topologyToJson(project.topology),
+            ...(project.facialRig ? { facialRig: facialRigToJson(project.facialRig) } : {})
           }
         }
       }
@@ -155,6 +157,7 @@ export function fromSourceProject(sourceInput: unknown): EditorProjectState {
   const machine = source.stateMachines?.[0];
   const procedural = readProcedural(rig.editor?.custom?.procedural ?? source.editor?.custom?.procedural);
   const topology = readEditorTopology(rig.editor?.custom?.topology, hierarchy, parents);
+  const facialRig = readEditorFacialRig(rig.editor?.custom?.facialRig, bones, visualSlots, parts);
 
   return {
     ...initialEditorProject,
@@ -174,6 +177,7 @@ export function fromSourceProject(sourceInput: unknown): EditorProjectState {
     visualSlots,
     skins,
     activeSkinId,
+    ...(facialRig ? { facialRig } : {}),
     ikChains,
     poses: Object.fromEntries((source.poses ?? []).map((pose) => [pose.id, fromSourcePose(pose)])),
     animations,
@@ -203,6 +207,98 @@ export function fromSourceProject(sourceInput: unknown): EditorProjectState {
     dirtyScopes: readDirtyScopes(rig.editor?.custom?.dirtyScopes),
     autosave: readAutosave(rig.editor?.custom?.autosave)
   };
+}
+
+export function readEditorFacialRig(
+  value: unknown,
+  bones: Readonly<Record<string, BoneTransform>>,
+  visualSlots: Readonly<Record<string, EditorProjectState["visualSlots"][string]>>,
+  parts: EditorProjectState["parts"] = {}
+): EditorFacialRig | undefined {
+  if (!isRecord(value)) return undefined;
+  const expressionSlots = readFacialSideMapping(value.expressionSlots);
+  const pupilSlots = readFacialSideMapping(value.pupilSlots);
+  const eyeAimBones = readFacialSideMapping(value.eyeAimBones);
+  const irisParallaxParts = readFacialSideMapping(value.irisParallaxParts);
+  const irisOrigins = readFacialPointMapping(value.irisOrigins);
+  const irisParallax = typeof value.irisParallax === "number" && Number.isFinite(value.irisParallax) && value.irisParallax >= 0 && value.irisParallax <= 1 ? value.irisParallax : undefined;
+  const gazeBounds = readFacialGazeBounds(value.gazeBounds);
+  if (!expressionSlots || !pupilSlots || !eyeAimBones || !gazeBounds || typeof value.linkedByDefault !== "boolean") return undefined;
+
+  const slotIds = [expressionSlots.left, expressionSlots.right, pupilSlots.left, pupilSlots.right];
+  if (new Set(slotIds).size !== slotIds.length || slotIds.some((slotId) => !visualSlots[slotId])) return undefined;
+  if (eyeAimBones.left === eyeAimBones.right || !bones[eyeAimBones.left] || !bones[eyeAimBones.right]) return undefined;
+  const expressionPartIds = new Set([
+    ...visualSlots[expressionSlots.left]!.partIds,
+    ...visualSlots[expressionSlots.right]!.partIds
+  ]);
+  const gazeBoundsByExpression = readFacialGazeBoundsByExpression(value.gazeBoundsByExpression, expressionPartIds);
+  if (value.gazeBoundsByExpression !== undefined && !gazeBoundsByExpression) return undefined;
+  if (irisParallaxParts && (irisParallaxParts.left === irisParallaxParts.right)) return undefined;
+  if (irisParallaxParts && (!parts[irisParallaxParts.left] || !parts[irisParallaxParts.right])) return undefined;
+
+  if ((irisParallaxParts || irisParallax !== undefined) && !irisOrigins) return undefined;
+
+  return { expressionSlots, pupilSlots, eyeAimBones, ...(irisParallaxParts ? { irisParallaxParts } : {}), ...(irisOrigins ? { irisOrigins } : {}), ...(irisParallax !== undefined ? { irisParallax } : {}), gazeBounds, ...(gazeBoundsByExpression ? { gazeBoundsByExpression } : {}), linkedByDefault: value.linkedByDefault };
+}
+
+function facialRigToJson(facialRig: EditorFacialRig) {
+  return {
+    expressionSlots: { ...facialRig.expressionSlots },
+    pupilSlots: { ...facialRig.pupilSlots },
+    eyeAimBones: { ...facialRig.eyeAimBones },
+    ...(facialRig.irisParallaxParts ? { irisParallaxParts: { ...facialRig.irisParallaxParts } } : {}),
+    ...(facialRig.irisOrigins ? { irisOrigins: { left: [...facialRig.irisOrigins.left], right: [...facialRig.irisOrigins.right] } } : {}),
+    ...(facialRig.irisParallax !== undefined ? { irisParallax: facialRig.irisParallax } : {}),
+    gazeBounds: { x: [...facialRig.gazeBounds.x], y: [...facialRig.gazeBounds.y] },
+    ...(facialRig.gazeBoundsByExpression ? {
+      gazeBoundsByExpression: Object.fromEntries(Object.entries(facialRig.gazeBoundsByExpression).map(([partId, bounds]) => [partId, { x: [...bounds.x], y: [...bounds.y] }]))
+    } : {}),
+    linkedByDefault: facialRig.linkedByDefault
+  };
+}
+
+function readFacialPointMapping(value: unknown): EditorFacialRig["irisOrigins"] | undefined {
+  if (!isRecord(value)) return undefined;
+  const readPoint = (point: unknown): readonly [number, number] | undefined => Array.isArray(point)
+    && point.length === 2
+    && point.every((coordinate) => typeof coordinate === "number" && Number.isFinite(coordinate))
+    ? [point[0] as number, point[1] as number]
+    : undefined;
+  const left = readPoint(value.left);
+  const right = readPoint(value.right);
+  return left && right ? { left, right } : undefined;
+}
+
+function readFacialSideMapping(value: unknown): EditorFacialRig["expressionSlots"] | undefined {
+  if (!isRecord(value)) return undefined;
+  const left = stringValue(value.left);
+  const right = stringValue(value.right);
+  return left && right && left !== right ? { left, right } : undefined;
+}
+
+function readFacialGazeBounds(value: unknown): EditorFacialRig["gazeBounds"] | undefined {
+  if (!isRecord(value)) return undefined;
+  const x = readFiniteNumberPair(value.x);
+  const y = readFiniteNumberPair(value.y);
+  if (!x || !y || x[0] > x[1] || y[0] > y[1] || x[0] > 0 || x[1] < 0 || y[0] > 0 || y[1] < 0) return undefined;
+  return { x, y };
+}
+
+function readFacialGazeBoundsByExpression(
+  value: unknown,
+  expressionPartIds: ReadonlySet<string>
+): EditorFacialRig["gazeBoundsByExpression"] | undefined {
+  if (!isRecord(value)) return undefined;
+  const entries = Object.entries(value).map(([partId, bounds]) => [partId, readFacialGazeBounds(bounds)] as const);
+  if (entries.some(([partId, bounds]) => !expressionPartIds.has(partId) || !bounds)) return undefined;
+  return Object.fromEntries(entries) as NonNullable<EditorFacialRig["gazeBoundsByExpression"]>;
+}
+
+function readFiniteNumberPair(value: unknown): readonly [number, number] | undefined {
+  return Array.isArray(value) && value.length === 2 && typeof value[0] === "number" && Number.isFinite(value[0]) && typeof value[1] === "number" && Number.isFinite(value[1])
+    ? [value[0], value[1]]
+    : undefined;
 }
 
 function readEditorIkChains(value: unknown, bones: Readonly<Record<string, BoneTransform>>): Readonly<Record<string, EditorIkChain>> {
@@ -261,6 +357,8 @@ function toSourcePart(part: ShapePart): PartDefinition {
       points: part.points.map((point) => [...point]),
       pathCommands: part.pathCommands ? part.pathCommands.map((command) => ({ ...command })) : null,
       svgViewBox: part.svgViewBox ? [...part.svgViewBox] : null,
+      ...(part.intrinsicSize ? { intrinsicSize: [...part.intrinsicSize] } : {}),
+      ...(part.aspectLocked !== undefined ? { aspectLocked: part.aspectLocked } : {}),
       width: part.width ?? null,
       anchor: part.anchor ? [...part.anchor] : null,
       offset: part.offset ? [...part.offset] : null,
@@ -299,6 +397,8 @@ function fromSourcePart(part: PartDefinition): ShapePart {
   const rotation = numberValue(custom?.rotation) ?? part.local?.rotation ?? part.transform?.rotation;
   const opacity = numberValue(custom?.opacity) ?? part.opacity;
   const svgViewBox = readViewBox(custom?.svgViewBox);
+  const intrinsicSize = readPositiveSize(custom?.intrinsicSize);
+  const aspectLocked = booleanValue(custom?.aspectLocked);
   const pathCommands = readPathCommands(custom?.pathCommands) ?? part.path?.commands;
   return {
     id: part.id,
@@ -311,6 +411,8 @@ function fromSourcePart(part: PartDefinition): ShapePart {
     preset: part.procedural?.preset === "tapered-limb" || part.procedural?.preset === "organic-blob" || part.procedural?.preset === "capsule" ? part.procedural.preset : undefined,
     ...(assetPath ? { assetPath } : {}),
     ...(svgViewBox ? { svgViewBox } : {}),
+    ...(intrinsicSize ? { intrinsicSize } : {}),
+    ...(aspectLocked !== undefined ? { aspectLocked } : {}),
     ...(width ? { width } : {}),
     ...(anchor ? { anchor } : {}),
     ...(offset ? { offset } : {}),
@@ -898,6 +1000,15 @@ function isPathCommand(value: unknown): value is PathCommand {
 
 function readNumberPair(value: unknown): readonly [number, number] | undefined {
   return Array.isArray(value) && typeof value[0] === "number" && typeof value[1] === "number" ? [value[0], value[1]] : undefined;
+}
+
+function readPositiveSize(value: unknown): readonly [number, number] | undefined {
+  const pair = readNumberPair(value);
+  return pair && pair[0] > 0 && pair[1] > 0 ? pair : undefined;
+}
+
+function booleanValue(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
 }
 
 function readViewBox(value: unknown): readonly [number, number, number, number] | undefined {

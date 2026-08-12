@@ -13,7 +13,7 @@ test("character library reads lightweight database summaries", async () => {
       version: 3,
       characterKind: "cat",
       boneCount: 25,
-      partCount: 47,
+      partCount: 51,
       animationCount: 10,
       createdAt: "2026-08-12T10:00:00.000Z",
       updatedAt: "2026-08-12T11:00:00.000Z"
@@ -25,7 +25,7 @@ test("character library reads lightweight database summaries", async () => {
       name: "Milo Database",
       characterKind: "cat",
       boneCount: 25,
-      partCount: 47,
+      partCount: 51,
       animationCount: 10
     }]);
   } finally {

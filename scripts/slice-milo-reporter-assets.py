@@ -36,6 +36,13 @@ SHEETS = (
     )),
 )
 
+V3_ARM_NAMES = (
+    "shoulder_left_v3", "upper_arm_left_v3", "forearm_left_v3", "paw_closed_left_v3", "paw_open_left_v3",
+    "shoulder_right_v3", "upper_arm_right_v3", "forearm_right_v3", "paw_closed_right_v3", "paw_open_right_v3",
+)
+V3_PUPIL_NAMES = ("slit", "medium", "round")
+V3_EYELID_NAMES = ("neutral", "blink", "happy", "sad", "angry", "surprised")
+
 REPLACED_BODY_PARTS = {
     "upper_arm_left", "forearm_left", "paw_left",
     "upper_arm_right", "forearm_right", "paw_right",
@@ -72,6 +79,61 @@ def keep_largest_component(cell: Image.Image) -> Image.Image:
     cleaned_alpha = Image.new("L", cell.size)
     cleaned_alpha.putdata([value if keep[index] else 0 for index, value in enumerate(alpha)])
     cleaned.putalpha(cleaned_alpha)
+    return cleaned
+
+
+def keep_center_component(cell: Image.Image) -> Image.Image:
+    """Keep the pupil component nearest the cell center, ignoring connected sheet borders."""
+    alpha = cell.getchannel("A")
+    alpha_values = list(alpha.getdata())
+    center_x, center_y = cell.width / 2, cell.height / 2
+    best: tuple[float, tuple[int, int], list[int]] | None = None
+    seen = bytearray(cell.width * cell.height)
+    for start, value in enumerate(alpha_values):
+        if value <= 8 or seen[start]:
+            continue
+        seen[start] = 1
+        stack = [start]
+        component: list[int] = []
+        while stack:
+            index = stack.pop()
+            component.append(index)
+            x, y = index % cell.width, index // cell.width
+            for ny in range(max(0, y - 1), min(cell.height, y + 2)):
+                for nx in range(max(0, x - 1), min(cell.width, x + 2)):
+                    neighbor = ny * cell.width + nx
+                    if not seen[neighbor] and alpha_values[neighbor] > 8:
+                        seen[neighbor] = 1
+                        stack.append(neighbor)
+        xs = [index % cell.width for index in component]
+        ys = [index // cell.width for index in component]
+        centroid = (sum(xs) / len(xs), sum(ys) / len(ys))
+        distance = (centroid[0] - center_x) ** 2 + (centroid[1] - center_y) ** 2
+        candidate = (distance, (round(centroid[0]), round(centroid[1])), component)
+        if best is None or candidate[0] < best[0]:
+            best = candidate
+    cleaned = cell.copy()
+    kept = set(best[2] if best else [])
+    cleaned.putalpha(Image.new("L", cell.size))
+    out_alpha = cleaned.getchannel("A")
+    source_alpha = alpha.load()
+    out_pixels = out_alpha.load()
+    for index in kept:
+        out_pixels[index % cell.width, index // cell.width] = source_alpha[index % cell.width, index // cell.width]
+    cleaned.putalpha(out_alpha)
+    return cleaned
+
+
+def clear_cell_border(cell: Image.Image, border: int = 4) -> Image.Image:
+    """Remove ImageGen's opaque white grid separators before component cleanup."""
+    cleaned = cell.copy()
+    alpha = cleaned.getchannel("A")
+    draw = ImageDraw.Draw(alpha)
+    draw.rectangle((0, 0, cleaned.width - 1, border - 1), fill=0)
+    draw.rectangle((0, cleaned.height - border, cleaned.width - 1, cleaned.height - 1), fill=0)
+    draw.rectangle((0, 0, border - 1, cleaned.height - 1), fill=0)
+    draw.rectangle((cleaned.width - border, 0, cleaned.width - 1, cleaned.height - 1), fill=0)
+    cleaned.putalpha(alpha)
     return cleaned
 
 
@@ -122,6 +184,65 @@ def common_crop(cells: list[Image.Image], margin: int = 8) -> list[Image.Image]:
     return [cell.crop(bounds) for cell in cells]
 
 
+def joint_crop(sprite: Image.Image, top_fraction: float, margin: int = 6) -> Image.Image:
+    """Reuse the accepted arm sheet material for seam-hiding joint overlays."""
+    top = round(sprite.height * top_fraction)
+    return trim(sprite.crop((0, top, sprite.width, sprite.height)), margin=margin)
+
+
+def write_v3_arms(written_names: set[str]) -> None:
+    image = Image.open(SOURCE / "milo-arms-v3-rgba.png").convert("RGBA")
+    cells = sheet_cells(image, 5, 2, len(V3_ARM_NAMES))
+    for row in range(2):
+        start = row * 5
+        cells[start + 3:start + 5] = common_crop(
+            [keep_largest_component(cell) for cell in cells[start + 3:start + 5]],
+            margin=10,
+        )
+    sprites = {name: trim(keep_largest_component(cell)) for name, cell in zip(V3_ARM_NAMES, cells)}
+    for side in ("left", "right"):
+        shoulder = sprites[f"shoulder_{side}_v3"]
+        forearm = sprites[f"forearm_{side}_v3"]
+        sprites[f"elbow_cover_{side}_v3"] = joint_crop(shoulder, 0.54)
+        sprites[f"cuff_{side}_v3"] = joint_crop(forearm, 0.62)
+    for name, sprite in sprites.items():
+        sprite.save(OUTPUT / f"{name}.png", optimize=True)
+        written_names.add(name)
+
+
+def write_v3_eye_anatomy(written_names: set[str]) -> None:
+    image = Image.open(SOURCE / "milo-eye-anatomy-v3-rgba.png").convert("RGBA")
+    cells = sheet_cells(image, 5, 2, 10)
+    for side_index, side in enumerate(("left", "right")):
+        row = [clear_cell_border(cell) for cell in cells[side_index * 5:(side_index + 1) * 5]]
+        named = {
+            f"eye_white_{side}": trim(keep_largest_component(row[0]), margin=10),
+            f"eye_iris_{side}": trim(keep_largest_component(row[1]), margin=8),
+        }
+        pupil_cells = []
+        for cell in row[2:5]:
+            width, height = cell.size
+            centered = cell.crop((round(width * 0.15), round(height * 0.18), round(width * 0.85), round(height * 0.82)))
+            pupil_cells.append(keep_center_component(centered))
+        pupil_cells = common_crop(pupil_cells, margin=8)
+        named.update({f"pupil_{side}_{shape}": sprite for shape, sprite in zip(V3_PUPIL_NAMES, pupil_cells)})
+        for name, sprite in named.items():
+            sprite.save(OUTPUT / f"{name}.png", optimize=True)
+            written_names.add(name)
+
+
+def write_v3_eyelids(written_names: set[str]) -> None:
+    image = Image.open(SOURCE / "milo-eyelids-v3-rgba.png").convert("RGBA")
+    cells = sheet_cells(image, 6, 2, 12)
+    for side_index, side in enumerate(("left", "right")):
+        row = [keep_largest_component(clear_cell_border(cell)) for cell in cells[side_index * 6:(side_index + 1) * 6]]
+        row = common_crop(row, margin=10)
+        for expression, sprite in zip(V3_EYELID_NAMES, row):
+            name = f"eyelid_{side}_{expression}"
+            sprite.save(OUTPUT / f"{name}.png", optimize=True)
+            written_names.add(name)
+
+
 def lock_mouth_nose(cells: list[Image.Image]) -> list[Image.Image]:
     width, height = cells[0].size
     box = (round(width * 0.36), round(height * 0.14), round(width * 0.72), round(height * 0.52))
@@ -170,9 +291,12 @@ def main() -> None:
         sprite.thumbnail((512, 512), Image.Resampling.LANCZOS)
         sprite.save(OUTPUT / f"{name}_v5.png", optimize=True)
         written_names.add(name)
-    if len(written_names) != 51:
-        raise RuntimeError(f"Expected 51 sprites, wrote {len(written_names)}")
-    print(f"Wrote {len(written_names)} Milo RGBA assets to {OUTPUT}")
+    write_v3_arms(written_names)
+    write_v3_eye_anatomy(written_names)
+    write_v3_eyelids(written_names)
+    if len(written_names) != 87:
+        raise RuntimeError(f"Expected 87 sprites including 51 legacy assets, wrote {len(written_names)}")
+    print(f"Wrote {len(written_names)} Milo RGBA assets (71 active v3 + 16 retained legacy-only variants) to {OUTPUT}")
 
 
 if __name__ == "__main__":

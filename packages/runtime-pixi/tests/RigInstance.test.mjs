@@ -410,6 +410,33 @@ test("skinned mesh vertices follow sampled bone transforms", () => {
   assert.deepEqual(Array.from(positions), [20, 0, 30, 0, 20, 10]);
 });
 
+test("keeps a rigid one-bone mesh in its bone container for local draw ordering", () => {
+  const rigidMeshPart = {
+    ...compiledFixture.rig.parts[0],
+    id: 1,
+    bone: 1,
+    drawOrder: 16,
+    mesh: {
+      vertices: [-5, -5, 5, -5, 5, 5, -5, 5],
+      indices: [0, 1, 2, 0, 2, 3],
+      skin: [
+        [{ bone: 1, x: -5, y: -5, weight: 1 }],
+        [{ bone: 1, x: 5, y: -5, weight: 1 }],
+        [{ bone: 1, x: 5, y: 5, weight: 1 }],
+        [{ bone: 1, x: -5, y: 5, weight: 1 }]
+      ]
+    }
+  };
+  const instance = new RigInstance({
+    ...compiledFixture,
+    rig: { ...compiledFixture.rig, parts: [compiledFixture.rig.parts[0], rigidMeshPart] }
+  });
+
+  assert.equal(instance.getPartContainer(1).parent, instance.getBoneContainer(1));
+  assert.equal(instance.parts[1].skinned, undefined);
+  assert.equal(instance.getPartContainer(1).zIndex, 16);
+});
+
 test("skinned mesh deform offsets are applied before skinning", () => {
   const instance = new RigInstance({
     compiledFormatVersion: "1.0.0",

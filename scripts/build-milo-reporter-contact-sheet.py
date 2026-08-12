@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build light, dark, and checkerboard contact sheets for Milo RGBA assets."""
 
+import json
 from pathlib import Path
 from PIL import Image, ImageDraw
 
@@ -22,7 +23,8 @@ def background(mode: str, size: tuple[int, int]) -> Image.Image:
 
 
 def main() -> None:
-    paths = sorted(PARTS.glob("*.png"))
+    manifest = json.loads((BASE / "milo-reporter.manifest.json").read_text())
+    paths = sorted(ROOT / "apps/editor/public" / path.removeprefix("/") for path in manifest["activeAssetPaths"])
     cell_w, cell_h, columns = 240, 220, 6
     rows = (len(paths) + columns - 1) // columns
     for mode in ("light", "dark", "checker"):
@@ -51,6 +53,25 @@ def main() -> None:
             clip_sheet.paste(frame, (x, y))
             draw.text(((index % 5) * 480 + 8, y + 276), path.stem, fill="#ffffff")
         clip_sheet.save(BASE / "qa/milo-clips-contact-sheet.jpg", quality=90)
+    eye_parts = {path.stem: Image.open(path).convert("RGBA") for path in paths if path.stem.startswith(("eye_iris_", "eyelid_", "pupil_"))}
+    if eye_parts:
+        gaze_sheet = background("checker", (240 * 9, 180 * 2))
+        draw = ImageDraw.Draw(gaze_sheet)
+        directions = ((-1, -1, "up-left"), (0, -1, "up"), (1, -1, "up-right"), (-1, 0, "left"), (0, 0, "center"), (1, 0, "right"), (-1, 1, "down-left"), (0, 1, "down"), (1, 1, "down-right"))
+        for column, (dx, dy, label) in enumerate(directions):
+            for row, side in enumerate(("left", "right")):
+                iris = eye_parts[f"eye_iris_{side}"].copy()
+                pupil = eye_parts[f"pupil_{side}_medium"].copy()
+                eyelid = eye_parts[f"eyelid_{side}_neutral"].copy()
+                iris.thumbnail((100, 100), Image.Resampling.LANCZOS)
+                pupil.thumbnail((38, 48), Image.Resampling.LANCZOS)
+                eyelid.thumbnail((138, 112), Image.Resampling.LANCZOS)
+                cx, cy = column * 240 + 120, row * 180 + 76
+                gaze_sheet.alpha_composite(iris, (cx - iris.width // 2, cy - iris.height // 2))
+                gaze_sheet.alpha_composite(pupil, (cx - pupil.width // 2 + dx * 7, cy - pupil.height // 2 + dy * 4))
+                gaze_sheet.alpha_composite(eyelid, (cx - eyelid.width // 2, cy - eyelid.height // 2))
+                if row == 1: draw.text((column * 240 + 8, 338), label, fill="#111111")
+        gaze_sheet.convert("RGB").save(BASE / "qa/milo-gaze-contact-sheet.jpg", quality=92)
     print(f"Built three Milo contact sheets for {len(paths)} assets")
 
 
