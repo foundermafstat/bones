@@ -110,9 +110,9 @@ const bodySpecs = [
 
 const armSpecs = ["left", "right"].flatMap((side) => [
   { id: `shoulder_${side}_v3`, boneId: `shoulder${side === "left" ? "Left" : "Right"}`, file: `shoulder_${side}_v3.png`, box: [108, 124], drawOrder: 10, opacity: 0 },
-  { id: `upper_arm_${side}_v3`, boneId: `upperArm${side === "left" ? "Left" : "Right"}`, file: `upper_arm_${side}_v3.png`, box: [72, 160], drawOrder: 13, grid: [4, 6], distalBoneId: `elbow${side === "left" ? "Left" : "Right"}`, distalOffsetY: 125 },
+  { id: `upper_arm_${side}_v3`, boneId: `upperArm${side === "left" ? "Left" : "Right"}`, file: `upper_arm_${side}_v3.png`, box: [80.5, 168], drawOrder: 13, grid: [4, 6], distalBoneId: `elbow${side === "left" ? "Left" : "Right"}`, distalOffsetY: 125 },
   { id: `elbow_cover_${side}_v3`, boneId: `elbow${side === "left" ? "Left" : "Right"}`, file: `elbow_cover_${side}_v3.png`, box: [98, 72], drawOrder: 11, opacity: 0 },
-  { id: `forearm_${side}_v3`, boneId: `forearm${side === "left" ? "Left" : "Right"}`, file: `forearm_${side}_v3.png`, box: [72, 134], drawOrder: 14, grid: [4, 6], distalBoneId: `wrist${side === "left" ? "Left" : "Right"}`, distalOffsetY: 106 },
+  { id: `forearm_${side}_v3`, boneId: `forearm${side === "left" ? "Left" : "Right"}`, file: `forearm_${side}_v3.png`, box: [80.5, 138], drawOrder: 14, grid: [4, 6], distalBoneId: `wrist${side === "left" ? "Left" : "Right"}`, distalOffsetY: 106 },
   { id: `cuff_${side}_v3`, boneId: `wrist${side === "left" ? "Left" : "Right"}`, file: `cuff_${side}_v3.png`, box: [72, 53], drawOrder: 15, opacity: 0 },
   { id: `paw_closed_${side}_v3`, boneId: `paw${side === "left" ? "Left" : "Right"}`, file: `paw_closed_${side}_v3.png`, box: [63, 72], drawOrder: 16, grid: [4, 4] },
   { id: `paw_open_${side}_v3`, boneId: `paw${side === "left" ? "Left" : "Right"}`, file: `paw_open_${side}_v3.png`, box: [72, 80], drawOrder: 16, grid: [4, 4] }
@@ -218,6 +218,9 @@ const upperLeftLength = armLength("upper_arm_left_v3", 125);
 const upperRightLength = armLength("upper_arm_right_v3", 125);
 const forearmLeftLength = armLength("forearm_left_v3", 106);
 const forearmRightLength = armLength("forearm_right_v3", 106);
+const pawOffsetY = 32;
+const elbowJoinInsetX = 8;
+const pawJoinInsetX = 20;
 const armDistalOffsets = {
   upper_arm_left_v3: upperLeftLength,
   upper_arm_right_v3: upperRightLength,
@@ -229,8 +232,8 @@ const bones = [
   ["root", null, 0, 145], ["torso", "root", 0, -60], ["chest", "torso", 0, -72], ["neck", "chest", 0, -42], ["head", "neck", 0, -68], ["jaw", "head", 0, 19],
   ["earLeft", "head", -63, -86], ["earRight", "head", 58, -86], ["whiskerLeft", "head", -54, 12], ["whiskerRight", "head", 54, 12],
   ["eyeAimLeft", "head", 0, 0], ["eyeAimRight", "head", 0, 0],
-  ["shoulderLeft", "chest", -145, -18, 0, 0.25], ["upperArmLeft", "shoulderLeft", 0, 0, upperLeftLength], ["elbowLeft", "upperArmLeft", 0, upperLeftLength, 0, -0.75], ["forearmLeft", "elbowLeft", 0, 0, forearmLeftLength], ["wristLeft", "forearmLeft", 0, forearmLeftLength], ["pawLeft", "wristLeft", 0, 4],
-  ["shoulderRight", "chest", 145, -18, 0, -0.25], ["upperArmRight", "shoulderRight", 0, 0, upperRightLength], ["elbowRight", "upperArmRight", 0, upperRightLength, 0, 0.75], ["forearmRight", "elbowRight", 0, 0, forearmRightLength], ["wristRight", "forearmRight", 0, forearmRightLength], ["pawRight", "wristRight", 0, 4],
+  ["shoulderLeft", "chest", -145, -18, 0, 0.25], ["upperArmLeft", "shoulderLeft", 0, 0, upperLeftLength], ["elbowLeft", "upperArmLeft", elbowJoinInsetX, upperLeftLength, 0, -0.75], ["forearmLeft", "elbowLeft", 0, 0, forearmLeftLength], ["wristLeft", "forearmLeft", 0, forearmLeftLength], ["pawLeft", "wristLeft", pawJoinInsetX, pawOffsetY],
+  ["shoulderRight", "chest", 145, -18, 0, -0.25], ["upperArmRight", "shoulderRight", 0, 0, upperRightLength], ["elbowRight", "upperArmRight", -elbowJoinInsetX, upperRightLength, 0, 0.75], ["forearmRight", "elbowRight", 0, 0, forearmRightLength], ["wristRight", "forearmRight", 0, forearmRightLength], ["pawRight", "wristRight", -pawJoinInsetX, pawOffsetY],
   ["collarLeft", "chest", -45, -4], ["collarRight", "chest", 45, -4], ["scarf", "chest", 0, 8], ["coatFlapLeft", "torso", -58, 58], ["coatFlapRight", "torso", 58, 58], ["coatLower", "torso", 0, 60], ["neckRuff", "neck", 0, 10]
 ].map(([id, parentId, x, y, length = 0, rotation = 0]) => ({
   id,
@@ -524,10 +527,10 @@ const poseDeforms = (sides) => Object.fromEntries(["left", "right"].flatMap((sid
   [`forearm_${side}_v3`, sides.includes(side) ? armDeforms[`forearm_${side}_v3`] : meshZeroes(`forearm_${side}_v3`)]
 ]));
 const poses = [
-  { id: "arms_neutral", name: "Arms Neutral", rigId: "milo-reporter-rig", boneTransforms: { elbowLeft: transform(0, upperLeftLength), wristLeft: transform(0, forearmLeftLength), pawLeft: transform(0, 4), elbowRight: transform(0, upperRightLength), wristRight: transform(0, forearmRightLength), pawRight: transform(0, 4) }, editor: { custom: { deforms: poseDeforms([]) } } },
-  { id: "reach_left", name: "Reach Left", rigId: "milo-reporter-rig", boneTransforms: { elbowLeft: transform(0, upperLeftLength * 0.3), wristLeft: transform(0, forearmLeftLength * 0.28), pawLeft: transform(0, 4, 0, 1.22, 1.22), elbowRight: transform(0, upperRightLength), wristRight: transform(0, forearmRightLength), pawRight: transform(0, 4) }, editor: { custom: { deforms: poseDeforms(["left"]) } } },
-  { id: "reach_right", name: "Reach Right", rigId: "milo-reporter-rig", boneTransforms: { elbowLeft: transform(0, upperLeftLength), wristLeft: transform(0, forearmLeftLength), pawLeft: transform(0, 4), elbowRight: transform(0, upperRightLength * 0.3), wristRight: transform(0, forearmRightLength * 0.28), pawRight: transform(0, 4, 0, 1.22, 1.22) }, editor: { custom: { deforms: poseDeforms(["right"]) } } },
-  { id: "reach_both", name: "Reach Both", rigId: "milo-reporter-rig", boneTransforms: { elbowLeft: transform(0, upperLeftLength * 0.3), wristLeft: transform(0, forearmLeftLength * 0.28), pawLeft: transform(0, 4, 0, 1.25, 1.25), elbowRight: transform(0, upperRightLength * 0.3), wristRight: transform(0, forearmRightLength * 0.28), pawRight: transform(0, 4, 0, 1.25, 1.25) }, editor: { custom: { deforms: poseDeforms(["left", "right"]) } } }
+  { id: "arms_neutral", name: "Arms Neutral", rigId: "milo-reporter-rig", boneTransforms: { elbowLeft: transform(elbowJoinInsetX, upperLeftLength), wristLeft: transform(0, forearmLeftLength), pawLeft: transform(pawJoinInsetX, pawOffsetY), elbowRight: transform(-elbowJoinInsetX, upperRightLength), wristRight: transform(0, forearmRightLength), pawRight: transform(-pawJoinInsetX, pawOffsetY) }, editor: { custom: { deforms: poseDeforms([]) } } },
+  { id: "reach_left", name: "Reach Left", rigId: "milo-reporter-rig", boneTransforms: { elbowLeft: transform(elbowJoinInsetX, upperLeftLength * 0.3), wristLeft: transform(0, forearmLeftLength * 0.28), pawLeft: transform(pawJoinInsetX, pawOffsetY, 0, 1.22, 1.22), elbowRight: transform(-elbowJoinInsetX, upperRightLength), wristRight: transform(0, forearmRightLength), pawRight: transform(-pawJoinInsetX, pawOffsetY) }, editor: { custom: { deforms: poseDeforms(["left"]) } } },
+  { id: "reach_right", name: "Reach Right", rigId: "milo-reporter-rig", boneTransforms: { elbowLeft: transform(elbowJoinInsetX, upperLeftLength), wristLeft: transform(0, forearmLeftLength), pawLeft: transform(pawJoinInsetX, pawOffsetY), elbowRight: transform(-elbowJoinInsetX, upperRightLength * 0.3), wristRight: transform(0, forearmRightLength * 0.28), pawRight: transform(-pawJoinInsetX, pawOffsetY, 0, 1.22, 1.22) }, editor: { custom: { deforms: poseDeforms(["right"]) } } },
+  { id: "reach_both", name: "Reach Both", rigId: "milo-reporter-rig", boneTransforms: { elbowLeft: transform(elbowJoinInsetX, upperLeftLength * 0.3), wristLeft: transform(0, forearmLeftLength * 0.28), pawLeft: transform(pawJoinInsetX, pawOffsetY, 0, 1.25, 1.25), elbowRight: transform(-elbowJoinInsetX, upperRightLength * 0.3), wristRight: transform(0, forearmRightLength * 0.28), pawRight: transform(-pawJoinInsetX, pawOffsetY, 0, 1.25, 1.25) }, editor: { custom: { deforms: poseDeforms(["left", "right"]) } } }
 ];
 
 const states = animations.map(({ id }) => ({ id, name: id, clipId: id }));
@@ -599,11 +602,11 @@ const manifest = {
   reference: "User-approved final-look identity, face foundation, paw-size calibration, and arm sheet",
   references: {
     finalLook: { source: "exec-a391a217-0dcd-4085-b459-59970971fa59.png", chroma: "source-art/milo-final-look-v3-chroma.png", rgba: "source-art/milo-final-look-v3-rgba.png" },
+    torsoComposite: { rgba: "source-art/milo-torso-composite-v2-rgba.png", role: "narrowed lower lapels with the standing collar retained" },
     faceFoundation: { source: "codex-clipboard-70a66fe4-fee2-4175-998d-62224d8b70a6.png", chroma: "source-art/milo-head-shell-v7-chroma.png", rgba: "source-art/milo-head-shell-v7-rgba.png", part: "parts/head_shell_v7.png" },
     pawScaleCalibration: { source: "exec-c60fa62d-4fc4-456a-8d5c-0ffd14515821.png", chroma: "source-art/milo-calibration-v3-chroma.png" },
     armSet: { source: "codex-clipboard-b931cc12-da4d-4624-94ef-f3bbabff45c8.png", chroma: "source-art/milo-arms-v3-chroma.png", rgba: "source-art/milo-arms-v3-rgba.png" },
-    roundedUpperSleeves: { source: "exec-02803c8f-60c3-4c7a-b658-1053d35403a0.png", chroma: "source-art/milo-upper-arms-v4-chroma.png", rgba: "source-art/milo-upper-arms-v4-rgba.png", replaces: ["parts/upper_arm_left_v3.png", "parts/upper_arm_right_v3.png"] },
-    seamlessForearms: { source: "exec-77d493c9-ee24-47e2-a2e6-b6c5bbd8c2fd.png", chroma: "source-art/milo-forearms-v4-chroma.png", rgba: "source-art/milo-forearms-v4-rgba.png", replaces: ["parts/forearm_left_v3.png", "parts/forearm_right_v3.png"] },
+    armSegments: { rgba: "source-art/milo-arms-v5-rgba.png", grid: [2, 2], upperArmCells: [0, 1], forearmCells: [2, 3], replaces: ["parts/upper_arm_left_v3.png", "parts/upper_arm_right_v3.png", "parts/forearm_left_v3.png", "parts/forearm_right_v3.png"] },
     eyeAnatomy: { chroma: "source-art/milo-eye-anatomy-v3-chroma.png", rgba: "source-art/milo-eye-anatomy-v3-rgba.png" },
     irisSource: { source: "exec-645040ae-0ea9-45ca-a4f2-ad9c949978e7.png", chroma: "source-art/milo-eye-bases-v4-chroma.png", role: "solid circular iris and pupil anatomy" },
     eyelids: { source: "exec-85342265-5d12-4161-abab-74295ab50d82.png", chroma: "source-art/milo-eyelids-v3-chroma.png", rgba: "source-art/milo-eyelids-v3-rgba.png" },
@@ -656,17 +659,21 @@ const manifest = {
       silhouettePixelPerfect: false
     },
     pupilMovesWithGaze: true,
-    armOverlapPadding: [0.15, 0.21],
+    armOverlapPadding: [0.248, 0.255],
     armContinuity: {
       skinnedSegmentsFollowBoneHierarchy: true,
       elbowCoversVisible: false,
       forearmOccludesUpperSleeveEnd: true,
       forearmHasOpenEnd: false,
-      cuffFitsForearm: true,
-      cuffsVisible: false,
+      separateCuffsVisible: false,
+      integratedCuffButtonsVisible: true,
+      oneSheetMaterialConsistency: true,
       roundedShoulderEntryByOutwardChain: true,
       roundedUpperSleeveAssets: true,
-      seamlessRoundedForearmEnds: true,
+      approvedArmGrid: [2, 2],
+      elbowJoinInsetX,
+      pawJoinInsetX,
+      alphaJointCentersAligned: true,
       elbowsBiasAwayFromTorso: true,
       symmetricElbowCenters: true,
       reachJointsFollowSegmentShortening: true

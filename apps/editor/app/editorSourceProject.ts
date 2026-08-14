@@ -676,7 +676,7 @@ function identityTransform(): Transform2D {
   return { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 };
 }
 
-function partLocalTransform(part: ShapePart): Transform2D {
+export function partLocalTransform(part: ShapePart): Transform2D {
   const offset = part.offset ?? [0, 0];
   const explicitScale = part.scale;
   if (!part.svgViewBox || !part.width) {

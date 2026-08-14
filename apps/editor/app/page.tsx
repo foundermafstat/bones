@@ -30,6 +30,7 @@ import {
   createMoveBoneCommand,
   createRotateBoneCommand,
   createAddBoneCommand,
+  createConnectJointsCommand,
   createAddSvgPartCommand,
   createDeleteBoneCommand,
   createRenameBoneCommand,
@@ -125,10 +126,10 @@ import {
 import { defaultEditorProject } from "./defaultEditorProject";
 import { createProjectExportBundle, createRuntimeParityReport, DEFAULT_RUNTIME_BUNDLE_FILE, DEFAULT_RUNTIME_ZIP_FILE, EXPORT_BUNDLE_ROOT_DIR, EDITOR_DRAFT_KEY, EDITOR_DRAFT_META_KEY, loadDraft, loadDraftMeta, parseImportedProject, saveDraft, serializeEditorProject, type DraftMetadata, type ProjectExportBundle, type ProjectImportResult, type RuntimeParityReport } from "./projectIo";
 import { PixiPreview } from "./PixiPreview";
-import type { GuidedStep } from "./GuidedEditor";
 import { StudioEditor } from "./StudioEditor";
+import { ProjectHome, SkeletonSetup, type PendingCreation, type StartPreset } from "./ProjectHome";
 import { fromSourceProject, toSourceProject } from "./editorSourceProject";
-import { createCharacterProject, type CreationTemplate } from "./characterTemplates";
+import { createCharacterProject } from "./characterTemplates";
 import { createDeflateZipBlob, type RuntimeArchiveEntry } from "./runtimeArchive";
 import { inspectSvgVector, vectorizeSvgPart } from "./editorVectorImport";
 import { connectProjectFolder, readRasterIntrinsicSize, resolveProjectAssetUrl, writeProjectAsset, type StoredProjectAsset } from "./localProjectAssets";
@@ -144,6 +145,7 @@ const modes = ["Rig", "Shape", "Pose", "Timeline", "Curve", "State Machine", "Pr
 const stateMachineViewBox = { x: 0, y: 0, width: 640, height: 360 } as const;
 const curveEditorViewBox = { x: 0, y: 0, width: 120, height: 100 } as const;
 type ProjectOrigin = "sample" | "empty" | "draft" | "imported" | "created";
+type AppSurface = "home" | "preset-confirm" | "skeleton-setup" | "studio";
 
 const sampleProject = {
   tracks: ["body.scaleY", "head.y", "upperArmFront.rotation", "thighFront.rotation", "thighBack.rotation"]
@@ -229,6 +231,14 @@ function parseStateMachineValue(value: string): number | boolean | string {
 
 function parseCsvIds(value: string): string[] {
   return value.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function nextAvailableProjectName(baseName: string, projects: readonly RemoteProjectSummary[]): string {
+  const names = new Set(projects.map((project) => project.name.trim().toLocaleLowerCase()));
+  if (!names.has(baseName.toLocaleLowerCase())) return baseName;
+  let suffix = 2;
+  while (names.has(`${baseName} ${suffix}`.toLocaleLowerCase())) suffix += 1;
+  return `${baseName} ${suffix}`;
 }
 
 function clampPanelSize(value: number, min: number, max: number): number {
@@ -407,12 +417,11 @@ function readFileAsDataUrl(file: File): Promise<string> {
 }
 
 export default function EditorPage() {
+  const [appSurface, setAppSurface] = useState<AppSurface>("home");
   const [mode, setMode] = useState<EditorMode>("Rig");
   const [advancedMode, setAdvancedMode] = useState(false);
-  const [guidedStep, setGuidedStep] = useState<GuidedStep>("character");
-  const [creatingCharacter, setCreatingCharacter] = useState(true);
-  const [createName, setCreateName] = useState("Milo");
-  const [createKind, setCreateKind] = useState<CreationTemplate>("dog");
+  const [pendingCreation, setPendingCreation] = useState<PendingCreation | null>(null);
+  const [createName, setCreateName] = useState("Milo Reporter");
   const [runtimeZipBytes, setRuntimeZipBytes] = useState<number | null>(null);
   const [packageZipBytes, setPackageZipBytes] = useState<number | null>(null);
   const [leftPanelWidth, setLeftPanelWidth] = useState(220);
@@ -554,9 +563,9 @@ export default function EditorPage() {
       setFolderStatus(error instanceof Error ? error.message : "Folder connection failed");
     }
   }, [editorState.project.name, editorState.project.projectId]);
-  const creationPreviewProject = useMemo(
-    () => createCharacterProject(createKind, createName),
-    [createKind, createName]
+  const sortedRemoteProjects = useMemo(
+    () => [...remoteProjects].sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt)),
+    [remoteProjects]
   );
   const localAssetPathsKey = useMemo(
     () => Object.values(editorState.project.parts).map((part) => part.assetPath).filter((path): path is string => Boolean(path?.startsWith("assets/"))).sort().join("|"),
@@ -1096,6 +1105,8 @@ export default function EditorPage() {
       setRemoteStatus(`Neon loaded · v${snapshot.version}`);
       setCharacterLibraryStatus(`Loaded ${snapshot.name}`);
       setIoStatus(`loaded ${snapshot.name} from database`);
+      setAdvancedMode(false);
+      setAppSurface("studio");
     } catch (error) {
       setCharacterLibraryStatus(error instanceof Error ? error.message : "Could not load character");
     }
@@ -1118,12 +1129,19 @@ export default function EditorPage() {
     replaceProject(structuredClone(defaultEditorProject), "sample", "idle_neutral");
     setIoStatus("sample loaded; draft cleared");
   };
-  const startEmptyProject = () => {
-    const project = createEmptyEditorProject();
-    replaceProject(project, "empty");
-    setIoStatus("new empty project");
-    void connectProjectFolder(project.projectId, project.name).then(() => setFolderStatus("Project folder connected")).catch((error) => setFolderStatus(error instanceof Error ? error.message : "Folder not connected"));
+  const beginCreation = (creation: PendingCreation) => {
+    const baseName = creation === "human"
+      ? "2D Character"
+      : creation === "dog"
+        ? "2D Animal"
+        : creation === "milo-reporter"
+          ? "Milo Reporter"
+          : "Untitled Rig";
+    setPendingCreation(creation);
+    setCreateName(nextAvailableProjectName(baseName, remoteProjects));
+    setAppSurface("preset-confirm");
   };
+  const startEmptyProject = () => beginCreation("blank");
   const openRemoteConflictVersion = async () => {
     try {
       const snapshot = await loadRemoteProject(editorState.project.projectId);
@@ -1162,29 +1180,39 @@ export default function EditorPage() {
       setIoStatus(error instanceof Error ? error.message : "revision restore failed");
     }
   };
-  const createSelectedCharacter = () => {
-    const project = createCharacterProject(createKind, createName);
+  const confirmProjectCreation = () => {
+    const creation = pendingCreation;
+    const name = createName.trim();
+    if (!creation || name.length < 2) return;
+    if (creation === "blank") {
+      const project = { ...createEmptyEditorProject(), name };
+      replaceProject(project, "empty");
+      setPendingCreation(null);
+      setAppSurface("skeleton-setup");
+      setIoStatus("new empty project");
+      void persistRemoteProject(project, "manual").then((session) => setIoStatus(session ? `${project.name} saved to database` : `${project.name} kept locally`));
+      return;
+    }
+    const project = createCharacterProject(creation, name);
     replaceProject(project, "created", Object.keys(project.poses)[0] ?? "");
-    setCreatingCharacter(false);
-    setGuidedStep("textures");
-    setPreviewPlaying(true);
-    setIoStatus(`${createKind} character created`);
-    void connectProjectFolder(project.projectId, project.name).then(() => setFolderStatus("Project folder connected")).catch((error) => setFolderStatus(error instanceof Error ? error.message : "Folder not connected"));
-    void persistRemoteProject(project, "manual").then((session) => setIoStatus(session ? `${project.name} saved to database` : `${project.name} kept locally`));
-  };
-  const createMiloReporter = () => {
-    const project = createCharacterProject("milo-reporter", "Milo Reporter");
-    replaceProject(project, "created", "idle_neutral");
-    setPreviewClipId("idle_neutral");
+    setPendingCreation(null);
+    setAdvancedMode(false);
+    setPreviewClipId(creation === "milo-reporter" ? "idle_neutral" : "idle");
     setTimelineCurrentTime(0);
     setPreviewPlaying(true);
-    setIoStatus("Milo Reporter created");
-    void persistRemoteProject(project, "manual").then((session) => setIoStatus(session ? "Milo Reporter saved to database" : "Milo Reporter kept locally"));
+    setAppSurface("studio");
+    setIoStatus(`${project.name} created`);
+    void persistRemoteProject(project, "manual").then((session) => setIoStatus(session ? `${project.name} saved to database` : `${project.name} kept locally`));
   };
-  const openSampleInGuide = () => {
-    resetToSampleProject();
-    setCreatingCharacter(false);
-    setGuidedStep("character");
+  const createFirstBlankBone = () => {
+    const command = createConnectJointsCommand("root", "body", "skeleton", [0, -96]);
+    const next = executeCommand(editorState, command);
+    setEditorState(next);
+    setAdvancedMode(false);
+    setMode("Rig");
+    setAppSurface("studio");
+    setIoStatus("body bone created");
+    void persistRemoteProject(next.project, "manual");
   };
   const importProjectFile = async (file: File) => {
     try {
@@ -1195,8 +1223,8 @@ export default function EditorPage() {
       }
       if (remoteSessionRef.current?.id === editorState.project.projectId) await createRemoteRevision(editorState.project.projectId, "import", `Before import ${file.name}`);
       replaceProject(result.project, "imported", Object.keys(result.project.poses)[0] ?? "");
-      setCreatingCharacter(false);
-      setGuidedStep("character");
+      setAdvancedMode(false);
+      setAppSurface("studio");
       setIoStatus(`imported ${result.kind ?? "project"}`);
     } catch (error) {
       setIoStatus(error instanceof Error ? error.message : "project import failed");
@@ -1653,6 +1681,35 @@ export default function EditorPage() {
   );
   const showDraftBanner = availableDraft !== null && projectOrigin !== "draft";
 
+  if (appSurface === "home" || appSurface === "preset-confirm") {
+    return (
+      <ProjectHome
+        projects={sortedRemoteProjects}
+        status={characterLibraryStatus}
+        pendingCreation={appSurface === "preset-confirm" ? pendingCreation : null}
+        projectName={createName}
+        onSelectPreset={beginCreation}
+        onSelectBlank={startEmptyProject}
+        onProjectNameChange={setCreateName}
+        onCancelCreation={() => { setPendingCreation(null); setAppSurface("home"); }}
+        onConfirmCreation={confirmProjectCreation}
+        onOpenProject={(projectId) => void loadSavedCharacter(projectId)}
+        onImportProject={importProjectFile}
+      />
+    );
+  }
+
+  if (appSurface === "skeleton-setup") {
+    return (
+      <SkeletonSetup
+        project={editorState.project}
+        quality={previewQuality}
+        onBack={() => { saveCurrentDraft(); setAppSurface("home"); void refreshRemoteProjects(); }}
+        onCreateFirstBone={createFirstBlankBone}
+      />
+    );
+  }
+
   const renderStudio = (advancedWorkspace?: ReactNode) => (
       <StudioEditor
         project={editorState.project}
@@ -1662,10 +1719,7 @@ export default function EditorPage() {
         quality={previewQuality}
         ioStatus={ioStatus}
         remoteStatus={remoteStatus}
-        folderStatus={folderStatus}
         remoteConflictVersion={remoteConflictVersion}
-        remoteProjects={remoteProjects}
-        characterLibraryStatus={characterLibraryStatus}
         lastExportBundle={lastExportBundle}
         canUndo={editorState.history.past.length > 0}
         canRedo={editorState.history.future.length > 0}
@@ -1678,13 +1732,10 @@ export default function EditorPage() {
         onRedo={() => setEditorState((state) => redo(state))}
         onSave={saveCurrentDraft}
         onConnectFolder={() => void connectCurrentProjectFolder()}
-        onNewProject={startEmptyProject}
-        onCreateMiloReporter={createMiloReporter}
+        onBackToProjects={() => { saveCurrentDraft(); setAppSurface("home"); void refreshRemoteProjects(); }}
         onOpenRemoteConflict={() => void openRemoteConflictVersion()}
         onSaveConflictAsNew={() => void saveConflictAsNewProject()}
         onRestoreLatestRevision={() => void restoreLatestRemoteRevision()}
-        onRefreshRemoteProjects={() => void refreshRemoteProjects()}
-        onLoadRemoteProject={(projectId) => void loadSavedCharacter(projectId)}
         advancedMode={mode}
         advancedWorkspace={advancedWorkspace}
         onCloseAdvanced={() => setAdvancedMode(false)}

@@ -10,6 +10,7 @@ import {
   type AnimationSample,
   type RuntimeTrackProperty,
   type RuntimeCompiledRig,
+  type PackedTransform2D,
   type QualityPresetName,
   type RuntimeProfilerStats
 } from "@bones/runtime-pixi";
@@ -19,6 +20,7 @@ import { toSourceProject } from "./editorSourceProject";
 import { vectorizeSvgParts } from "./editorVectorImport";
 
 interface PixiPreviewProps {
+  readonly authoring?: PixiPreviewAuthoringState | undefined;
   readonly clipId: string;
   readonly compiledProject?: RuntimeCompiledRig | null;
   readonly currentTime?: number;
@@ -35,6 +37,13 @@ interface PixiPreviewProps {
   readonly onProfilerStats?: (stats: RuntimeProfilerStats) => void;
 }
 
+export interface PixiPreviewAuthoringState {
+  readonly visiblePartIds?: readonly string[] | undefined;
+  readonly bindPosePartIds?: readonly string[] | undefined;
+  readonly partTransforms?: Readonly<Record<string, PackedTransform2D>> | undefined;
+  readonly viewport?: { readonly x: number; readonly y: number; readonly width: number; readonly height: number } | undefined;
+}
+
 interface PixiPreviewSceneState {
   readonly x: number;
   readonly y: number;
@@ -44,12 +53,12 @@ interface PixiPreviewSceneState {
   readonly colliders: readonly { readonly x: number; readonly y: number; readonly width: number; readonly height: number; readonly kind: string }[];
 }
 
-export function PixiPreview({ clipId, compiledProject, currentTime, disableAnimation, playing, project, quality, runtimeMode, sceneState, showSkeleton, skinId, interactionMode = "preview", onTimeChange, onProfilerStats }: PixiPreviewProps) {
+export function PixiPreview({ authoring, clipId, compiledProject, currentTime, disableAnimation, playing, project, quality, runtimeMode, sceneState, showSkeleton, skinId, interactionMode = "preview", onTimeChange, onProfilerStats }: PixiPreviewProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
-  const stateRef = useRef({ clipId, currentTime, disableAnimation, playing, sceneState, showSkeleton, skinId, interactionMode, onTimeChange, onProfilerStats });
+  const stateRef = useRef({ authoring, clipId, currentTime, disableAnimation, playing, sceneState, showSkeleton, skinId, interactionMode, onTimeChange, onProfilerStats });
   const [error, setError] = useState<string | null>(null);
 
-  stateRef.current = { clipId, currentTime, disableAnimation, playing, sceneState, showSkeleton, skinId, interactionMode, onTimeChange, onProfilerStats };
+  stateRef.current = { authoring, clipId, currentTime, disableAnimation, playing, sceneState, showSkeleton, skinId, interactionMode, onTimeChange, onProfilerStats };
 
   useEffect(() => {
     const canvas = hostRef.current?.querySelector("canvas");
@@ -172,6 +181,7 @@ export function PixiPreview({ clipId, compiledProject, currentTime, disableAnima
           };
         };
         const onPointerDown = (event: PointerEvent) => {
+          if (stateRef.current.authoring?.viewport) return;
           if (stateRef.current.interactionMode !== "preview" && !spacePressed && event.button !== 1) {
             return;
           }
@@ -207,6 +217,7 @@ export function PixiPreview({ clipId, compiledProject, currentTime, disableAnima
         };
         const onWheel = (event: WheelEvent) => {
           event.preventDefault();
+          if (stateRef.current.authoring?.viewport) return;
           applyZoom(event.clientX, event.clientY, viewState.zoom * Math.exp(-event.deltaY * 0.0012));
         };
         const onKeyDown = (event: KeyboardEvent) => {
@@ -245,7 +256,10 @@ export function PixiPreview({ clipId, compiledProject, currentTime, disableAnima
           }
           const updateStart = performance.now();
 
-          const fitScale = meshBounds
+          const authoringViewport = current.authoring?.viewport;
+          const fitScale = authoringViewport
+            ? Math.min(app.screen.width / authoringViewport.width, app.screen.height / authoringViewport.height)
+            : meshBounds
             ? Math.min(app.screen.width / (meshBounds.width + 80), app.screen.height / (meshBounds.height + 80)) * 0.84
             : project.characterKind === "dog"
               ? Math.min(app.screen.width / 300, app.screen.height / 240) * 0.92
@@ -258,8 +272,12 @@ export function PixiPreview({ clipId, compiledProject, currentTime, disableAnima
           const desiredX = app.screen.width * 0.5 + sceneX * scale + viewState.panX;
           const desiredY = app.screen.height * 0.5 + sceneY * scale + viewState.panY;
           rig.container.position.set(
-            meshBounds ? desiredX - meshBounds.centerX * scaleX : desiredX,
-            meshBounds ? desiredY - meshBounds.centerY * scale : desiredY
+            authoringViewport
+              ? desiredX - (authoringViewport.x + authoringViewport.width / 2) * scaleX
+              : meshBounds ? desiredX - meshBounds.centerX * scaleX : desiredX,
+            authoringViewport
+              ? desiredY - (authoringViewport.y + authoringViewport.height / 2) * scale
+              : meshBounds ? desiredY - meshBounds.centerY * scale : desiredY
           );
           rig.container.scale.set(scaleX, scale);
           drawPreviewScene(sceneLayer, scene, app.screen, scale, viewState);
@@ -277,6 +295,7 @@ export function PixiPreview({ clipId, compiledProject, currentTime, disableAnima
             rig.update(0);
           }
 
+          applyAuthoringState(rig, compiled, current.authoring);
           drawSkeleton(skeleton, rig, compiled, project, current.showSkeleton);
           const updateMs = performance.now() - updateStart;
           const stats = profiler.record({ updateMs, renderMs: ticker.deltaMS, allocations: 0 });
@@ -328,6 +347,31 @@ export function PixiPreview({ clipId, compiledProject, currentTime, disableAnima
       ) : null}
     </>
   );
+}
+
+function applyAuthoringState(rig: RigInstance, compiled: RuntimeCompiledRig, authoring: PixiPreviewAuthoringState | undefined) {
+  if (!authoring) return;
+  if (authoring.visiblePartIds) {
+    const visible = new Set(authoring.visiblePartIds.flatMap((partId) => {
+      const numericId = compiled.lookups?.parts[partId];
+      return typeof numericId === "number" ? [numericId] : [];
+    }));
+    for (const part of rig.parts) part.container.visible = part.container.visible && visible.has(part.id);
+  }
+  for (const partId of authoring.bindPosePartIds ?? []) {
+    const numericId = compiled.lookups?.parts[partId];
+    if (typeof numericId === "number") rig.applyPartBindPoseMesh(numericId);
+  }
+  for (const [partId, transform] of Object.entries(authoring.partTransforms ?? {})) {
+    const numericId = compiled.lookups?.parts[partId];
+    if (typeof numericId !== "number") continue;
+    const container = rig.getPartContainer(numericId);
+    if (!container) continue;
+    container.position.set(transform[0], transform[1]);
+    container.rotation = transform[2];
+    container.scale.set(transform[3], transform[4]);
+    container.skew.set(transform[5], transform[6]);
+  }
 }
 
 function evaluateAuthoringRig(rig: RigInstance, compiled: RuntimeCompiledRig, clip: RuntimeAnimationClip | undefined, time: number, statefulDelta?: number): void {

@@ -9,7 +9,7 @@ BASE = ROOT / "apps/editor/public/assets/mascots/milo-reporter"
 SOURCE = BASE / "source-art"
 OUTPUT = BASE / "parts"
 COMPOSITE_OVERRIDES = {
-    "chest_upper_coat": "milo-torso-composite-rgba.png",
+    "chest_upper_coat": "milo-torso-composite-v2-rgba.png",
 }
 
 SHEETS = (
@@ -226,6 +226,9 @@ def write_v3_arms(written_names: set[str]) -> None:
             margin=10,
         )
     sprites = {name: trim(keep_largest_component(cell)) for name, cell in zip(V3_ARM_NAMES, cells)}
+    sprites["upper_arm_left_v3"], sprites["upper_arm_right_v3"] = common_centered_canvas(
+        [sprites["upper_arm_left_v3"], sprites["upper_arm_right_v3"]],
+    )
     sprites["forearm_left_v3"], sprites["forearm_right_v3"] = common_centered_canvas(
         [sprites["forearm_left_v3"], sprites["forearm_right_v3"]],
     )
@@ -239,24 +242,19 @@ def write_v3_arms(written_names: set[str]) -> None:
         written_names.add(name)
 
 
-def write_v4_upper_arms(written_names: set[str]) -> None:
-    """Replace only the two v3 upper sleeves with the approved rounded pair."""
-    image = Image.open(SOURCE / "milo-upper-arms-v4-rgba.png").convert("RGBA")
-    cells = [keep_largest_component(cell) for cell in sheet_cells(image, 2, 1, 2)]
-    sprites = common_crop(cells, margin=10)
-    for side, sprite in zip(("left", "right"), sprites):
-        name = f"upper_arm_{side}_v3"
-        sprite.save(OUTPUT / f"{name}.png", optimize=True)
-        written_names.add(name)
-
-
-def write_v4_forearms(written_names: set[str]) -> None:
-    """Replace both forearms with seamless capsules that have matching rounded ends."""
-    image = Image.open(SOURCE / "milo-forearms-v4-rgba.png").convert("RGBA")
-    cells = [trim(keep_largest_component(cell), margin=10) for cell in sheet_cells(image, 2, 1, 2)]
-    sprites = common_centered_canvas(cells)
-    for side, sprite in zip(("left", "right"), sprites):
-        name = f"forearm_{side}_v3"
+def write_v5_arm_segments(written_names: set[str]) -> None:
+    """Slice the approved 2x2 sheet: upper arms on top, cuffed forearms below."""
+    image = Image.open(SOURCE / "milo-arms-v5-rgba.png").convert("RGBA")
+    cells = [trim(keep_largest_component(cell), margin=10) for cell in sheet_cells(image, 2, 2, 4)]
+    upper_arms = common_centered_canvas(cells[:2])
+    forearms = common_centered_canvas(cells[2:])
+    sprites = {
+        "upper_arm_left_v3": upper_arms[0],
+        "upper_arm_right_v3": upper_arms[1],
+        "forearm_left_v3": forearms[0],
+        "forearm_right_v3": forearms[1],
+    }
+    for name, sprite in sprites.items():
         sprite.save(OUTPUT / f"{name}.png", optimize=True)
         written_names.add(name)
 
@@ -416,8 +414,7 @@ def main() -> None:
     fixed_nose.save(OUTPUT / "nose_fixed.png", optimize=True)
     written_names.add("nose_fixed")
     write_v3_arms(written_names)
-    write_v4_upper_arms(written_names)
-    write_v4_forearms(written_names)
+    write_v5_arm_segments(written_names)
     write_v3_eye_anatomy(written_names)
     write_authoritative_irises(written_names)
     write_v3_eyelids(written_names)

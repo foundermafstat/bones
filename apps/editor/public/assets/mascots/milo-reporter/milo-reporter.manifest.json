@@ -10,6 +10,10 @@
       "chroma": "source-art/milo-final-look-v3-chroma.png",
       "rgba": "source-art/milo-final-look-v3-rgba.png"
     },
+    "torsoComposite": {
+      "rgba": "source-art/milo-torso-composite-v2-rgba.png",
+      "role": "narrowed lower lapels with the standing collar retained"
+    },
     "faceFoundation": {
       "source": "codex-clipboard-70a66fe4-fee2-4175-998d-62224d8b70a6.png",
       "chroma": "source-art/milo-head-shell-v7-chroma.png",
@@ -25,20 +29,23 @@
       "chroma": "source-art/milo-arms-v3-chroma.png",
       "rgba": "source-art/milo-arms-v3-rgba.png"
     },
-    "roundedUpperSleeves": {
-      "source": "exec-02803c8f-60c3-4c7a-b658-1053d35403a0.png",
-      "chroma": "source-art/milo-upper-arms-v4-chroma.png",
-      "rgba": "source-art/milo-upper-arms-v4-rgba.png",
+    "armSegments": {
+      "rgba": "source-art/milo-arms-v5-rgba.png",
+      "grid": [
+        2,
+        2
+      ],
+      "upperArmCells": [
+        0,
+        1
+      ],
+      "forearmCells": [
+        2,
+        3
+      ],
       "replaces": [
         "parts/upper_arm_left_v3.png",
-        "parts/upper_arm_right_v3.png"
-      ]
-    },
-    "seamlessForearms": {
-      "source": "exec-77d493c9-ee24-47e2-a2e6-b6c5bbd8c2fd.png",
-      "chroma": "source-art/milo-forearms-v4-chroma.png",
-      "rgba": "source-art/milo-forearms-v4-rgba.png",
-      "replaces": [
+        "parts/upper_arm_right_v3.png",
         "parts/forearm_left_v3.png",
         "parts/forearm_right_v3.png"
       ]
@@ -191,16 +198,16 @@
       "boneId": "chest",
       "texture": "/assets/mascots/milo-reporter/parts/chest_upper_coat_v5.png",
       "intrinsicSize": [
-        428,
+        433,
         512
       ],
       "sourceSize": [
-        428,
+        433,
         512
       ],
       "runtimeSize": [
         340,
-        406.7289719626168
+        402.0323325635104
       ],
       "aspectLocked": true,
       "baseAspectError": 0
@@ -443,16 +450,16 @@
       "boneId": "upperArmLeft",
       "texture": "/assets/mascots/milo-reporter/parts/upper_arm_left_v3.png",
       "intrinsicSize": [
-        462,
-        1018
+        198,
+        410
       ],
       "sourceSize": [
-        462,
-        1018
+        198,
+        410
       ],
       "runtimeSize": [
-        72,
-        158.64935064935065
+        80.5,
+        166.6919191919192
       ],
       "aspectLocked": true,
       "baseAspectError": 0
@@ -479,19 +486,19 @@
       "boneId": "forearmLeft",
       "texture": "/assets/mascots/milo-reporter/parts/forearm_left_v3.png",
       "intrinsicSize": [
-        312,
-        541
+        250,
+        413
       ],
       "sourceSize": [
-        312,
-        541
+        250,
+        413
       ],
       "runtimeSize": [
-        72,
-        124.84615384615385
+        80.5,
+        132.986
       ],
       "aspectLocked": true,
-      "baseAspectError": 0
+      "baseAspectError": 2.220446049250313e-16
     },
     "cuff_left_v3": {
       "boneId": "wristLeft",
@@ -569,16 +576,16 @@
       "boneId": "upperArmRight",
       "texture": "/assets/mascots/milo-reporter/parts/upper_arm_right_v3.png",
       "intrinsicSize": [
-        462,
-        1018
+        198,
+        410
       ],
       "sourceSize": [
-        462,
-        1018
+        198,
+        410
       ],
       "runtimeSize": [
-        72,
-        158.64935064935065
+        80.5,
+        166.6919191919192
       ],
       "aspectLocked": true,
       "baseAspectError": 0
@@ -605,19 +612,19 @@
       "boneId": "forearmRight",
       "texture": "/assets/mascots/milo-reporter/parts/forearm_right_v3.png",
       "intrinsicSize": [
-        312,
-        541
+        250,
+        413
       ],
       "sourceSize": [
-        312,
-        541
+        250,
+        413
       ],
       "runtimeSize": [
-        72,
-        124.84615384615385
+        80.5,
+        132.986
       ],
       "aspectLocked": true,
-      "baseAspectError": 0
+      "baseAspectError": 2.220446049250313e-16
     },
     "cuff_right_v3": {
       "boneId": "wristRight",
@@ -1666,19 +1673,26 @@
     },
     "pupilMovesWithGaze": true,
     "armOverlapPadding": [
-      0.15,
-      0.21
+      0.248,
+      0.255
     ],
     "armContinuity": {
       "skinnedSegmentsFollowBoneHierarchy": true,
       "elbowCoversVisible": false,
       "forearmOccludesUpperSleeveEnd": true,
       "forearmHasOpenEnd": false,
-      "cuffFitsForearm": true,
-      "cuffsVisible": false,
+      "separateCuffsVisible": false,
+      "integratedCuffButtonsVisible": true,
+      "oneSheetMaterialConsistency": true,
       "roundedShoulderEntryByOutwardChain": true,
       "roundedUpperSleeveAssets": true,
-      "seamlessRoundedForearmEnds": true,
+      "approvedArmGrid": [
+        2,
+        2
+      ],
+      "elbowJoinInsetX": 8,
+      "pawJoinInsetX": 20,
+      "alphaJointCentersAligned": true,
       "elbowsBiasAwayFromTorso": true,
       "symmetricElbowCenters": true,
       "reachJointsFollowSegmentShortening": true

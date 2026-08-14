@@ -208,6 +208,13 @@ export class RigInstance {
     return this.partById.get(id)?.container;
   }
 
+  applyPartBindPoseMesh(id: number): void {
+    const part = this.partById.get(id);
+    if (!part?.meshBaseVertices || !part.meshPositions) return;
+    part.meshPositions.set(part.meshBaseVertices);
+    updateMeshBuffer(part);
+  }
+
   get skinId(): string | undefined {
     return this.activeSkinId;
   }
@@ -562,8 +569,7 @@ export class RigInstance {
         continue;
       }
       const partBoneMatrix = this.boneWorldMatrices.get(part.bone) ?? identityMatrix();
-      const partMatrix = multiplyMatrices(partBoneMatrix, matrixFromContainer(part.container));
-      const inversePartMatrix = invertMatrix(partMatrix);
+      const inversePartBoneMatrix = invertMatrix(partBoneMatrix);
       for (let vertexIndex = 0; vertexIndex < skin.length; vertexIndex += 1) {
         const influences = skin[vertexIndex] ?? [];
         const deformX = part.meshDeformOffsets?.[vertexIndex * 2] ?? 0;
@@ -580,7 +586,7 @@ export class RigInstance {
           worldX += point.x * influence.weight;
           worldY += point.y * influence.weight;
         }
-        const localPoint = applyMatrix(inversePartMatrix, worldX, worldY);
+        const localPoint = applyMatrix(inversePartBoneMatrix, worldX, worldY);
         part.meshPositions[vertexIndex * 2] = localPoint.x;
         part.meshPositions[vertexIndex * 2 + 1] = localPoint.y;
       }

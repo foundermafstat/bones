@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import {
+  ArrowLeft,
   Bone,
-  Cat,
   CircleDot,
   ChevronDown,
   ChevronRight,
@@ -18,6 +18,8 @@ import {
   Lock,
   Minus,
   MousePointer2,
+  PanelLeft,
+  PanelRight,
   PenLine,
   Pause,
   Play,
@@ -31,6 +33,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -39,7 +42,7 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import type { QualityPresetName } from "@bones/runtime-pixi";
+import type { PackedTransform2D, QualityPresetName } from "@bones/runtime-pixi";
 import type { MeshShape, MeshVertexSkin } from "@bones/schema";
 import {
   createDefaultEditorIkChains,
@@ -79,13 +82,21 @@ import {
   type Keyframe
 } from "./editorState";
 import { PixiPreview } from "./PixiPreview";
+import { partLocalTransform } from "./editorSourceProject";
+import {
+  createPlacementFrame,
+  movePlacement,
+  rotatePlacement,
+  scalePlacement,
+  type PlacementCorner,
+  type PlacementScaleHandle
+} from "./artworkPlacement";
 import { addMeshTriangle, addMeshVertex, createAttachmentMesh, removeMeshTriangle, removeMeshVertex, triangulateMesh } from "./meshAuthoring";
 import type { ProjectExportBundle } from "./projectIo";
-import type { RemoteProjectSummary } from "./projectPersistence";
 
 type StudioSection = "Build" | "Animate" | "Test" | "Export";
 type AdvancedMode = "Rig" | "Shape" | "Pose" | "Timeline" | "Curve" | "State Machine" | "Procedural" | "Preview";
-type StudioWorkspace = "Select" | "Skeleton" | "Artwork" | "Face" | "Pose" | "Preview" | "Advanced";
+type StudioWorkspace = "Skeleton" | "Artwork" | "Face" | "Pose" | "Preview" | "Advanced";
 type TrackFilter = "all" | "selected";
 type SkeletonTool = "select" | "joint" | "bone" | "pan";
 type ArtworkMode = "place" | "bind" | "mesh" | "weights" | "deform";
@@ -114,10 +125,7 @@ interface StudioEditorProps {
   readonly quality: QualityPresetName;
   readonly ioStatus: string;
   readonly remoteStatus: string;
-  readonly folderStatus: string;
   readonly remoteConflictVersion: number | null;
-  readonly remoteProjects: readonly RemoteProjectSummary[];
-  readonly characterLibraryStatus: string;
   readonly lastExportBundle: ProjectExportBundle | null;
   readonly canUndo: boolean;
   readonly canRedo: boolean;
@@ -130,13 +138,10 @@ interface StudioEditorProps {
   readonly onRedo: () => void;
   readonly onSave: () => void;
   readonly onConnectFolder: () => void;
-  readonly onNewProject: () => void;
-  readonly onCreateMiloReporter: () => void;
+  readonly onBackToProjects: () => void;
   readonly onOpenRemoteConflict: () => void;
   readonly onSaveConflictAsNew: () => void;
   readonly onRestoreLatestRevision: () => void;
-  readonly onRefreshRemoteProjects: () => void;
-  readonly onLoadRemoteProject: (projectId: string) => void;
   readonly onExport: () => void;
   readonly onReplaceArtwork: (slotId: string, file: File) => void;
   readonly onOpenAdvanced: (mode?: AdvancedMode) => void;
@@ -153,6 +158,20 @@ interface WorldBone {
   readonly scaleY: number;
 }
 
+interface PlacementDraft {
+  readonly partId: string;
+  readonly offset: readonly [number, number];
+  readonly rotation: number;
+  readonly scale: readonly [number, number];
+}
+
+interface PlacementDrag {
+  readonly kind: "move" | "rotate" | "scale";
+  readonly part: EditorProjectState["parts"][string];
+  readonly startWorld: readonly [number, number];
+  readonly scaleHandle?: PlacementScaleHandle;
+}
+
 interface LayerGroup {
   readonly id: string;
   readonly name: string;
@@ -160,8 +179,10 @@ interface LayerGroup {
 }
 
 const studioSections: readonly StudioSection[] = ["Build", "Animate", "Test", "Export"];
+const placementCorners: readonly PlacementCorner[] = ["nw", "ne", "se", "sw"];
+const lockedAspectHandles = ["se"] as const;
+const freeAspectHandles = ["e", "s", "se"] as const;
 const workspaceItems = [
-  { label: "Select", icon: MousePointer2 },
   { label: "Skeleton", icon: Bone },
   { label: "Artwork", icon: ImageIcon },
   { label: "Face", icon: Smile },
@@ -184,10 +205,7 @@ export function StudioEditor(props: StudioEditorProps) {
     quality,
     ioStatus,
     remoteStatus,
-    folderStatus,
     remoteConflictVersion,
-    remoteProjects,
-    characterLibraryStatus,
     lastExportBundle,
     canUndo,
     canRedo,
@@ -200,13 +218,10 @@ export function StudioEditor(props: StudioEditorProps) {
     onRedo,
     onSave,
     onConnectFolder,
-    onNewProject,
-    onCreateMiloReporter,
+    onBackToProjects,
     onOpenRemoteConflict,
     onSaveConflictAsNew,
     onRestoreLatestRevision,
-    onRefreshRemoteProjects,
-    onLoadRemoteProject,
     onExport,
     onReplaceArtwork,
     onOpenAdvanced,
@@ -214,9 +229,11 @@ export function StudioEditor(props: StudioEditorProps) {
     advancedMode,
     advancedWorkspace
   } = props;
-  const [section, setSection] = useState<StudioSection>("Animate");
-  const [workspace, setWorkspace] = useState<StudioWorkspace>("Pose");
-  const [lastWorkspace, setLastWorkspace] = useState<Readonly<Record<StudioSection, StudioWorkspace>>>({ Build: "Artwork", Animate: "Pose", Test: "Preview", Export: "Select" });
+  const startsWithSkeleton = Object.keys(project.parts).length === 0 && Object.keys(project.animations).length === 0;
+  const [section, setSection] = useState<StudioSection>(() => startsWithSkeleton ? "Build" : "Animate");
+  const [workspace, setWorkspace] = useState<StudioWorkspace>(() => startsWithSkeleton ? "Skeleton" : "Pose");
+  const [lastWorkspace, setLastWorkspace] = useState<Readonly<Record<StudioSection, StudioWorkspace>>>({ Build: "Artwork", Animate: "Pose", Test: "Preview", Export: "Preview" });
+  const [mobilePanel, setMobilePanel] = useState<"layers" | "inspector" | null>(null);
   const [uiPreferences, setUiPreferences] = useState<StudioUiPreferences>(defaultStudioUiPreferences);
   const [preferencesReady, setPreferencesReady] = useState(false);
   const [selectedSlotId, setSelectedSlotId] = useState(() => project.visualSlots.right_hand_1?.id ?? project.visualSlots.upperArmFrontShape?.id ?? "");
@@ -237,10 +254,13 @@ export function StudioEditor(props: StudioEditorProps) {
   const [selectedMeshVertices, setSelectedMeshVertices] = useState<readonly number[]>([]);
   const [selectedTriangleIndex, setSelectedTriangleIndex] = useState(-1);
   const [meshDraftVertices, setMeshDraftVertices] = useState<readonly number[] | null>(null);
+  const [placementDraft, setPlacementDraft] = useState<PlacementDraft | null>(null);
   const [weightBoneId, setWeightBoneId] = useState("");
   const [weightTest, setWeightTest] = useState(false);
   const [lockedWeightVertices, setLockedWeightVertices] = useState<Readonly<Record<string, boolean>>>({});
   const artworkInputRef = useRef<HTMLInputElement | null>(null);
+  const placementDragRef = useRef<PlacementDrag | null>(null);
+  const placementDraftRef = useRef<PlacementDraft | null>(null);
 
   useEffect(() => {
     try {
@@ -291,13 +311,23 @@ export function StudioEditor(props: StudioEditorProps) {
   const selectedEyeExpressionSlot = facialRig ? visualSlots[facialRig.expressionSlots[selectedEyeSide]] : visualSlots.eyes;
   const selectedEyePupilSlot = facialRig ? visualSlots[facialRig.pupilSlots[selectedEyeSide]] : undefined;
   const layerGroups = useMemo(() => createLayerGroups(orderedSlots), [orderedSlots]);
-  const selectedSlot = visualSlots[selectedSlotId] ?? orderedSlots[orderedSlots.length - 1];
-  const selectedLayerGroup = layerGroups.find((group) => group.slots.some((slot) => slot.id === selectedSlot?.id));
-  const selectedBoundBoneId = workspace === "Artwork" && selectedSlot?.boneId && project.bones[selectedSlot.boneId] ? selectedSlot.boneId : project.selectedBoneId;
+  const placeModeActive = workspace === "Artwork" && artworkMode === "place";
+  const fallbackSelectedSlot = visualSlots[selectedSlotId] ?? orderedSlots[orderedSlots.length - 1];
+  const selectedBoundBoneId = placeModeActive
+    ? project.selectedBoneId
+    : workspace === "Artwork" && fallbackSelectedSlot?.boneId && project.bones[fallbackSelectedSlot.boneId]
+      ? fallbackSelectedSlot.boneId
+      : project.selectedBoneId;
   const defaultChains = useMemo(() => createDefaultEditorIkChains(project.bones), [project.bones]);
   const ikChains = Object.keys(project.ikChains).length ? project.ikChains : defaultChains;
-  const selectedChain = ikChains[selectedChainId] ?? findChainForBone(project, ikChains, selectedBoundBoneId);
+  const selectedChain = placeModeActive ? undefined : ikChains[selectedChainId] ?? findChainForBone(project, ikChains, selectedBoundBoneId);
   const selectedBoneId = project.bones[selectedBoundBoneId] ? selectedBoundBoneId : selectedChain?.rootBoneId ?? project.hierarchy[0] ?? "";
+  const placeBoneSlots = useMemo(() => orderedSlots.filter((slot) => slot.boneId === selectedBoneId), [orderedSlots, selectedBoneId]);
+  const placeSlots = useMemo(() => placeBoneSlots.filter((slot) => Boolean(activeSkin?.attachments[slot.id])), [activeSkin?.attachments, placeBoneSlots]);
+  const selectedSlot = placeModeActive
+    ? placeBoneSlots.find((slot) => slot.id === selectedSlotId) ?? placeSlots[placeSlots.length - 1] ?? placeBoneSlots[placeBoneSlots.length - 1]
+    : fallbackSelectedSlot;
+  const selectedLayerGroup = layerGroups.find((group) => group.slots.some((slot) => slot.id === selectedSlot?.id));
   const activeClip = project.animations[clipId] ?? Object.values(project.animations)[0];
   const animationAuthoringActive = section === "Animate" || section === "Test" || workspace === "Face" || (workspace === "Artwork" && artworkMode === "deform");
   const sampledBones = useMemo(() => sampleEditorBones(project, animationAuthoringActive ? activeClip?.id : undefined, currentTime), [activeClip?.id, animationAuthoringActive, currentTime, project]);
@@ -702,6 +732,26 @@ export function StudioEditor(props: StudioEditorProps) {
   const frameRate = activeClip?.frameRate ?? 60;
   const selectedAttachmentId = selectedSlot ? activeSkin?.attachments[selectedSlot.id] : null;
   const selectedAttachment = selectedAttachmentId ? project.parts[selectedAttachmentId] : undefined;
+  const placePartIds = useMemo(() => [...new Set(placeSlots.flatMap((slot) => {
+    const partId = activeSkin?.attachments[slot.id];
+    return partId ? [partId] : [];
+  }))], [activeSkin?.attachments, placeSlots]);
+  const placementPart = selectedAttachment && placementDraft?.partId === selectedAttachment.id
+    ? { ...selectedAttachment, offset: placementDraft.offset, rotation: placementDraft.rotation, scale: placementDraft.scale }
+    : selectedAttachment;
+  const inspectorAttachment = placeModeActive ? placementPart : selectedAttachment;
+  const placementBone = placementPart ? worldBones[placementPart.boneId] : undefined;
+  const placementFrame = placeModeActive && placementPart && placementBone ? createPlacementFrame(placementPart, placementBone) : undefined;
+  const placementSegment = placeModeActive ? selectedBonePlacementSegment(project, worldBones, selectedBoneId) : undefined;
+  const placementAuthoring = useMemo(() => {
+    if (!placeModeActive) return undefined;
+    const partTransforms: Record<string, PackedTransform2D> = {};
+    if (placementPart && placementDraft?.partId === placementPart.id) {
+      const transform = partLocalTransform(placementPart);
+      partTransforms[placementPart.id] = [transform.x, transform.y, transform.rotation, transform.scaleX, transform.scaleY, 0, 0];
+    }
+    return { visiblePartIds: placePartIds, bindPosePartIds: placePartIds, partTransforms, viewport: viewBox };
+  }, [placeModeActive, placePartIds, placementDraft?.partId, placementPart, viewBox]);
   const selectedMesh = selectedAttachment?.mesh;
   const deformTrackId = selectedAttachment ? `${selectedAttachment.id}.deform` : "";
   const selectedDeformKeys = activeClip && deformTrackId ? activeClip.tracks[deformTrackId] ?? [] : [];
@@ -731,7 +781,7 @@ export function StudioEditor(props: StudioEditorProps) {
   const activeEyePupilPartId = selectedEyePupilSlot && activeClip
     ? sampleAttachmentAt(activeClip.tracks[`slot:${selectedEyePupilSlot.id}.attachment`] ?? [], currentTime) ?? activeSkin?.attachments[selectedEyePupilSlot.id] ?? null
     : null;
-  const showRigOverlay = workspace === "Select" || workspace === "Skeleton" || workspace === "Pose" || (workspace === "Artwork" && (artworkMode === "bind" || artworkMode === "weights"));
+  const showRigOverlay = workspace === "Skeleton" || workspace === "Pose" || (workspace === "Artwork" && (artworkMode === "bind" || artworkMode === "weights"));
   const inspectorDefaultOpen = useCallback((title: string) => {
     if (workspace === "Artwork") return title === "Transform" || title === "Appearance" || title === "Layer" || (artworkMode === "bind" && title === "Binding") || (artworkMode === "mesh" && title === "Mesh topology") || (artworkMode === "weights" && title === "Weights") || (artworkMode === "deform" && (title === "Vertex Deform" || title === "Breathing"));
     if (workspace === "Skeleton" || workspace === "Pose") return title === "Transform" || title === "Chain";
@@ -751,12 +801,107 @@ export function StudioEditor(props: StudioEditorProps) {
     setUiPreferences((current) => ({ ...current, timeline }));
   }, []);
 
+  const selectPlaceBone = (boneId: string) => {
+    placementDragRef.current = null;
+    placementDraftRef.current = null;
+    setPlacementDraft(null);
+    onSelectBone(boneId);
+    const candidates = orderedSlots.filter((slot) => slot.boneId === boneId && Boolean(activeSkin?.attachments[slot.id]));
+    const next = candidates.find((slot) => slot.id === selectedSlotId) ?? candidates[candidates.length - 1];
+    if (next) setSelectedSlotId(next.id);
+  };
+
+  const setPlacementPreview = (draft: PlacementDraft | null) => {
+    placementDraftRef.current = draft;
+    setPlacementDraft(draft);
+  };
+
+  const startPlacementDrag = (event: ReactPointerEvent<SVGElement>, kind: PlacementDrag["kind"], scaleHandle?: PlacementScaleHandle) => {
+    if (!placeModeActive || !selectedAttachment || !placementBone || selectedSlot?.locked) return;
+    const svg = event.currentTarget.ownerSVGElement;
+    if (!svg) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const startWorld = svgClientPoint(svg, event.clientX, event.clientY);
+    placementDragRef.current = { kind, part: selectedAttachment, startWorld, ...(scaleHandle ? { scaleHandle } : {}) };
+    setPlacementPreview(placementDraftFromPart(selectedAttachment));
+  };
+
+  const movePlacementDrag = (event: ReactPointerEvent<SVGSVGElement>) => {
+    const drag = placementDragRef.current;
+    if (!drag || !placementBone) return;
+    const currentWorld = svgClientPoint(event.currentTarget, event.clientX, event.clientY);
+    const patch = drag.kind === "move"
+      ? movePlacement(drag.part, placementBone, drag.startWorld, currentWorld)
+      : drag.kind === "rotate"
+        ? rotatePlacement(drag.part, placementBone, drag.startWorld, currentWorld)
+        : drag.scaleHandle
+          ? scalePlacement(drag.part, placementBone, drag.scaleHandle, currentWorld)
+          : undefined;
+    if (!patch) return;
+    const next = { ...drag.part, ...patch };
+    setPlacementPreview(placementDraftFromPart(next));
+  };
+
+  const finishPlacementDrag = () => {
+    const drag = placementDragRef.current;
+    const draft = placementDraftRef.current;
+    placementDragRef.current = null;
+    setPlacementPreview(null);
+    if (!drag || !draft || !placementTransformChanged(drag.part, draft)) return;
+    onRunCommand(createUpdatePartTransformCommand(drag.part.id, {
+      offset: [round(draft.offset[0], 4), round(draft.offset[1], 4)],
+      rotation: round(draft.rotation, 6),
+      scale: [round(draft.scale[0], 5), round(draft.scale[1], 5)]
+    }));
+  };
+
+  const cancelPlacementDrag = () => {
+    placementDragRef.current = null;
+    setPlacementPreview(null);
+  };
+
+  const placementDraftActive = placementDraft !== null;
+  useEffect(() => {
+    if (!placementDraftActive) return;
+    const cancelOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      placementDragRef.current = null;
+      placementDraftRef.current = null;
+      setPlacementDraft(null);
+    };
+    window.addEventListener("keydown", cancelOnEscape);
+    return () => window.removeEventListener("keydown", cancelOnEscape);
+  }, [placementDraftActive]);
+
+  useEffect(() => {
+    placementDragRef.current = null;
+    placementDraftRef.current = null;
+    setPlacementDraft(null);
+  }, [placeModeActive, selectedAttachment?.id]);
+
   return (
     <main className="bones-studio" aria-label="Bones visual rig and animation editor">
       <header className="bones-studio-topbar">
         <div className="bones-brand-group">
+          <Button size="icon" variant="ghost" aria-label="Back to projects" onClick={onBackToProjects}><ArrowLeft /></Button>
           <strong>BONES</strong><Separator orientation="vertical" className="h-6" />
-          <span className="truncate">{project.name}</span><ChevronDown size={15} />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="bones-project-menu-trigger"><span className="truncate">{project.name}</span><ChevronDown /></button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="bones-studio-menu" align="start">
+              <DropdownMenuItem onClick={onSave}><Save /> Save project</DropdownMenuItem>
+              <DropdownMenuItem onClick={onConnectFolder}><FolderOpen /> Connect folder</DropdownMenuItem>
+              <DropdownMenuItem onClick={onRestoreLatestRevision}>Restore latest revision</DropdownMenuItem>
+              {remoteConflictVersion !== null ? <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={onOpenRemoteConflict}>Open database version</DropdownMenuItem>
+                <DropdownMenuItem onClick={onSaveConflictAsNew}>Save local as new</DropdownMenuItem>
+              </> : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
         <nav className="bones-section-tabs" aria-label="Editor sections">
           {studioSections.map((item) => (
@@ -774,7 +919,10 @@ export function StudioEditor(props: StudioEditorProps) {
             </Button>
           ) : null}
           <IconButton label="Save" onClick={onSave}><Save /></IconButton>
-          <IconButton label={folderStatus} onClick={onConnectFolder}><FolderOpen /></IconButton>
+          <div className="bones-mobile-panels" aria-label="Side panels">
+            <IconButton label="Layers" onClick={() => setMobilePanel((panel) => panel === "layers" ? null : "layers")}><PanelLeft /></IconButton>
+            <IconButton label="Inspector" onClick={() => setMobilePanel((panel) => panel === "inspector" ? null : "inspector")}><PanelRight /></IconButton>
+          </div>
         </div>
       </header>
 
@@ -796,7 +944,7 @@ export function StudioEditor(props: StudioEditorProps) {
           </section>
         ) : (
           <>
-        <aside className="bones-left-panel">
+        <aside className={`bones-left-panel ${mobilePanel === "layers" ? "is-mobile-open" : ""}`}>
           <div className="bones-panel-heading"><strong>{workspace}</strong><span>{section}</span></div>
           {workspace === "Skeleton" ? (
             <div className="bones-workspace-tools" aria-label="Skeleton canvas tools">
@@ -877,29 +1025,39 @@ export function StudioEditor(props: StudioEditorProps) {
               <p className="bones-layer-note">Attachments use step keys; gaze uses smooth numeric keys at frame {Math.round(currentTime * frameRate)}. Undo/redo is supported.</p>
             </div>
           ) : null}
-          {workspace === "Select" ? (
-            <ScrollArea className="min-h-0 flex-1"><div className="bones-project-card">
-              <strong>{project.name}</strong>
-              <span>{remoteConflictVersion === null ? remoteStatus : `Resolve Neon conflict · v${remoteConflictVersion}`}</span>
-              <span>{folderStatus}</span>
-              <div><Button size="sm" onClick={onCreateMiloReporter}><Cat /> Milo Reporter</Button><Button size="sm" variant="outline" onClick={onNewProject}><Plus /> Empty rig</Button><Button size="sm" variant="outline" onClick={onConnectFolder}><FolderOpen /> Folder</Button></div>
-              <Button size="sm" variant="outline" onClick={onRestoreLatestRevision}>Restore latest revision</Button>
-              {remoteConflictVersion !== null ? <div><Button size="sm" onClick={onOpenRemoteConflict}>Open DB version</Button><Button size="sm" variant="outline" onClick={onSaveConflictAsNew}>Save local as new</Button></div> : null}
-              <Separator />
-              <div className="bones-character-library-heading"><strong>Saved characters</strong><Button size="xs" variant="ghost" onClick={onRefreshRemoteProjects}>Refresh</Button></div>
-              <span>{characterLibraryStatus}</span>
-              <div className="bones-character-library">
-                {remoteProjects.map((saved) => (
-                  <button key={saved.id} className={saved.id === project.projectId ? "is-active" : ""} aria-label={`Load ${saved.name}`} onClick={() => onLoadRemoteProject(saved.id)}>
-                    <strong>{saved.name}</strong>
-                    <span>{humanize(saved.characterKind)} · {saved.boneCount} bones · {saved.partCount} parts · {saved.animationCount} clips</span>
-                    <small>v{saved.version} · {new Date(saved.updatedAt).toLocaleString()}</small>
-                  </button>
-                ))}
+          {workspace === "Artwork" && artworkMode === "place" ? (
+            <ScrollArea className="min-h-0 flex-1">
+              <div className="bones-place-tree" aria-label="Artwork bones">
+                {project.hierarchy.map((boneId) => {
+                  const selected = boneId === selectedBoneId;
+                  return (
+                    <div key={boneId} className={selected ? "is-selected" : ""}>
+                      <button className="bones-place-bone" style={{ paddingLeft: 12 + boneDepth(project, boneId) * 12 }} onClick={() => selectPlaceBone(boneId)}>
+                        <ChevronRight className={selected ? "is-open" : ""} /><Bone /><span className="truncate">{humanize(boneId)}</span>
+                      </button>
+                      {selected ? (
+                        <div className="bones-place-images" aria-label={`${humanize(boneId)} images`}>
+                          {placeBoneSlots.map((slot) => {
+                            const partId = activeSkin?.attachments[slot.id];
+                            const part = partId ? project.parts[partId] : undefined;
+                            return (
+                              <button key={slot.id} className={`bones-place-image ${slot.id === selectedSlot?.id ? "is-selected" : ""}`} onClick={() => setSelectedSlotId(slot.id)}>
+                                <span className="bones-layer-thumb">{part?.assetUrl || (part?.assetPath && !part.assetPath.startsWith("assets/")) ? <img src={part.assetUrl ?? part.assetPath} alt="" /> : <ImageIcon />}</span>
+                                <span className="truncate">{part ? humanize(part.id) : `${slot.name} · No image`}</span>
+                                {slot.locked ? <Lock /> : null}
+                              </button>
+                            );
+                          })}
+                          {!placeBoneSlots.length ? <span className="bones-place-empty">No image slot is bound to this bone.</span> : null}
+                          {!placeSlots.length ? <Button size="sm" variant="outline" disabled={!selectedSlot || slotModelBlocked} onClick={() => artworkInputRef.current?.click()}><Upload /> Replace artwork…</Button> : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
-            </div></ScrollArea>
-          ) : null}
-          {workspace === "Artwork" || workspace === "Pose" ? (
+            </ScrollArea>
+          ) : workspace === "Artwork" || workspace === "Pose" ? (
             <>
               <div className="bones-skin-row">
                 <Select value={activeSkinId} onValueChange={(value) => onRunCommand(createSetActiveSkinCommand(value))}>
@@ -979,11 +1137,12 @@ export function StudioEditor(props: StudioEditorProps) {
 
         <section className="bones-stage" aria-label={`${section} canvas`}>
           <PixiPreview
+            authoring={placementAuthoring}
             clipId={activeClip?.id ?? clipId}
-            currentTime={animationAuthoringActive ? currentTime : 0}
-            disableAnimation={!animationAuthoringActive && section === "Build"}
+            currentTime={placeModeActive ? 0 : animationAuthoringActive ? currentTime : 0}
+            disableAnimation={placeModeActive || (!animationAuthoringActive && section === "Build")}
             onTimeChange={onCurrentTimeChange}
-            playing={playing && animationAuthoringActive}
+            playing={!placeModeActive && playing && animationAuthoringActive}
             project={previewProject}
             quality={quality}
             runtimeMode="source"
@@ -1017,6 +1176,44 @@ export function StudioEditor(props: StudioEditorProps) {
               {selectedChain ? <IkOverlay chain={selectedChain} worldBones={worldBones} target={ikTarget} onPointerDown={startIkDrag} /> : null}
             </svg>
           ) : null}
+          {placeModeActive && (placementSegment || placementFrame) ? (
+            <svg
+              className={`bones-placement-overlay ${selectedSlot?.locked ? "is-locked" : ""}`}
+              viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`}
+              preserveAspectRatio="xMidYMid meet"
+              aria-label="Artwork placement handles"
+              onPointerMove={movePlacementDrag}
+              onPointerUp={finishPlacementDrag}
+              onPointerCancel={cancelPlacementDrag}
+            >
+              {placementSegment ? (
+                <g className="bones-placement-bone">
+                  <line x1={placementSegment.start[0]} y1={placementSegment.start[1]} x2={placementSegment.end[0]} y2={placementSegment.end[1]} />
+                  <circle cx={placementSegment.start[0]} cy={placementSegment.start[1]} r={3} />
+                  <circle cx={placementSegment.end[0]} cy={placementSegment.end[1]} r={3} />
+                </g>
+              ) : null}
+              {placementFrame && placementPart ? (
+                <g className="bones-placement-frame">
+                  <polygon
+                    className="bones-placement-hit-area"
+                    points={placementCorners.map((corner) => placementFrame.corners[corner].join(",")).join(" ")}
+                    onPointerDown={(event) => startPlacementDrag(event, "move")}
+                  />
+                  <polygon className="bones-placement-outline" points={placementCorners.map((corner) => placementFrame.corners[corner].join(",")).join(" ")} />
+                  <circle className="bones-placement-pivot" cx={placementFrame.pivot[0]} cy={placementFrame.pivot[1]} r={2.75} />
+                  {!selectedSlot?.locked ? <>
+                    {(placementPart.aspectLocked ? lockedAspectHandles : freeAspectHandles).map((handle) => {
+                      const point = handle === "se" ? placementFrame.corners.se : placementFrame.edges[handle];
+                      return <circle key={handle} data-handle={handle} className="bones-placement-handle" cx={point[0]} cy={point[1]} r={4} onPointerDown={(event) => startPlacementDrag(event, "scale", handle)} />;
+                    })}
+                    <line className="bones-placement-rotate-line" x1={placementFrame.edges.n[0]} y1={placementFrame.edges.n[1]} x2={placementFrame.rotationHandle[0]} y2={placementFrame.rotationHandle[1]} />
+                    <circle className="bones-placement-handle is-rotation" cx={placementFrame.rotationHandle[0]} cy={placementFrame.rotationHandle[1]} r={4.5} onPointerDown={(event) => startPlacementDrag(event, "rotate")} />
+                  </> : null}
+                </g>
+              ) : null}
+            </svg>
+          ) : null}
           {workspace === "Artwork" && selectedAttachment && selectedMesh && ["mesh", "weights", "deform"].includes(artworkMode) ? (
             <svg className={`bones-mesh-overlay is-${artworkMode}`} viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`} preserveAspectRatio="xMidYMid meet" aria-label="Editable artwork mesh">
               {Array.from({ length: Math.floor(selectedMesh.indices.length / 3) }, (_, triangleIndex) => {
@@ -1043,7 +1240,7 @@ export function StudioEditor(props: StudioEditorProps) {
           ) : null}
         </section>
 
-        <aside className="bones-inspector">
+        <aside className={`bones-inspector ${mobilePanel === "inspector" ? "is-mobile-open" : ""}`}>
           <div className="bones-inspector-title"><strong>{workspace === "Artwork" ? selectedSlot?.name ?? "Artwork" : workspace === "Face" ? selectedFaceSlot?.name ?? "Face" : humanize(selectedBoneId)}</strong><Settings2 /></div>
           <ScrollArea className="min-h-0 flex-1">
             {workspace === "Face" ? (
@@ -1056,10 +1253,10 @@ export function StudioEditor(props: StudioEditorProps) {
             ) : <InspectorSection title="Transform" open={inspectorSectionOpen("Transform")} onOpenChange={(open) => setInspectorSectionOpen("Transform", open)}>
               {workspace === "Artwork" ? (
                 <>
-                  <FieldGrid label="Position"><NumberField prefix="X" value={selectedAttachment?.offset?.[0] ?? 0} onCommit={(value) => updatePartTransform({ offset: [value, selectedAttachment?.offset?.[1] ?? 0] })} /><NumberField prefix="Y" value={selectedAttachment?.offset?.[1] ?? 0} onCommit={(value) => updatePartTransform({ offset: [selectedAttachment?.offset?.[0] ?? 0, value] })} /></FieldGrid>
-                  <FieldGrid label="Rotation"><NumberField value={degrees(selectedAttachment?.rotation ?? 0)} suffix="°" onCommit={(value) => updatePartTransform({ rotation: radians(value) })} /></FieldGrid>
-                  <FieldGrid label={selectedAttachment?.aspectLocked ? "Scale 🔗" : "Scale"}><NumberField prefix="X" value={selectedAttachment?.scale?.[0] ?? 1} onCommit={(value) => updatePartTransform({ scale: selectedAttachment?.aspectLocked ? [value, value] : [value, selectedAttachment?.scale?.[1] ?? 1] })} /><NumberField prefix="Y" value={selectedAttachment?.scale?.[1] ?? 1} onCommit={(value) => updatePartTransform({ scale: selectedAttachment?.aspectLocked ? [value, value] : [selectedAttachment?.scale?.[0] ?? 1, value] })} /></FieldGrid>
-                  <FieldGrid label="Pivot"><NumberField prefix="X" value={selectedAttachment?.pivot[0] ?? 0} onCommit={(value) => updatePartTransform({ pivot: [value, selectedAttachment?.pivot[1] ?? 0] })} /><NumberField prefix="Y" value={selectedAttachment?.pivot[1] ?? 0} onCommit={(value) => updatePartTransform({ pivot: [selectedAttachment?.pivot[0] ?? 0, value] })} /></FieldGrid>
+                  <FieldGrid label="Position"><NumberField prefix="X" value={inspectorAttachment?.offset?.[0] ?? 0} onCommit={(value) => updatePartTransform({ offset: [value, inspectorAttachment?.offset?.[1] ?? 0] })} /><NumberField prefix="Y" value={inspectorAttachment?.offset?.[1] ?? 0} onCommit={(value) => updatePartTransform({ offset: [inspectorAttachment?.offset?.[0] ?? 0, value] })} /></FieldGrid>
+                  <FieldGrid label="Rotation"><NumberField value={degrees(inspectorAttachment?.rotation ?? 0)} suffix="°" onCommit={(value) => updatePartTransform({ rotation: radians(value) })} /></FieldGrid>
+                  <FieldGrid label={inspectorAttachment?.aspectLocked ? "Scale 🔗" : "Scale"}><NumberField prefix="X" value={inspectorAttachment?.scale?.[0] ?? 1} onCommit={(value) => updatePartTransform({ scale: inspectorAttachment?.aspectLocked ? [value, value] : [value, inspectorAttachment?.scale?.[1] ?? 1] })} /><NumberField prefix="Y" value={inspectorAttachment?.scale?.[1] ?? 1} onCommit={(value) => updatePartTransform({ scale: inspectorAttachment?.aspectLocked ? [value, value] : [inspectorAttachment?.scale?.[0] ?? 1, value] })} /></FieldGrid>
+                  <FieldGrid label="Pivot"><NumberField prefix="X" value={inspectorAttachment?.pivot[0] ?? 0} onCommit={(value) => updatePartTransform({ pivot: [value, inspectorAttachment?.pivot[1] ?? 0] })} /><NumberField prefix="Y" value={inspectorAttachment?.pivot[1] ?? 0} onCommit={(value) => updatePartTransform({ pivot: [inspectorAttachment?.pivot[0] ?? 0, value] })} /></FieldGrid>
                 </>
               ) : (
                 <>
@@ -1164,7 +1361,7 @@ export function StudioEditor(props: StudioEditorProps) {
         )}
       </div>
 
-      {animationAuthoringActive && !advancedWorkspace ? (
+      {section === "Animate" && !advancedWorkspace ? (
         <Timeline
           clip={activeClip}
           clipId={activeClip?.id ?? clipId}
@@ -1607,6 +1804,45 @@ function calculateRigViewBox(project: EditorProjectState, worldBones: Readonly<R
   const width = Math.max(120, maxX - minX + 80) / 0.84;
   const height = Math.max(160, maxY - minY + 80) / 0.84;
   return { x: (minX + maxX - width) / 2, y: (minY + maxY - height) / 2, width, height };
+}
+
+function selectedBonePlacementSegment(project: EditorProjectState, worldBones: Readonly<Record<string, WorldBone>>, boneId: string): { readonly start: readonly [number, number]; readonly end: readonly [number, number] } | undefined {
+  const topologySegment = Object.values(project.topology.segments).find((segment) => segment.boneId === boneId);
+  if (topologySegment) {
+    const startJoint = project.topology.joints[topologySegment.startJointId];
+    const endJoint = project.topology.joints[topologySegment.endJointId];
+    const startBone = startJoint ? worldBones[startJoint.boneId] : undefined;
+    const endBone = endJoint ? worldBones[endJoint.boneId] : undefined;
+    if (startBone && endBone) return { start: [startBone.x, startBone.y], end: [endBone.x, endBone.y] };
+  }
+  const start = worldBones[boneId];
+  if (!start) return undefined;
+  const childId = project.hierarchy.find((candidate) => project.parents[candidate] === boneId);
+  const child = childId ? worldBones[childId] : undefined;
+  if (child) return { start: [start.x, start.y], end: [child.x, child.y] };
+  const length = project.boneLengths[boneId] ?? 0;
+  return {
+    start: [start.x, start.y],
+    end: [start.x - Math.sin(start.rotation) * length * start.scaleY, start.y + Math.cos(start.rotation) * length * start.scaleY]
+  };
+}
+
+function placementDraftFromPart(part: EditorProjectState["parts"][string]): PlacementDraft {
+  return {
+    partId: part.id,
+    offset: part.offset ?? [0, 0],
+    rotation: part.rotation ?? 0,
+    scale: part.scale ?? [1, 1]
+  };
+}
+
+function placementTransformChanged(part: EditorProjectState["parts"][string], draft: PlacementDraft): boolean {
+  const current = placementDraftFromPart(part);
+  return Math.abs(current.offset[0] - draft.offset[0]) > 0.0001
+    || Math.abs(current.offset[1] - draft.offset[1]) > 0.0001
+    || Math.abs(current.rotation - draft.rotation) > 0.000001
+    || Math.abs(current.scale[0] - draft.scale[0]) > 0.00001
+    || Math.abs(current.scale[1] - draft.scale[1]) > 0.00001;
 }
 
 function svgClientPoint(svg: SVGSVGElement, clientX: number, clientY: number): readonly [number, number] {

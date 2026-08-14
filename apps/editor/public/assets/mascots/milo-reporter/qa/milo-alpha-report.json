@@ -16,10 +16,10 @@
     {
       "file": "chest_upper_coat_v5.png",
       "size": [
-        428,
+        433,
         512
       ],
-      "visiblePixels": 163490,
+      "visiblePixels": 165963,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
@@ -156,10 +156,10 @@
     {
       "file": "upper_arm_left_v3.png",
       "size": [
-        462,
-        1018
+        198,
+        410
       ],
-      "visiblePixels": 337804,
+      "visiblePixels": 57006,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
@@ -176,10 +176,10 @@
     {
       "file": "forearm_left_v3.png",
       "size": [
-        312,
-        541
+        250,
+        413
       ],
-      "visiblePixels": 133817,
+      "visiblePixels": 61903,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
@@ -226,10 +226,10 @@
     {
       "file": "upper_arm_right_v3.png",
       "size": [
-        462,
-        1018
+        198,
+        410
       ],
-      "visiblePixels": 339821,
+      "visiblePixels": 57006,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
@@ -246,10 +246,10 @@
     {
       "file": "forearm_right_v3.png",
       "size": [
-        312,
-        541
+        250,
+        413
       ],
-      "visiblePixels": 136776,
+      "visiblePixels": 61903,
       "greenFringePixels": 0,
       "transparentCorners": true
     },

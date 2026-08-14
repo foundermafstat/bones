@@ -287,15 +287,20 @@ test("Milo v3 limbs use dense weighted meshes and bounded forward deformation", 
     const shoulder = bones[`shoulder${suffix}`];
     const elbow = bones[`elbow${suffix}`];
     const wrist = bones[`wrist${suffix}`];
-    const restingElbowX = shoulder.local.x - Math.sin(shoulder.local.rotation) * elbow.local.y;
+    const paw = bones[`paw${suffix}`];
+    const restingElbowX = shoulder.local.x + Math.cos(shoulder.local.rotation) * elbow.local.x - Math.sin(shoulder.local.rotation) * elbow.local.y;
     const restingForearmRotation = shoulder.local.rotation + elbow.local.rotation;
     const restingWristX = restingElbowX - Math.sin(restingForearmRotation) * wrist.local.y;
+    const restingPawX = restingWristX + Math.cos(restingForearmRotation) * paw.local.x - Math.sin(restingForearmRotation) * paw.local.y;
     assert.deepEqual([shoulder.local.x, shoulder.local.y, shoulder.local.rotation], [direction * 145, -18, -direction * 0.25]);
     assert.equal(elbow.local.y, 125, `${side} elbow must keep the established overlap while the seamless forearm hides the sleeve end`);
+    assert.equal(elbow.local.x, -direction * 8, `${side} forearm root must align the source alpha centers at the visible joint`);
     assert.equal(elbow.local.rotation, direction * 0.75);
+    assert.equal(paw.local.y, 32, `${side} paw must sit below the integrated cuff button`);
+    assert.equal(paw.local.x, -direction * 20, `${side} paw must center beneath the integrated cuff opening`);
     assert.equal(Math.abs(restingElbowX) > Math.abs(shoulder.local.x), true, `${side} elbow must lean away from the torso`);
     assert.equal(Math.abs(restingWristX) < Math.abs(restingElbowX), true, `${side} forearm must return inward from the elbow`);
-    assert.equal(Math.abs(restingWristX) <= 129, true, `${side} resting paw must stay near the torso`);
+    assert.equal(Math.abs(restingPawX) <= 129, true, `${side} resting paw must stay near the torso`);
     for (const clip of source.animations) {
       const upperRotation = clip.tracks.find((track) => track.target.id === `upperArm${suffix}` && track.property === "transform.rotation");
       assert.equal(upperRotation.keyframes.every((key) => (shoulder.local.rotation + key.value) * -direction > 0), true, `${clip.id}/${side}: elbow drifted toward torso`);
@@ -312,25 +317,35 @@ test("Milo v3 limbs use dense weighted meshes and bounded forward deformation", 
     assert.equal(Math.abs(upperSize[0] - forearmSize[0]) <= 1, true, `${side} sleeve widths must join without a step`);
     assert.equal(upper.local.x, forearm.local.x, `${side} sleeve centers must meet at the elbow`);
     assert.equal(upperSize[0] >= 71 && upperSize[1] >= 158, true, `${side} upper sleeve must use the wider, longer calibration`);
-    assert.equal(forearmSize[0] >= 71 && forearmSize[1] >= 124, true, `${side} forearm must keep the calibrated width with its new seamless rounded ends`);
+    assert.equal(forearmSize[0] >= 71 && forearmSize[1] >= 106, true, `${side} approved forearm must keep its calibrated aspect-locked size`);
     assert.equal(cuff.opacity, 0, `${side} cuff must stay hidden so the rounded forearm end remains seamless`);
     assert.equal(cuffSize[0] <= forearmSize[0] + 1, true, `${side} retained legacy cuff must not exceed the forearm width`);
     const upperOverlapRatio = (upperSize[1] - bones[`elbow${side === "left" ? "Left" : "Right"}`].local.y) / upperSize[1];
-    assert.equal(upperOverlapRatio >= 0.2 && upperOverlapRatio <= 0.22, true, `${side} seamless forearm must cover the established upper-sleeve overlap`);
-    assert.equal(forearmSize[1] - bones[`wrist${side === "left" ? "Left" : "Right"}`].local.y >= forearmSize[1] * 0.15, true);
+    assert.equal(upperOverlapRatio >= 0.248 && upperOverlapRatio <= 0.255, true, `${side} restored upper sleeve must retain a deep elbow overlap`);
+    assert.equal(forearmSize[1] - bones[`wrist${side === "left" ? "Left" : "Right"}`].local.y >= forearmSize[1] * 0.13, true);
   }
   assert.deepEqual(parts.upper_arm_left_v3.editor.custom.intrinsicSize, parts.upper_arm_right_v3.editor.custom.intrinsicSize, "rounded sleeve pair must keep identical canvases and pivots");
-  assert.equal(manifest.references.roundedUpperSleeves.replaces.length, 2);
+  assert.deepEqual(manifest.references.armSegments, {
+    rgba: "source-art/milo-arms-v5-rgba.png",
+    grid: [2, 2],
+    upperArmCells: [0, 1],
+    forearmCells: [2, 3],
+    replaces: ["parts/upper_arm_left_v3.png", "parts/upper_arm_right_v3.png", "parts/forearm_left_v3.png", "parts/forearm_right_v3.png"]
+  });
   assert.deepEqual(manifest.qa.armContinuity, {
     skinnedSegmentsFollowBoneHierarchy: true,
     elbowCoversVisible: false,
     forearmOccludesUpperSleeveEnd: true,
     forearmHasOpenEnd: false,
-    cuffFitsForearm: true,
-    cuffsVisible: false,
+    separateCuffsVisible: false,
+    integratedCuffButtonsVisible: true,
+    oneSheetMaterialConsistency: true,
     roundedShoulderEntryByOutwardChain: true,
     roundedUpperSleeveAssets: true,
-    seamlessRoundedForearmEnds: true,
+    approvedArmGrid: [2, 2],
+    elbowJoinInsetX: 8,
+    pawJoinInsetX: 20,
+    alphaJointCentersAligned: true,
     elbowsBiasAwayFromTorso: true,
     symmetricElbowCenters: true,
     reachJointsFollowSegmentShortening: true

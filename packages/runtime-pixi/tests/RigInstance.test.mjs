@@ -447,6 +447,48 @@ test("skinned mesh vertices follow sampled bone transforms", () => {
   });
 
   assert.deepEqual(Array.from(positions), [20, 0, 30, 0, 20, 10]);
+
+  instance.applyPartBindPoseMesh(0);
+  assert.deepEqual(Array.from(positions), [10, 0, 20, 0, 10, 10]);
+});
+
+test("skinned mesh keeps attachment local transforms outside bone skinning", () => {
+  const instance = new RigInstance({
+    compiledFormatVersion: "1.0.0",
+    schemaVersion: "1.0.0",
+    runtimeTarget: "pixi-v8",
+    sourceProjectId: "project.skinned-local-transform",
+    name: "Skinned local transform",
+    rig: {
+      id: 0,
+      rootBone: 0,
+      bones: [{ id: 0, parent: -1, local: [0, 0, 0, 1, 1, 0, 0], length: 0 }],
+      parts: [{
+        id: 0,
+        bone: 0,
+        type: "mesh",
+        drawOrder: 0,
+        visible: true,
+        opacity: 1,
+        local: [5, 7, 0, 2, 3, 0, 0],
+        mesh: {
+          vertices: [0, 0, 10, 0, 0, 10],
+          indices: [0, 1, 2],
+          skin: [
+            [{ bone: 0, x: 0, y: 0, weight: 1 }],
+            [{ bone: 0, x: 10, y: 0, weight: 1 }],
+            [{ bone: 0, x: 0, y: 10, weight: 1 }]
+          ]
+        }
+      }]
+    }
+  });
+
+  instance.applySample({ normalizedTime: 0, localTime: 0, values: [] });
+  const container = instance.getPartContainer(0);
+  const positions = container.children[0].__bonesMeshPositions;
+  assert.deepEqual(Array.from(positions), [0, 0, 10, 0, 0, 10]);
+  assert.deepEqual([container.x, container.y, container.scale.x, container.scale.y], [5, 7, 2, 3]);
 });
 
 test("keeps a rigid one-bone mesh in its bone container for local draw ordering", () => {
