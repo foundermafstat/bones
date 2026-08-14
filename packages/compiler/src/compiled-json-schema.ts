@@ -80,6 +80,7 @@ export const compiledRigProjectJsonSchema = {
         bones: { type: "array", minItems: 1, items: { $ref: "#/$defs/bone" } },
         parts: { type: "array", items: { $ref: "#/$defs/part" } },
         visualSlots: { type: "array", items: { $ref: "#/$defs/visualSlot" } },
+        facialApertures: { type: "array", items: { $ref: "#/$defs/facialAperture" } },
         skins: { type: "array", items: { $ref: "#/$defs/skin" } },
         defaultSkinId: { type: "string", minLength: 1 }
       }
@@ -93,6 +94,32 @@ export const compiledRigProjectJsonSchema = {
         bone: numericId,
         drawOrder: { type: "number" },
         partIds: { type: "array", items: numericId, uniqueItems: true }
+      }
+    },
+    facialAperture: {
+      type: "object",
+      additionalProperties: false,
+      required: ["expressionSlot", "clippedParts", "regions"],
+      properties: {
+        expressionSlot: numericId,
+        clippedParts: { type: "array", minItems: 1, items: numericId, uniqueItems: true },
+        regions: {
+          type: "array",
+          minItems: 1,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["attachment", "polygon"],
+            properties: {
+              attachment: numericId,
+              polygon: {
+                type: "array",
+                items: { type: "number" },
+                anyOf: [{ maxItems: 0 }, { minItems: 6 }]
+              }
+            }
+          }
+        }
       }
     },
     skin: {

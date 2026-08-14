@@ -1,7 +1,10 @@
+import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const editorDir = dirname(fileURLToPath(import.meta.url));
+const rootEnv = resolve(editorDir, "../../.env");
+if (existsSync(rootEnv)) process.loadEnvFile(rootEnv);
 const workspaceDist = (packageName) => resolve(editorDir, `../../packages/${packageName}/dist/index.js`);
 
 /** @type {import('next').NextConfig} */

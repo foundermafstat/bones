@@ -81,6 +81,7 @@ export function compileRig(projectInput: unknown, options: CompileOptions = {}):
       }
     }
   }
+  const facialApertures = compileFacialApertures(rig, visualSlots, slotIndexById, lookups);
 
   return {
     compiledFormatVersion: BONES_COMPILED_FORMAT_VERSION,
@@ -143,6 +144,7 @@ export function compileRig(projectInput: unknown, options: CompileOptions = {}):
             }))
           }
         : {}),
+      ...(facialApertures.length ? { facialApertures } : {}),
       ...(rig.skins?.length
         ? {
             skins: rig.skins.map((skin) => ({
@@ -163,6 +165,55 @@ export function compileRig(projectInput: unknown, options: CompileOptions = {}):
     ...(compileConstraints(normalized.proceduralPresets, lookups) ? { constraints: compileConstraints(normalized.proceduralPresets, lookups)! } : {}),
     lookups
   };
+}
+
+function compileFacialApertures(
+  rig: RigDefinition,
+  visualSlots: NonNullable<RigDefinition["visualSlots"]>,
+  slotIndexById: ReadonlyMap<string, number>,
+  lookups: CompiledLookupTablesV1
+) {
+  const custom = rig.editor?.custom as Record<string, unknown> | undefined;
+  const facialRig = custom?.facialRig;
+  if (!isRecord(facialRig) || !isRecord(facialRig.expressionSlots) || !isRecord(facialRig.pupilSlots)
+    || !isRecord(facialRig.irisParallaxParts) || !isRecord(facialRig.aperturesByExpression)) return [];
+  const expressionSlots = facialRig.expressionSlots;
+  const pupilSlots = facialRig.pupilSlots;
+  const irisParallaxParts = facialRig.irisParallaxParts;
+  const aperturesByExpression = facialRig.aperturesByExpression;
+
+  return (["left", "right"] as const).flatMap((side) => {
+    const expressionSlotId = expressionSlots[side];
+    const pupilSlotId = pupilSlots[side];
+    const irisPartId = irisParallaxParts[side];
+    if (typeof expressionSlotId !== "string" || typeof pupilSlotId !== "string" || typeof irisPartId !== "string") return [];
+    const expressionSlotIndex = slotIndexById.get(expressionSlotId);
+    const pupilSlotIndex = slotIndexById.get(pupilSlotId);
+    if (expressionSlotIndex === undefined || pupilSlotIndex === undefined) return [];
+    const expressionSlot = visualSlots[expressionSlotIndex];
+    const pupilSlot = visualSlots[pupilSlotIndex];
+    if (!expressionSlot || !pupilSlot) return [];
+    const expressionPartIds = expressionSlot.partIds ?? [];
+    const pupilPartIds = pupilSlot.partIds ?? [];
+    const regions = expressionPartIds.flatMap((attachmentId) => {
+      const polygon = aperturesByExpression[attachmentId];
+      if (!Array.isArray(polygon)
+        || (polygon.length !== 0 && (polygon.length < 6 || polygon.length % 2 !== 0))
+        || polygon.some((coordinate) => typeof coordinate !== "number" || !Number.isFinite(coordinate))) return [];
+      return [{ attachment: lookupRequired(lookups.parts, attachmentId, "part"), polygon: polygon as number[] }];
+    });
+    if (regions.length !== expressionPartIds.length) return [];
+    return [{
+      expressionSlot: expressionSlotIndex,
+      clippedParts: [irisPartId, ...pupilPartIds]
+        .map((partId) => lookupRequired(lookups.parts, partId, "part")),
+      regions
+    }];
+  });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export function buildLookupTables(project: RigProject, rig: RigDefinition = selectRig(project)): CompiledLookupTablesV1 {

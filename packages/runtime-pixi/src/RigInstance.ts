@@ -1,4 +1,4 @@
-import { Container } from "pixi.js";
+import { Container, Graphics } from "pixi.js";
 import { AnimationMixer } from "./AnimationMixer.js";
 import { sampleAnimationClip } from "./AnimationSampler.js";
 import { ConstraintSolver } from "./ConstraintSolver.js";
@@ -51,6 +51,7 @@ export class RigInstance {
   private readonly activeSkinPartIds = new Set<number>();
   private readonly defaultSlotAttachments = new Map<number, number | null>();
   private readonly activeSlotAttachments = new Map<number, number | null>();
+  private readonly facialApertureMasks = new Map<number, Graphics>();
   private activeSkinId: string | undefined;
   private activeClip: number | undefined;
   private activeTransition: number | undefined;
@@ -122,6 +123,7 @@ export class RigInstance {
 
     this.buildHierarchy();
     this.initializeVisualSlots();
+    this.initializeFacialApertures();
     this.applyDefaultTransforms();
     if (this.compiled.rig.skins?.length) {
       this.setSkin(options.skinId ?? this.compiled.rig.defaultSkinId ?? this.compiled.rig.skins[0]!.id);
@@ -408,10 +410,6 @@ export class RigInstance {
     }
 
     for (const part of [...this.parts].sort((a, b) => a.drawOrder - b.drawOrder || a.id - b.id)) {
-      if (part.skinned) {
-        this.rigContainer.addChild(part.container);
-        continue;
-      }
       const bone = this.getBoneContainer(part.bone);
       if (!bone) {
         throw new Error(`Compiled rig references missing part bone '${part.bone}'.`);
@@ -432,6 +430,39 @@ export class RigInstance {
         for (const attachment of skin.attachments) {
           if (attachment.slot === slotIndex) this.skinManagedPartIds.add(attachment.part);
         }
+      }
+    }
+  }
+
+  private initializeFacialApertures(): void {
+    for (const aperture of this.compiled.rig.facialApertures ?? []) {
+      const attachment = aperture.regions[0]?.attachment;
+      const attachmentPart = attachment === undefined ? undefined : this.compiledPartById.get(attachment);
+      const bone = attachmentPart ? this.getBoneContainer(attachmentPart.bone) : undefined;
+      if (!bone) continue;
+      const mask = new Graphics();
+      mask.label = `facial-aperture:${aperture.expressionSlot}`;
+      bone.addChild(mask);
+      this.facialApertureMasks.set(aperture.expressionSlot, mask);
+      for (const partId of aperture.clippedParts) {
+        const part = this.partById.get(partId);
+        if (part) part.container.mask = mask;
+      }
+    }
+    this.updateFacialApertures();
+  }
+
+  private updateFacialApertures(): void {
+    for (const aperture of this.compiled.rig.facialApertures ?? []) {
+      const mask = this.facialApertureMasks.get(aperture.expressionSlot);
+      if (!mask) continue;
+      const attachment = this.activeSlotAttachments.get(aperture.expressionSlot)
+        ?? this.defaultSlotAttachments.get(aperture.expressionSlot)
+        ?? null;
+      const polygon = aperture.regions.find((region) => region.attachment === attachment)?.polygon ?? [];
+      mask.clear();
+      if (polygon.length >= 6 && polygon.length % 2 === 0 && polygon.every(Number.isFinite)) {
+        mask.poly([...polygon], true).fill({ color: 0xffffff });
       }
     }
   }
@@ -485,6 +516,7 @@ export class RigInstance {
         part.container.visible = this.activeSkinPartIds.has(partId) && (source?.visible ?? true);
       }
     }
+    this.updateFacialApertures();
   }
 
   private resetMeshDeform(part: PartRuntime): void {
@@ -529,6 +561,9 @@ export class RigInstance {
       if (!skin?.length) {
         continue;
       }
+      const partBoneMatrix = this.boneWorldMatrices.get(part.bone) ?? identityMatrix();
+      const partMatrix = multiplyMatrices(partBoneMatrix, matrixFromContainer(part.container));
+      const inversePartMatrix = invertMatrix(partMatrix);
       for (let vertexIndex = 0; vertexIndex < skin.length; vertexIndex += 1) {
         const influences = skin[vertexIndex] ?? [];
         const deformX = part.meshDeformOffsets?.[vertexIndex * 2] ?? 0;
@@ -545,8 +580,9 @@ export class RigInstance {
           worldX += point.x * influence.weight;
           worldY += point.y * influence.weight;
         }
-        part.meshPositions[vertexIndex * 2] = worldX;
-        part.meshPositions[vertexIndex * 2 + 1] = worldY;
+        const localPoint = applyMatrix(inversePartMatrix, worldX, worldY);
+        part.meshPositions[vertexIndex * 2] = localPoint.x;
+        part.meshPositions[vertexIndex * 2 + 1] = localPoint.y;
       }
       updateMeshBuffer(part);
     }
@@ -663,6 +699,22 @@ function multiplyMatrices(left: MatrixLike, right: MatrixLike): MatrixLike {
 
 function identityMatrix(): MatrixLike {
   return { a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 };
+}
+
+function invertMatrix(matrix: MatrixLike): MatrixLike {
+  const determinant = matrix.a * matrix.d - matrix.b * matrix.c;
+  if (Math.abs(determinant) < 1e-12) {
+    return identityMatrix();
+  }
+  const inverseDeterminant = 1 / determinant;
+  return {
+    a: matrix.d * inverseDeterminant,
+    b: -matrix.b * inverseDeterminant,
+    c: -matrix.c * inverseDeterminant,
+    d: matrix.a * inverseDeterminant,
+    tx: (matrix.c * matrix.ty - matrix.d * matrix.tx) * inverseDeterminant,
+    ty: (matrix.b * matrix.tx - matrix.a * matrix.ty) * inverseDeterminant
+  };
 }
 
 function applyMatrix(matrix: MatrixLike, x: number, y: number): { readonly x: number; readonly y: number } {

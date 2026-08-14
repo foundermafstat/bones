@@ -9,7 +9,6 @@ BASE = ROOT / "apps/editor/public/assets/mascots/milo-reporter"
 SOURCE = BASE / "source-art"
 OUTPUT = BASE / "parts"
 COMPOSITE_OVERRIDES = {
-    "head_shell": "milo-head-shell-rgba.png",
     "chest_upper_coat": "milo-torso-composite-rgba.png",
 }
 
@@ -44,6 +43,7 @@ V3_PUPIL_NAMES = ("slit", "medium", "round")
 V3_EYELID_NAMES = ("neutral", "blink", "happy", "sad", "angry", "surprised")
 
 REPLACED_BODY_PARTS = {
+    "jaw_chin",
     "upper_arm_left", "forearm_left", "paw_left",
     "upper_arm_right", "forearm_right", "paw_right",
 }
@@ -137,6 +137,21 @@ def clear_cell_border(cell: Image.Image, border: int = 4) -> Image.Image:
     return cleaned
 
 
+def remove_green_chroma(image: Image.Image) -> Image.Image:
+    """Remove the flat green sheet while retaining soft antialiased sprite edges."""
+    cleaned = image.convert("RGBA")
+    pixels = cleaned.load()
+    for y in range(cleaned.height):
+        for x in range(cleaned.width):
+            red, green, blue, alpha = pixels[x, y]
+            excess = green - max(red, blue)
+            if excess <= 20:
+                continue
+            matte = max(0, min(255, round(255 * (80 - excess) / 60)))
+            pixels[x, y] = (red, min(green, max(red, blue) + 8), blue, min(alpha, matte))
+    return cleaned
+
+
 def trim(cell: Image.Image, margin: int = 8) -> Image.Image:
     cell = keep_largest_component(cell)
     bbox = cell.getchannel("A").getbbox()
@@ -184,6 +199,17 @@ def common_crop(cells: list[Image.Image], margin: int = 8) -> list[Image.Image]:
     return [cell.crop(bounds) for cell in cells]
 
 
+def common_centered_canvas(cells: list[Image.Image]) -> list[Image.Image]:
+    width = max(cell.width for cell in cells)
+    height = max(cell.height for cell in cells)
+    aligned: list[Image.Image] = []
+    for cell in cells:
+        canvas = Image.new("RGBA", (width, height))
+        canvas.alpha_composite(cell, ((width - cell.width) // 2, 0))
+        aligned.append(canvas)
+    return aligned
+
+
 def joint_crop(sprite: Image.Image, top_fraction: float, margin: int = 6) -> Image.Image:
     """Reuse the accepted arm sheet material for seam-hiding joint overlays."""
     top = round(sprite.height * top_fraction)
@@ -200,12 +226,37 @@ def write_v3_arms(written_names: set[str]) -> None:
             margin=10,
         )
     sprites = {name: trim(keep_largest_component(cell)) for name, cell in zip(V3_ARM_NAMES, cells)}
+    sprites["forearm_left_v3"], sprites["forearm_right_v3"] = common_centered_canvas(
+        [sprites["forearm_left_v3"], sprites["forearm_right_v3"]],
+    )
     for side in ("left", "right"):
         shoulder = sprites[f"shoulder_{side}_v3"]
         forearm = sprites[f"forearm_{side}_v3"]
         sprites[f"elbow_cover_{side}_v3"] = joint_crop(shoulder, 0.54)
         sprites[f"cuff_{side}_v3"] = joint_crop(forearm, 0.62)
     for name, sprite in sprites.items():
+        sprite.save(OUTPUT / f"{name}.png", optimize=True)
+        written_names.add(name)
+
+
+def write_v4_upper_arms(written_names: set[str]) -> None:
+    """Replace only the two v3 upper sleeves with the approved rounded pair."""
+    image = Image.open(SOURCE / "milo-upper-arms-v4-rgba.png").convert("RGBA")
+    cells = [keep_largest_component(cell) for cell in sheet_cells(image, 2, 1, 2)]
+    sprites = common_crop(cells, margin=10)
+    for side, sprite in zip(("left", "right"), sprites):
+        name = f"upper_arm_{side}_v3"
+        sprite.save(OUTPUT / f"{name}.png", optimize=True)
+        written_names.add(name)
+
+
+def write_v4_forearms(written_names: set[str]) -> None:
+    """Replace both forearms with seamless capsules that have matching rounded ends."""
+    image = Image.open(SOURCE / "milo-forearms-v4-rgba.png").convert("RGBA")
+    cells = [trim(keep_largest_component(cell), margin=10) for cell in sheet_cells(image, 2, 1, 2)]
+    sprites = common_centered_canvas(cells)
+    for side, sprite in zip(("left", "right"), sprites):
+        name = f"forearm_{side}_v3"
         sprite.save(OUTPUT / f"{name}.png", optimize=True)
         written_names.add(name)
 
@@ -231,6 +282,19 @@ def write_v3_eye_anatomy(written_names: set[str]) -> None:
             written_names.add(name)
 
 
+def write_authoritative_irises(written_names: set[str]) -> None:
+    """Crop the solid circular irises approved by the user; eyelids provide the aperture."""
+    image = Image.open(SOURCE / "milo-eye-bases-v4-chroma.png").convert("RGBA")
+    cells = sheet_cells(image, 5, 2, 10)
+    for side_index, side in enumerate(("left", "right")):
+        cell = remove_green_chroma(cells[side_index * 5 + 1])
+        width, height = cell.size
+        centered = cell.crop((round(width * 0.08), round(height * 0.14), round(width * 0.92), round(height * 0.86)))
+        sprite = trim(keep_largest_component(centered), margin=8)
+        sprite.save(OUTPUT / f"eye_iris_{side}.png", optimize=True)
+        written_names.add(f"eye_iris_{side}")
+
+
 def write_v3_eyelids(written_names: set[str]) -> None:
     image = Image.open(SOURCE / "milo-eyelids-v3-rgba.png").convert("RGBA")
     cells = sheet_cells(image, 6, 2, 12)
@@ -243,35 +307,91 @@ def write_v3_eyelids(written_names: set[str]) -> None:
             written_names.add(name)
 
 
-def lock_mouth_nose(cells: list[Image.Image]) -> list[Image.Image]:
-    width, height = cells[0].size
-    box = (round(width * 0.36), round(height * 0.14), round(width * 0.72), round(height * 0.52))
-    patch = cells[0].crop(box)
-    soft_mask = Image.new("L", patch.size)
-    ImageDraw.Draw(soft_mask).rounded_rectangle((5, 5, patch.width - 6, patch.height - 6), radius=max(9, patch.width // 7), fill=255)
-    soft_mask = soft_mask.filter(ImageFilter.GaussianBlur(max(3, patch.width // 28)))
-    soft_mask = ImageChops.multiply(soft_mask, patch.getchannel("A"))
-    core_mask = Image.new("L", patch.size)
-    ImageDraw.Draw(core_mask).rounded_rectangle((14, 12, patch.width - 15, patch.height - 14), radius=max(7, patch.width // 10), fill=255)
-    core_mask = ImageChops.multiply(core_mask, patch.getchannel("A").point(lambda alpha: 255 if alpha > 8 else 0))
-    locked: list[Image.Image] = []
+def write_authoritative_head(written_names: set[str]) -> None:
+    """Use the approved blank face foundation as-is; facial assets stay independent."""
+    sprite = trim(Image.open(SOURCE / "milo-head-shell-v7-rgba.png").convert("RGBA"), margin=12)
+    sprite.thumbnail((512, 512), Image.Resampling.LANCZOS)
+    sprite.save(OUTPUT / "head_shell_v7.png", optimize=True)
+    written_names.add("head_shell")
+
+
+def mouth_nose_bounds(cell: Image.Image) -> tuple[int, int, int, int]:
+    """Locate the dark nose in the upper-center muzzle zone, excluding the mouth."""
+    pixels = cell.convert("RGBA").load()
+    points: list[tuple[int, int]] = []
+    for y in range(round(cell.height * 0.16), round(cell.height * 0.44)):
+        for x in range(round(cell.width * 0.24), round(cell.width * 0.76)):
+            red, green, blue, alpha = pixels[x, y]
+            if alpha > 80 and red < 125 and green < 100 and blue < 100:
+                points.append((x, y))
+    if not points:
+        raise ValueError("Mouth cell has no detectable nose anchor")
+    xs, ys = zip(*points)
+    return min(xs), min(ys), max(xs) + 1, max(ys) + 1
+
+
+def align_and_lock_mouth_noses(cells: list[Image.Image]) -> list[Image.Image]:
+    """Align whole muzzles first, then reuse one compact nose patch without duplication."""
+    target = mouth_nose_bounds(cells[0])
+    target_center_x = (target[0] + target[2]) / 2
+    target_top = target[1]
+    aligned: list[Image.Image] = []
     for cell in cells:
+        bounds = mouth_nose_bounds(cell)
+        source_center_x = (bounds[0] + bounds[2]) / 2
+        dx = round(target_center_x - source_center_x)
+        dy = round(target_top - bounds[1])
+        shifted = Image.new("RGBA", cell.size)
+        shifted.alpha_composite(cell, (dx, dy))
+        aligned.append(shifted)
+
+    left = max(0, target[0] - 12)
+    top = max(0, target[1] - 8)
+    right = min(cells[0].width, target[2] + 12)
+    bottom = min(cells[0].height, target[3] + 12)
+    box = (left, top, right, bottom)
+    master_patch = aligned[0].crop(box)
+    master_pixels = master_patch.load()
+    for y in range(master_patch.height):
+        for x in range(master_patch.width):
+            red, green, blue, alpha = master_pixels[x, y]
+            if alpha > 0 and red < 190 and green < 150 and blue < 150 and red > green * 1.12:
+                luminance = round(red * 0.48 + green * 0.34 + blue * 0.18)
+                master_pixels[x, y] = (min(92, round(luminance * 0.78)), min(82, round(luminance * 0.7)), min(84, round(luminance * 0.72)), alpha)
+    locked: list[Image.Image] = []
+    for cell in aligned:
         normalized = cell.copy()
-        normalized.paste(patch, box, soft_mask)
-        normalized.paste(patch, box, core_mask)
-        locked.append(normalized)
+        normalized.paste(master_patch, (left, top))
+        locked.append(keep_largest_component(normalized))
     return locked
+
+
+def separate_fixed_nose(cells: list[Image.Image]) -> tuple[list[Image.Image], Image.Image]:
+    """Extract one fixed nose and subtract precisely the same alpha region from every mouth."""
+    bounds = mouth_nose_bounds(cells[0])
+    nose_mask = Image.new("L", cells[0].size, 0)
+    ImageDraw.Draw(nose_mask).ellipse((bounds[0] - 9, bounds[1] - 7, bounds[2] + 9, bounds[3] + 8), fill=255)
+    fixed_nose = cells[0].copy()
+    fixed_nose.putalpha(ImageChops.multiply(fixed_nose.getchannel("A"), nose_mask))
+    cleaned: list[Image.Image] = []
+    for cell in cells:
+        mouth_only = cell.copy()
+        mouth_only.putalpha(ImageChops.subtract(cell.getchannel("A"), nose_mask))
+        cleaned.append(mouth_only)
+    aligned = common_crop([*cleaned, fixed_nose], margin=10)
+    return aligned[:-1], aligned[-1]
 
 
 def main() -> None:
     OUTPUT.mkdir(parents=True, exist_ok=True)
     written_names: set[str] = set()
+    fixed_nose: Image.Image | None = None
     for filename, columns, rows, mode, names in SHEETS:
         image = Image.open(SOURCE / filename).convert("RGBA")
         cells = sheet_cells(image, columns, rows, len(names))
         if mode == "mouth":
-            cells = [keep_largest_component(cell) for cell in cells]
-            cells = common_crop(lock_mouth_nose(cells), margin=10)
+            cells = [keep_largest_component(clear_cell_border(cell, border=6)) for cell in cells]
+            cells, fixed_nose = separate_fixed_nose(align_and_lock_mouth_noses(cells))
         elif mode == "face":
             cells = common_crop(cells, margin=10)
         elif mode == "arms":
@@ -291,11 +411,19 @@ def main() -> None:
         sprite.thumbnail((512, 512), Image.Resampling.LANCZOS)
         sprite.save(OUTPUT / f"{name}_v5.png", optimize=True)
         written_names.add(name)
+    if fixed_nose is None:
+        raise RuntimeError("Mouth sheet did not produce a fixed nose")
+    fixed_nose.save(OUTPUT / "nose_fixed.png", optimize=True)
+    written_names.add("nose_fixed")
     write_v3_arms(written_names)
+    write_v4_upper_arms(written_names)
+    write_v4_forearms(written_names)
     write_v3_eye_anatomy(written_names)
+    write_authoritative_irises(written_names)
     write_v3_eyelids(written_names)
+    write_authoritative_head(written_names)
     if len(written_names) != 87:
-        raise RuntimeError(f"Expected 87 sprites including 51 legacy assets, wrote {len(written_names)}")
+        raise RuntimeError(f"Expected 87 sprites including retained legacy assets, wrote {len(written_names)}")
     print(f"Wrote {len(written_names)} Milo RGBA assets (71 active v3 + 16 retained legacy-only variants) to {OUTPUT}")
 
 

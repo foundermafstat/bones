@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { compileRig } from "../packages/compiler/dist/index.js";
@@ -94,10 +95,10 @@ const bodySpecs = [
   { id: "body_lower_coat", boneId: "coatLower", file: "body_lower_coat.png", box: [220, 216], drawOrder: 1 },
   { id: "chest_upper_coat", boneId: "chest", file: "chest_upper_coat_v5.png", box: [340, 430], drawOrder: 4, offset: [0, 60] },
   { id: "neck_ruff", boneId: "neckRuff", file: "neck_ruff.png", box: [150, 150], drawOrder: 9, offset: [0, 78] },
-  { id: "head_shell", boneId: "head", file: "head_shell_v5.png", box: [205, 205], drawOrder: 20 },
-  { id: "jaw_chin", boneId: "jaw", file: "jaw_chin.png", box: [120, 74], drawOrder: 21 },
-  { id: "ear_left", boneId: "earLeft", file: "ear_left.png", box: [70, 107], drawOrder: 22 },
-  { id: "ear_right", boneId: "earRight", file: "ear_right.png", box: [70, 107], drawOrder: 22 },
+  { id: "head_shell", boneId: "head", file: "head_shell_v7.png", box: [198, 175], drawOrder: 20, offset: [0, -5] },
+  { id: "nose_fixed", boneId: "head", file: "nose_fixed.png", box: [58, 46], drawOrder: 32, offset: [0, 21] },
+  { id: "ear_left", boneId: "earLeft", file: "ear_left.png", box: [58, 89], drawOrder: 22, rotation: -0.035 },
+  { id: "ear_right", boneId: "earRight", file: "ear_right.png", box: [58, 90], drawOrder: 22, rotation: 0.035 },
   { id: "whiskers_left", boneId: "whiskerLeft", file: "whiskers_left.png", box: [38, 47], drawOrder: 23 },
   { id: "whiskers_right", boneId: "whiskerRight", file: "whiskers_right.png", box: [38, 47], drawOrder: 23 },
   { id: "collar_left", boneId: "collarLeft", file: "collar_left.png", box: [82, 127], drawOrder: 7 },
@@ -108,17 +109,22 @@ const bodySpecs = [
 ];
 
 const armSpecs = ["left", "right"].flatMap((side) => [
-  { id: `shoulder_${side}_v3`, boneId: `shoulder${side === "left" ? "Left" : "Right"}`, file: `shoulder_${side}_v3.png`, box: [108, 124], drawOrder: 10 },
-  { id: `upper_arm_${side}_v3`, boneId: `upperArm${side === "left" ? "Left" : "Right"}`, file: `upper_arm_${side}_v3.png`, box: [94, 142], drawOrder: 11, grid: [4, 6], distalBoneId: `elbow${side === "left" ? "Left" : "Right"}`, distalOffsetY: 112 },
-  { id: `elbow_cover_${side}_v3`, boneId: `elbow${side === "left" ? "Left" : "Right"}`, file: `elbow_cover_${side}_v3.png`, box: [98, 72], drawOrder: 13 },
-  { id: `forearm_${side}_v3`, boneId: `forearm${side === "left" ? "Left" : "Right"}`, file: `forearm_${side}_v3.png`, box: [92, 126], drawOrder: 12, grid: [4, 6], distalBoneId: `wrist${side === "left" ? "Left" : "Right"}`, distalOffsetY: 96 },
-  { id: `cuff_${side}_v3`, boneId: `wrist${side === "left" ? "Left" : "Right"}`, file: `cuff_${side}_v3.png`, box: [94, 54], drawOrder: 14 },
+  { id: `shoulder_${side}_v3`, boneId: `shoulder${side === "left" ? "Left" : "Right"}`, file: `shoulder_${side}_v3.png`, box: [108, 124], drawOrder: 10, opacity: 0 },
+  { id: `upper_arm_${side}_v3`, boneId: `upperArm${side === "left" ? "Left" : "Right"}`, file: `upper_arm_${side}_v3.png`, box: [72, 160], drawOrder: 13, grid: [4, 6], distalBoneId: `elbow${side === "left" ? "Left" : "Right"}`, distalOffsetY: 125 },
+  { id: `elbow_cover_${side}_v3`, boneId: `elbow${side === "left" ? "Left" : "Right"}`, file: `elbow_cover_${side}_v3.png`, box: [98, 72], drawOrder: 11, opacity: 0 },
+  { id: `forearm_${side}_v3`, boneId: `forearm${side === "left" ? "Left" : "Right"}`, file: `forearm_${side}_v3.png`, box: [72, 134], drawOrder: 14, grid: [4, 6], distalBoneId: `wrist${side === "left" ? "Left" : "Right"}`, distalOffsetY: 106 },
+  { id: `cuff_${side}_v3`, boneId: `wrist${side === "left" ? "Left" : "Right"}`, file: `cuff_${side}_v3.png`, box: [72, 53], drawOrder: 15, opacity: 0 },
   { id: `paw_closed_${side}_v3`, boneId: `paw${side === "left" ? "Left" : "Right"}`, file: `paw_closed_${side}_v3.png`, box: [63, 72], drawOrder: 16, grid: [4, 4] },
   { id: `paw_open_${side}_v3`, boneId: `paw${side === "left" ? "Left" : "Right"}`, file: `paw_open_${side}_v3.png`, box: [72, 80], drawOrder: 16, grid: [4, 4] }
 ]);
 
 const eyeExpressions = ["neutral", "blink", "happy", "sad", "angry", "surprised"];
 const pupilShapes = ["slit", "medium", "round"];
+const eyeOrigins = { left: [-35.5, -21], right: [33.5, -21] };
+const eyeBoxes = {
+  left: { base: [58, 45], iris: [33, 33], pupil: [12, 21], eyelid: [58, 48], eyelidY: -24.5 },
+  right: { base: [59, 45], iris: [33, 33], pupil: [12, 21], eyelid: [59, 48], eyelidY: -24.5 }
+};
 const gazeBoundsByExpression = Object.fromEntries([
   ["left", {
     neutral: { x: [-5.5, 6], y: [-3, 3.25] }, blink: { x: [0, 0], y: [0, 0] }, happy: { x: [-4.2, 4.6], y: [-1.8, 1.8] },
@@ -130,41 +136,88 @@ const gazeBoundsByExpression = Object.fromEntries([
   }]
 ].flatMap(([side, expressions]) => Object.entries(expressions).map(([expression, bounds]) => [`eyelid_${side}_${expression}`, bounds])));
 const eyeStaticSpecs = ["left", "right"].flatMap((side) => {
+  const [x, y] = eyeOrigins[side];
   return [
-    { id: `eye_white_${side}`, boneId: "head", file: `eye_white_${side}.png`, box: [77, 63], drawOrder: 24, offset: [side === "left" ? -40 : 40, -15], opacity: 0 },
-    { id: `eye_iris_${side}`, boneId: "head", file: `eye_iris_${side}.png`, box: [42, 27], drawOrder: 25, offset: [side === "left" ? -40 : 40, -15] }
+    { id: `eye_white_${side}`, boneId: "head", file: `eye_white_${side}.png`, box: eyeBoxes[side].base, drawOrder: 24, offset: [x, y], opacity: 0 },
+    { id: `eye_iris_${side}`, boneId: "head", file: `eye_iris_${side}.png`, box: eyeBoxes[side].iris, drawOrder: 25, offset: [x, y] }
   ];
 });
 const pupilSpecs = ["left", "right"].flatMap((side) => pupilShapes.map((shape) => ({
   id: `pupil_${side}_${shape}`,
   boneId: `eyeAim${side === "left" ? "Left" : "Right"}`,
   file: `pupil_${side}_${shape}.png`,
-  box: [19.2, 30],
+  box: eyeBoxes[side].pupil,
   drawOrder: 26,
-  offset: [side === "left" ? -40 : 40, -15]
+  offset: eyeOrigins[side]
 })));
 const eyelidSpecs = ["left", "right"].flatMap((side) => eyeExpressions.map((expression) => ({
   id: `eyelid_${side}_${expression}`,
   boneId: "head",
   file: `eyelid_${side}_${expression}.png`,
-  box: [77, 63],
+  box: eyeBoxes[side].eyelid,
   drawOrder: 30,
-  offset: [side === "left" ? -40 : 40, -15]
+  offset: [eyeOrigins[side][0], eyeBoxes[side].eyelidY]
 })));
+const eyelidAperturePixelBounds = {
+  eyelid_left_neutral: [73, 109, 190, 187], eyelid_left_blink: null,
+  eyelid_left_happy: [63, 129, 182, 179], eyelid_left_sad: [50, 109, 159, 180],
+  eyelid_left_angry: [56, 136, 161, 184], eyelid_left_surprised: [42, 86, 168, 189],
+  eyelid_right_neutral: [64, 113, 179, 187], eyelid_right_blink: null,
+  eyelid_right_happy: [58, 128, 176, 179], eyelid_right_sad: [80, 111, 188, 181],
+  eyelid_right_angry: [73, 138, 176, 185], eyelid_right_surprised: [68, 88, 192, 191]
+};
+const aperturePadding = 1.25;
+const aperturesByExpression = Object.fromEntries(eyelidSpecs.map((spec) => {
+  const bounds = eyelidAperturePixelBounds[spec.id];
+  if (!bounds) return [spec.id, []];
+  const [sourceWidth, sourceHeight] = pngSize(spec.file);
+  const scale = Math.min(spec.box[0] / sourceWidth, spec.box[1] / sourceHeight);
+  const [minX, minY, maxX, maxY] = bounds;
+  const centerX = spec.offset[0] + ((minX + maxX) / 2 - sourceWidth / 2) * scale;
+  const centerY = spec.offset[1] + ((minY + maxY) / 2 - sourceHeight / 2) * scale;
+  const radiusX = (maxX - minX) * scale / 2 + aperturePadding;
+  const radiusY = (maxY - minY) * scale / 2 + aperturePadding;
+  const exponent = spec.id.endsWith("surprised") ? 2 : 1.5;
+  const polygon = Array.from({ length: 24 }, (_, index) => {
+    const angle = index * Math.PI * 2 / 24;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    return [
+      centerX + radiusX * Math.sign(cos) * Math.abs(cos) ** (2 / exponent),
+      centerY + radiusY * Math.sign(sin) * Math.abs(sin) ** (2 / exponent)
+    ];
+  }).flat();
+  return [spec.id, polygon];
+}));
 
 const emotions = ["neutral", "happy", "sad", "angry"];
 const visemes = ["mbp", "ai", "e", "ou", "fv"];
 const mouthNames = [...emotions.flatMap((emotion) => visemes.map((viseme) => `${emotion}_${viseme}`)), "surprised_round"];
-const mouthSpecs = mouthNames.map((name) => ({ id: `mouth_${name}`, boneId: "jaw", file: `mouth_${name}.png`, box: [92, 67], drawOrder: 31 }));
+const mouthSpecs = mouthNames.map((name) => ({ id: `mouth_${name}`, boneId: "jaw", file: `mouth_${name}.png`, box: [68, 55], drawOrder: 31, offset: [0, 2] }));
 
 const allSpecs = [...bodySpecs, ...armSpecs, ...eyeStaticSpecs, ...pupilSpecs, ...eyelidSpecs, ...mouthSpecs];
+const transformOnlyFacialFiles = [...new Set(allSpecs
+  .filter((spec) => /^(?:head_shell|nose_fixed|ear_|whiskers_|eye_|pupil_|eyelid_|mouth_)/.test(spec.id))
+  .map((spec) => spec.file))].sort();
+const transformOnlyFacialSha256 = createHash("sha256");
+for (const file of transformOnlyFacialFiles) {
+  transformOnlyFacialSha256.update(file);
+  transformOnlyFacialSha256.update("\0");
+  transformOnlyFacialSha256.update(readFileSync(resolve(partsDir, file)));
+  transformOnlyFacialSha256.update("\0");
+}
+const transformOnlyFacialDigest = transformOnlyFacialSha256.digest("hex");
+const expectedTransformOnlyFacialDigest = "94035a5fc219e7eb68adbfb1e13848cb80665c797ae40e0e92dc0976b4f12cbf";
+if (transformOnlyFacialDigest !== expectedTransformOnlyFacialDigest) {
+  throw new Error(`Milo transform-only facial PNG checksum drifted: ${transformOnlyFacialDigest}`);
+}
 const specSizes = Object.fromEntries(allSpecs.map((spec) => [spec.id, { intrinsic: pngSize(spec.file), runtime: containSize(pngSize(spec.file), spec.box) }]));
 
 const armLength = (id, fallback) => Math.round(Math.min(fallback, specSizes[id].runtime[1] * 0.86));
-const upperLeftLength = armLength("upper_arm_left_v3", 112);
-const upperRightLength = armLength("upper_arm_right_v3", 112);
-const forearmLeftLength = armLength("forearm_left_v3", 96);
-const forearmRightLength = armLength("forearm_right_v3", 96);
+const upperLeftLength = armLength("upper_arm_left_v3", 125);
+const upperRightLength = armLength("upper_arm_right_v3", 125);
+const forearmLeftLength = armLength("forearm_left_v3", 106);
+const forearmRightLength = armLength("forearm_right_v3", 106);
 const armDistalOffsets = {
   upper_arm_left_v3: upperLeftLength,
   upper_arm_right_v3: upperRightLength,
@@ -173,28 +226,29 @@ const armDistalOffsets = {
 };
 
 const bones = [
-  ["root", null, 0, 145], ["torso", "root", 0, -60], ["chest", "torso", 0, -72], ["neck", "chest", 0, -42], ["head", "neck", 0, -68], ["jaw", "head", 0, 42],
-  ["earLeft", "head", -52, -72], ["earRight", "head", 52, -72], ["whiskerLeft", "head", -64, 14], ["whiskerRight", "head", 64, 14],
+  ["root", null, 0, 145], ["torso", "root", 0, -60], ["chest", "torso", 0, -72], ["neck", "chest", 0, -42], ["head", "neck", 0, -68], ["jaw", "head", 0, 19],
+  ["earLeft", "head", -63, -86], ["earRight", "head", 58, -86], ["whiskerLeft", "head", -54, 12], ["whiskerRight", "head", 54, 12],
   ["eyeAimLeft", "head", 0, 0], ["eyeAimRight", "head", 0, 0],
-  ["shoulderLeft", "chest", -108, -5], ["upperArmLeft", "shoulderLeft", 0, 0, upperLeftLength], ["elbowLeft", "upperArmLeft", 0, upperLeftLength], ["forearmLeft", "elbowLeft", 0, 0, forearmLeftLength], ["wristLeft", "forearmLeft", 0, forearmLeftLength], ["pawLeft", "wristLeft", 0, 4],
-  ["shoulderRight", "chest", 108, -5], ["upperArmRight", "shoulderRight", 0, 0, upperRightLength], ["elbowRight", "upperArmRight", 0, upperRightLength], ["forearmRight", "elbowRight", 0, 0, forearmRightLength], ["wristRight", "forearmRight", 0, forearmRightLength], ["pawRight", "wristRight", 0, 4],
+  ["shoulderLeft", "chest", -145, -18, 0, 0.25], ["upperArmLeft", "shoulderLeft", 0, 0, upperLeftLength], ["elbowLeft", "upperArmLeft", 0, upperLeftLength, 0, -0.75], ["forearmLeft", "elbowLeft", 0, 0, forearmLeftLength], ["wristLeft", "forearmLeft", 0, forearmLeftLength], ["pawLeft", "wristLeft", 0, 4],
+  ["shoulderRight", "chest", 145, -18, 0, -0.25], ["upperArmRight", "shoulderRight", 0, 0, upperRightLength], ["elbowRight", "upperArmRight", 0, upperRightLength, 0, 0.75], ["forearmRight", "elbowRight", 0, 0, forearmRightLength], ["wristRight", "forearmRight", 0, forearmRightLength], ["pawRight", "wristRight", 0, 4],
   ["collarLeft", "chest", -45, -4], ["collarRight", "chest", 45, -4], ["scarf", "chest", 0, 8], ["coatFlapLeft", "torso", -58, 58], ["coatFlapRight", "torso", 58, 58], ["coatLower", "torso", 0, 60], ["neckRuff", "neck", 0, 10]
-].map(([id, parentId, x, y, length = 0]) => ({
+].map(([id, parentId, x, y, length = 0, rotation = 0]) => ({
   id,
   name: id,
   ...(parentId ? { parentId } : {}),
-  local: transform(x, y),
+  local: transform(x, y, rotation),
   length,
   editor: { custom: { facing: 1 } }
 }));
 
-const hiddenIdentityParts = new Set(["body_lower_coat", "neck_ruff", "jaw_chin", "collar_left", "collar_right", "scarf_center", "coat_flap_left", "coat_flap_right"]);
+const hiddenIdentityParts = new Set(["body_lower_coat", "neck_ruff", "collar_left", "collar_right", "scarf_center", "coat_flap_left", "coat_flap_right"]);
 
 function buildPart(spec) {
   const texture = `${publicBase}/${spec.file}`;
   const { intrinsic, runtime } = specSizes[spec.id];
   const [width, height] = runtime;
   const [x, y] = spec.offset ?? [0, 0];
+  const rotation = spec.rotation ?? 0;
   let mesh;
   const topAnchored = spec.grid?.[1] === 6 || spec.id.includes("shoulder_");
   if (spec.grid?.[0] === 4 && spec.grid?.[1] === 6) {
@@ -212,7 +266,7 @@ function buildPart(spec) {
     drawOrder: spec.drawOrder,
     visible: true,
     opacity: spec.opacity ?? (hiddenIdentityParts.has(spec.id) ? 0 : 1),
-    local: transform(x, y),
+    local: transform(x, y, rotation),
     mesh,
     editor: {
       custom: {
@@ -224,7 +278,8 @@ function buildPart(spec) {
         width,
         intrinsicSize: intrinsic,
         aspectLocked: true,
-        scale: [1, 1]
+        scale: [1, 1],
+        rotation
       }
     }
   };
@@ -258,7 +313,12 @@ const attachments = [
 ];
 
 const key = (time, value, interpolation = "linear") => ({ time, value, interpolation });
-const track = (id, targetKind, targetId, property, values) => ({ id, target: { kind: targetKind, id: targetId }, property, keyframes: values });
+const track = (id, targetKind, targetId, property, values) => ({
+  id,
+  target: { kind: targetKind, id: targetId },
+  property,
+  keyframes: [...new Map(values.map((keyframe) => [keyframe.time, keyframe])).values()].sort((left, right) => left.time - right.time)
+});
 const attachmentTrack = (slot, values) => track(`slot:${slot}.attachment`, "slot", slot, "attachment", values.map(([time, value]) => key(time, value, "step")));
 const motionTrack = (bone, property, values) => track(`${bone}.${property.replace("transform.", "")}`, "bone", bone, property, values.map(([time, value]) => key(time, value)));
 const partMotionTrack = (partId, property, values) => track(`part:${partId}.${property.replace("transform.", "")}`, "part", partId, property, values.map(([time, value]) => key(time, value)));
@@ -268,7 +328,7 @@ function meshZeroes(partId) {
   return Array(parts.find((part) => part.id === partId).mesh.vertices.length).fill(0);
 }
 
-function reachDeform(partId, retainedLength = 0.3, distalWidth = 0.2) {
+function reachDeform(partId, distalWidth = 0.2) {
   const vertices = parts.find((part) => part.id === partId).mesh.vertices;
   const ys = vertices.filter((_, index) => index % 2 === 1);
   const minY = Math.min(...ys);
@@ -279,13 +339,13 @@ function reachDeform(partId, retainedLength = 0.3, distalWidth = 0.2) {
       const t = maxY === minY ? 0 : (rowY - minY) / (maxY - minY);
       return coordinate * distalWidth * t;
     }
-    return -(coordinate - minY) * (1 - retainedLength);
+    return 0;
   });
 }
 
 const armDeforms = Object.fromEntries(["left", "right"].flatMap((side) => [
-  [`upper_arm_${side}_v3`, reachDeform(`upper_arm_${side}_v3`, 0.3, 0.16)],
-  [`forearm_${side}_v3`, reachDeform(`forearm_${side}_v3`, 0.28, 0.2)]
+  [`upper_arm_${side}_v3`, reachDeform(`upper_arm_${side}_v3`, 0.16)],
+  [`forearm_${side}_v3`, reachDeform(`forearm_${side}_v3`, 0.2)]
 ]));
 
 function eyeTracks(emotion, duration, { gaze = "micro", wink = false, pupil = "medium", noBlink = false } = {}) {
@@ -326,10 +386,10 @@ function eyeTracks(emotion, duration, { gaze = "micro", wink = false, pupil = "m
   const rightX = withBlinkCenter(gazeOffsets.map(([time, x], index) => [time, clamp(x + (index % 2 ? 0.35 : 0), rightBounds.x)]), rightBlinkIntervals);
   const rightY = withBlinkCenter(gazeOffsets.map(([time, , y], index) => [time, clamp(y + (index % 2 ? -0.2 : 0), rightBounds.y)]), rightBlinkIntervals);
   const irisParallax = 0.25;
-  const leftIrisX = leftX.map(([time, x]) => [time, -40 + x * irisParallax]);
-  const leftIrisY = leftY.map(([time, y]) => [time, -15 + y * irisParallax]);
-  const rightIrisX = rightX.map(([time, x]) => [time, 40 + x * irisParallax]);
-  const rightIrisY = rightY.map(([time, y]) => [time, -15 + y * irisParallax]);
+  const leftIrisX = leftX.map(([time, x]) => [time, eyeOrigins.left[0] + x * irisParallax]);
+  const leftIrisY = leftY.map(([time, y]) => [time, eyeOrigins.left[1] + y * irisParallax]);
+  const rightIrisX = rightX.map(([time, x]) => [time, eyeOrigins.right[0] + x * irisParallax]);
+  const rightIrisY = rightY.map(([time, y]) => [time, eyeOrigins.right[1] + y * irisParallax]);
 
   return [
     attachmentTrack("eye.left.expression", leftExpression),
@@ -389,11 +449,19 @@ function armReachTracks(side, duration, activeStart, activeEnd, scale = 1.22) {
   const upper = `upper_arm_${suffix}_v3`;
   const forearm = `forearm_${suffix}_v3`;
   const paw = `paw${side === "left" ? "Left" : "Right"}`;
+  const elbow = `elbow${side === "left" ? "Left" : "Right"}`;
+  const wrist = `wrist${side === "left" ? "Left" : "Right"}`;
+  const upperLength = side === "left" ? upperLeftLength : upperRightLength;
+  const forearmLength = side === "left" ? forearmLeftLength : forearmRightLength;
+  const reachedUpperLength = upperLength * 0.3;
+  const reachedForearmLength = forearmLength * 0.28;
   const zeroUpper = meshZeroes(upper);
   const zeroForearm = meshZeroes(forearm);
   return [
     deformTrack(upper, [[0, zeroUpper], [activeStart, armDeforms[upper]], [activeEnd, armDeforms[upper]], [duration, zeroUpper]]),
     deformTrack(forearm, [[0, zeroForearm], [activeStart, armDeforms[forearm]], [activeEnd, armDeforms[forearm]], [duration, zeroForearm]]),
+    motionTrack(elbow, "transform.y", [[0, upperLength], [activeStart, reachedUpperLength], [activeEnd, reachedUpperLength], [duration, upperLength]]),
+    motionTrack(wrist, "transform.y", [[0, forearmLength], [activeStart, reachedForearmLength], [activeEnd, reachedForearmLength], [duration, forearmLength]]),
     motionTrack(paw, "transform.scaleX", [[0, 1], [activeStart, scale], [activeEnd, scale], [duration, 1]]),
     motionTrack(paw, "transform.scaleY", [[0, 1], [activeStart, scale], [activeEnd, scale], [duration, 1]])
   ];
@@ -456,10 +524,10 @@ const poseDeforms = (sides) => Object.fromEntries(["left", "right"].flatMap((sid
   [`forearm_${side}_v3`, sides.includes(side) ? armDeforms[`forearm_${side}_v3`] : meshZeroes(`forearm_${side}_v3`)]
 ]));
 const poses = [
-  { id: "arms_neutral", name: "Arms Neutral", rigId: "milo-reporter-rig", boneTransforms: { pawLeft: transform(0, 4), pawRight: transform(0, 4) }, editor: { custom: { deforms: poseDeforms([]) } } },
-  { id: "reach_left", name: "Reach Left", rigId: "milo-reporter-rig", boneTransforms: { pawLeft: transform(0, 4, 0, 1.22, 1.22), pawRight: transform(0, 4) }, editor: { custom: { deforms: poseDeforms(["left"]) } } },
-  { id: "reach_right", name: "Reach Right", rigId: "milo-reporter-rig", boneTransforms: { pawLeft: transform(0, 4), pawRight: transform(0, 4, 0, 1.22, 1.22) }, editor: { custom: { deforms: poseDeforms(["right"]) } } },
-  { id: "reach_both", name: "Reach Both", rigId: "milo-reporter-rig", boneTransforms: { pawLeft: transform(0, 4, 0, 1.25, 1.25), pawRight: transform(0, 4, 0, 1.25, 1.25) }, editor: { custom: { deforms: poseDeforms(["left", "right"]) } } }
+  { id: "arms_neutral", name: "Arms Neutral", rigId: "milo-reporter-rig", boneTransforms: { elbowLeft: transform(0, upperLeftLength), wristLeft: transform(0, forearmLeftLength), pawLeft: transform(0, 4), elbowRight: transform(0, upperRightLength), wristRight: transform(0, forearmRightLength), pawRight: transform(0, 4) }, editor: { custom: { deforms: poseDeforms([]) } } },
+  { id: "reach_left", name: "Reach Left", rigId: "milo-reporter-rig", boneTransforms: { elbowLeft: transform(0, upperLeftLength * 0.3), wristLeft: transform(0, forearmLeftLength * 0.28), pawLeft: transform(0, 4, 0, 1.22, 1.22), elbowRight: transform(0, upperRightLength), wristRight: transform(0, forearmRightLength), pawRight: transform(0, 4) }, editor: { custom: { deforms: poseDeforms(["left"]) } } },
+  { id: "reach_right", name: "Reach Right", rigId: "milo-reporter-rig", boneTransforms: { elbowLeft: transform(0, upperLeftLength), wristLeft: transform(0, forearmLeftLength), pawLeft: transform(0, 4), elbowRight: transform(0, upperRightLength * 0.3), wristRight: transform(0, forearmRightLength * 0.28), pawRight: transform(0, 4, 0, 1.22, 1.22) }, editor: { custom: { deforms: poseDeforms(["right"]) } } },
+  { id: "reach_both", name: "Reach Both", rigId: "milo-reporter-rig", boneTransforms: { elbowLeft: transform(0, upperLeftLength * 0.3), wristLeft: transform(0, forearmLeftLength * 0.28), pawLeft: transform(0, 4, 0, 1.25, 1.25), elbowRight: transform(0, upperRightLength * 0.3), wristRight: transform(0, forearmRightLength * 0.28), pawRight: transform(0, 4, 0, 1.25, 1.25) }, editor: { custom: { deforms: poseDeforms(["left", "right"]) } } }
 ];
 
 const states = animations.map(({ id }) => ({ id, name: id, clipId: id }));
@@ -478,10 +546,11 @@ const facialRig = {
   pupilSlots: { left: "eye.left.pupil", right: "eye.right.pupil" },
   eyeAimBones: { left: "eyeAimLeft", right: "eyeAimRight" },
   irisParallaxParts: { left: "eye_iris_left", right: "eye_iris_right" },
-  irisOrigins: { left: [-40, -15], right: [40, -15] },
+  irisOrigins: eyeOrigins,
   irisParallax: 0.25,
   gazeBounds: { x: [-6, 6], y: [-3.5, 3.5] },
   gazeBoundsByExpression,
+  aperturesByExpression,
   linkedByDefault: true
 };
 
@@ -527,22 +596,26 @@ const manifest = {
   name: "Milo Reporter",
   version: 3,
   generatedWith: "OpenAI built-in ImageGen",
-  reference: "User-approved final-look identity, paw-size calibration, and arm sheet",
+  reference: "User-approved final-look identity, face foundation, paw-size calibration, and arm sheet",
   references: {
     finalLook: { source: "exec-a391a217-0dcd-4085-b459-59970971fa59.png", chroma: "source-art/milo-final-look-v3-chroma.png", rgba: "source-art/milo-final-look-v3-rgba.png" },
+    faceFoundation: { source: "codex-clipboard-70a66fe4-fee2-4175-998d-62224d8b70a6.png", chroma: "source-art/milo-head-shell-v7-chroma.png", rgba: "source-art/milo-head-shell-v7-rgba.png", part: "parts/head_shell_v7.png" },
     pawScaleCalibration: { source: "exec-c60fa62d-4fc4-456a-8d5c-0ffd14515821.png", chroma: "source-art/milo-calibration-v3-chroma.png" },
     armSet: { source: "codex-clipboard-b931cc12-da4d-4624-94ef-f3bbabff45c8.png", chroma: "source-art/milo-arms-v3-chroma.png", rgba: "source-art/milo-arms-v3-rgba.png" },
+    roundedUpperSleeves: { source: "exec-02803c8f-60c3-4c7a-b658-1053d35403a0.png", chroma: "source-art/milo-upper-arms-v4-chroma.png", rgba: "source-art/milo-upper-arms-v4-rgba.png", replaces: ["parts/upper_arm_left_v3.png", "parts/upper_arm_right_v3.png"] },
+    seamlessForearms: { source: "exec-77d493c9-ee24-47e2-a2e6-b6c5bbd8c2fd.png", chroma: "source-art/milo-forearms-v4-chroma.png", rgba: "source-art/milo-forearms-v4-rgba.png", replaces: ["parts/forearm_left_v3.png", "parts/forearm_right_v3.png"] },
     eyeAnatomy: { chroma: "source-art/milo-eye-anatomy-v3-chroma.png", rgba: "source-art/milo-eye-anatomy-v3-rgba.png" },
+    irisSource: { source: "exec-645040ae-0ea9-45ca-a4f2-ad9c949978e7.png", chroma: "source-art/milo-eye-bases-v4-chroma.png", role: "solid circular iris and pupil anatomy" },
     eyelids: { source: "exec-85342265-5d12-4161-abab-74295ab50d82.png", chroma: "source-art/milo-eyelids-v3-chroma.png", rgba: "source-art/milo-eyelids-v3-rgba.png" },
     removedHeadMask: { source: "exec-f00f7a7c-a857-4dcd-a72a-78d2f42e5a33.png", active: false, reason: "User rejected the full-face safe mask; expression-specific numeric safe zones replace it." }
   },
   chromaKey: "#00FF00",
   prompts: {
-    identity: "Match the approved final-look anchor exactly for face, eyes, white-fur silhouette, black coat and frontal waist-up proportions; do not reshape or distort its anatomy.",
+    identity: "Match the approved final-look anchor exactly for face, eyes, white-fur silhouette, black coat and frontal waist-up proportions; use the user-approved blank face foundation directly and do not reshape or distort its anatomy.",
     calibration: "Use the separate approved calibration only to measure closed-paw scale against head width; it does not replace the final-look identity.",
     arms: "Preserve the exact silhouette, proportions, rounded edges, closed paws and open padded paws from the user-approved mirrored arm set.",
-    eyes: "Use exec-85342265-5d12-4161-abab-74295ab50d82 as the exact top eyelid-expression edging. Per side: a slightly moving solid amber iris and an independently moving enlarged black pupil with side-specific catchlight; each eyelid expression supplies its own numeric gaze safe-zone. No full-face mask is active. The matte white base remains packaged but hidden for compatibility.",
-    mouths: "Twenty-one distinct feline emotional visemes with one fixed-size nose anchor."
+    eyes: "Use exec-85342265-5d12-4161-abab-74295ab50d82 as the exact top eyelid-expression edging. Per side: a slightly moving solid amber iris and an independently moving enlarged black pupil with side-specific catchlight; each eyelid expression supplies its own numeric gaze safe-zone and alpha-derived aperture clipping polygon. No full-face mask is active. The matte white base remains packaged but hidden for compatibility.",
+    mouths: "Twenty-one distinct feline emotional visemes reuse their approved PNGs with the nose alpha removed; one fixed nose part stays unchanged across every attachment."
   },
   counts: { bones: bones.length, bodyParts: bodySpecs.length, armParts: armSpecs.length, eyeParts: eyeStaticSpecs.length + pupilSpecs.length + eyelidSpecs.length, mouthParts: mouthSpecs.length, totalParts: parts.length, clips: animations.length, poses: poses.length },
   activeAssetPaths,
@@ -565,11 +638,41 @@ const manifest = {
     irisParallax: 0.25,
     gazeSafeZone: { pupil: { x: [-6, 6], y: [-3.5, 3.5] }, iris: { x: [-1.5, 1.5], y: [-0.875, 0.875] }, clipsInsideEyelidAperture: true },
     gazeSafeZonesByExpression: facialRig.gazeBoundsByExpression,
+    apertureMasksByExpression: { count: Object.keys(facialRig.aperturesByExpression).length, padding: aperturePadding, blinkClosed: true, clipsIrisAndPupil: true },
     rejectedFullFaceMaskExcluded: true,
+    transformOnlyFacialAssets: { count: transformOnlyFacialFiles.length, sha256: transformOnlyFacialDigest, noNewAssets: true },
+    authoritativeReferenceLock: {
+      reference: "source-art/milo-final-look-v3-rgba.png",
+      alignmentAnchors: ["body", "coat-collar"],
+      tolerancePx: { centers: 1, sizes: 2, earControlPoints: 2 },
+      landmarks: {
+        leftEye: [498, 313, 584, 373],
+        rightEye: [669, 313, 757, 374],
+        noseMouth: [597, 413, 655, 453],
+        leftEar: [405, 48, 497, 273],
+        rightEar: [758, 48, 840, 273]
+      },
+      transformsOnly: true,
+      silhouettePixelPerfect: false
+    },
     pupilMovesWithGaze: true,
-    armOverlapPadding: [0.12, 0.15],
+    armOverlapPadding: [0.15, 0.21],
+    armContinuity: {
+      skinnedSegmentsFollowBoneHierarchy: true,
+      elbowCoversVisible: false,
+      forearmOccludesUpperSleeveEnd: true,
+      forearmHasOpenEnd: false,
+      cuffFitsForearm: true,
+      cuffsVisible: false,
+      roundedShoulderEntryByOutwardChain: true,
+      roundedUpperSleeveAssets: true,
+      seamlessRoundedForearmEnds: true,
+      elbowsBiasAwayFromTorso: true,
+      symmetricElbowCenters: true,
+      reachJointsFollowSegmentShortening: true
+    },
     baseAspectErrorMax: 0.005,
-    finalLookLocked: { face: true, eyes: true, body: true, coat: true, silhouette: true, reference: "exec-a391a217-0dcd-4085-b459-59970971fa59.png" },
+    finalLookLocked: { face: true, eyes: true, body: true, coat: true, silhouette: true, reference: "exec-a391a217-0dcd-4085-b459-59970971fa59.png", faceFoundation: "codex-clipboard-70a66fe4-fee2-4175-998d-62224d8b70a6.png" },
     calibratedClosedPawToHeadWidth: { measured: 0.307, tolerance: 0.01, measurement: { headWidth: 329, closedPawWidth: 101, sampleScale: 0.5 }, reference: "exec-c60fa62d-4fc4-456a-8d5c-0ffd14515821.png", role: "paw-size-only" },
     legacyAssetsExcludedFromActiveSet: true
   }

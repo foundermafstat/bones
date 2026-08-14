@@ -1,6 +1,11 @@
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { neon } from "@neondatabase/serverless";
+
+const rootEnv = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../../.env");
+if (existsSync(rootEnv)) process.loadEnvFile(rootEnv);
 
 const mode = process.argv[2] ?? "--check";
 if (mode !== "--check" && mode !== "--apply") {
@@ -9,7 +14,7 @@ if (mode !== "--check" && mode !== "--apply") {
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
-  throw new Error("DATABASE_URL is missing. Put the rotated Neon URL in apps/editor/.env.local and export it for this command.");
+  throw new Error("DATABASE_URL is missing. Put it in the repository root .env file.");
 }
 
 const migrationUrl = new URL("../drizzle/0000_bones_projects.sql", import.meta.url);

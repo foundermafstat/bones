@@ -1,7 +1,7 @@
 {
   "expectedParts": 71,
   "actualParts": 71,
-  "legacyFilesIgnored": 17,
+  "legacyFilesIgnored": 19,
   "files": [
     {
       "file": "body_lower_coat.png",
@@ -34,22 +34,22 @@
       "transparentCorners": true
     },
     {
-      "file": "head_shell_v5.png",
+      "file": "head_shell_v7.png",
       "size": [
         512,
-        454
+        453
       ],
-      "visiblePixels": 157854,
+      "visiblePixels": 157240,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
     {
-      "file": "jaw_chin.png",
+      "file": "nose_fixed.png",
       "size": [
-        147,
-        91
+        214,
+        172
       ],
-      "visiblePixels": 7150,
+      "visiblePixels": 2017,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
@@ -156,10 +156,10 @@
     {
       "file": "upper_arm_left_v3.png",
       "size": [
-        177,
-        412
+        462,
+        1018
       ],
-      "visiblePixels": 55744,
+      "visiblePixels": 337804,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
@@ -176,10 +176,10 @@
     {
       "file": "forearm_left_v3.png",
       "size": [
-        170,
-        316
+        312,
+        541
       ],
-      "visiblePixels": 39500,
+      "visiblePixels": 133817,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
@@ -226,10 +226,10 @@
     {
       "file": "upper_arm_right_v3.png",
       "size": [
-        177,
-        409
+        462,
+        1018
       ],
-      "visiblePixels": 55209,
+      "visiblePixels": 339821,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
@@ -246,10 +246,10 @@
     {
       "file": "forearm_right_v3.png",
       "size": [
-        171,
-        315
+        312,
+        541
       ],
-      "visiblePixels": 39216,
+      "visiblePixels": 136776,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
@@ -257,9 +257,9 @@
       "file": "cuff_right_v3.png",
       "size": [
         162,
-        118
+        117
       ],
-      "visiblePixels": 14401,
+      "visiblePixels": 14259,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
@@ -296,10 +296,10 @@
     {
       "file": "eye_iris_left.png",
       "size": [
-        203,
-        133
+        188,
+        185
       ],
-      "visiblePixels": 14955,
+      "visiblePixels": 22765,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
@@ -316,10 +316,10 @@
     {
       "file": "eye_iris_right.png",
       "size": [
-        199,
-        138
+        188,
+        186
       ],
-      "visiblePixels": 14754,
+      "visiblePixels": 22910,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
@@ -506,217 +506,217 @@
     {
       "file": "mouth_neutral_mbp.png",
       "size": [
-        248,
-        236
+        214,
+        172
       ],
-      "visiblePixels": 22777,
+      "visiblePixels": 20760,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
     {
       "file": "mouth_neutral_ai.png",
       "size": [
-        248,
-        236
+        214,
+        172
       ],
-      "visiblePixels": 24199,
+      "visiblePixels": 21482,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
     {
       "file": "mouth_neutral_e.png",
       "size": [
-        248,
-        236
+        214,
+        172
       ],
-      "visiblePixels": 22950,
+      "visiblePixels": 20817,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
     {
       "file": "mouth_neutral_ou.png",
       "size": [
-        248,
-        236
+        214,
+        172
       ],
-      "visiblePixels": 21864,
+      "visiblePixels": 19499,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
     {
       "file": "mouth_neutral_fv.png",
       "size": [
-        248,
-        236
+        214,
+        172
       ],
-      "visiblePixels": 22664,
+      "visiblePixels": 20094,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
     {
       "file": "mouth_happy_mbp.png",
       "size": [
-        248,
-        236
+        214,
+        172
       ],
-      "visiblePixels": 22760,
+      "visiblePixels": 20697,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
     {
       "file": "mouth_happy_ai.png",
       "size": [
-        248,
-        236
+        214,
+        172
       ],
-      "visiblePixels": 24280,
+      "visiblePixels": 21799,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
     {
       "file": "mouth_happy_e.png",
       "size": [
-        248,
-        236
+        214,
+        172
       ],
-      "visiblePixels": 24065,
+      "visiblePixels": 21750,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
     {
       "file": "mouth_happy_ou.png",
       "size": [
-        248,
-        236
+        214,
+        172
       ],
-      "visiblePixels": 21766,
+      "visiblePixels": 19609,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
     {
       "file": "mouth_happy_fv.png",
       "size": [
-        248,
-        236
+        214,
+        172
       ],
-      "visiblePixels": 22501,
+      "visiblePixels": 20139,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
     {
       "file": "mouth_sad_mbp.png",
       "size": [
-        248,
-        236
+        214,
+        172
       ],
-      "visiblePixels": 23206,
+      "visiblePixels": 21172,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
     {
       "file": "mouth_sad_ai.png",
       "size": [
-        248,
-        236
+        214,
+        172
       ],
-      "visiblePixels": 24799,
+      "visiblePixels": 22217,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
     {
       "file": "mouth_sad_e.png",
       "size": [
-        248,
-        236
+        214,
+        172
       ],
-      "visiblePixels": 22885,
+      "visiblePixels": 20813,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
     {
       "file": "mouth_sad_ou.png",
       "size": [
-        248,
-        236
+        214,
+        172
       ],
-      "visiblePixels": 21785,
+      "visiblePixels": 19729,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
     {
       "file": "mouth_sad_fv.png",
       "size": [
-        248,
-        236
+        214,
+        172
       ],
-      "visiblePixels": 23062,
+      "visiblePixels": 20689,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
     {
       "file": "mouth_angry_mbp.png",
       "size": [
-        248,
-        236
+        214,
+        172
       ],
-      "visiblePixels": 23510,
+      "visiblePixels": 21481,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
     {
       "file": "mouth_angry_ai.png",
       "size": [
-        248,
-        236
+        214,
+        172
       ],
-      "visiblePixels": 26976,
+      "visiblePixels": 23037,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
     {
       "file": "mouth_angry_e.png",
       "size": [
-        248,
-        236
+        214,
+        172
       ],
-      "visiblePixels": 23398,
+      "visiblePixels": 21295,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
     {
       "file": "mouth_angry_ou.png",
       "size": [
-        248,
-        236
+        214,
+        172
       ],
-      "visiblePixels": 22479,
+      "visiblePixels": 20373,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
     {
       "file": "mouth_angry_fv.png",
       "size": [
-        248,
-        236
+        214,
+        172
       ],
-      "visiblePixels": 23174,
+      "visiblePixels": 21050,
       "greenFringePixels": 0,
       "transparentCorners": true
     },
     {
       "file": "mouth_surprised_round.png",
       "size": [
-        248,
-        236
+        214,
+        172
       ],
-      "visiblePixels": 28420,
+      "visiblePixels": 23766,
       "greenFringePixels": 0,
       "transparentCorners": true
     }
   ],
   "facialAlignment": {
-    "mouthCanvasEqual": true,
-    "noseAnchorEqual": true,
+    "mouthPivotsExplicit": true,
+    "noseRemovedFromRuntimeByAlpha": true,
     "eyeVariantCanvasesEqual": true
   },
   "ok": true,

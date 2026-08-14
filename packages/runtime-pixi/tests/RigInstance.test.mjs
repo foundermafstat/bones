@@ -131,6 +131,45 @@ test("shows exactly one attachment per visual slot and restores the skin fallbac
   assert.equal(instance.getPartContainer(1).visible, false);
 });
 
+test("clips iris and pupil to the aperture of the active eyelid attachment", () => {
+  const parts = [0, 1, 2, 3].map((id) => ({
+    ...compiledFixture.rig.parts[0], id, bone: 1, drawOrder: id < 2 ? 30 : 25 + id
+  }));
+  const instance = new RigInstance({
+    ...compiledFixture,
+    compiledFormatVersion: "1.1.0",
+    rig: {
+      ...compiledFixture.rig,
+      parts,
+      visualSlots: [
+        { id: "eye.expression", bone: 1, drawOrder: 30, partIds: [0, 1] },
+        { id: "eye.pupil", bone: 1, drawOrder: 27, partIds: [3] }
+      ],
+      facialApertures: [{
+        expressionSlot: 0,
+        clippedParts: [2, 3],
+        regions: [
+          { attachment: 0, polygon: [-10, -5, 10, -5, 10, 5, -10, 5] },
+          { attachment: 1, polygon: [] }
+        ]
+      }],
+      skins: [{ id: "default", name: "Default", attachments: [{ slot: 0, part: 0 }, { slot: 1, part: 3 }] }],
+      defaultSkinId: "default"
+    }
+  });
+  const irisMask = instance.getPartContainer(2).mask;
+  assert.ok(irisMask instanceof Graphics);
+  assert.equal(instance.getPartContainer(3).mask, irisMask);
+  assert.ok(irisMask.bounds.width > 0);
+
+  instance.applySample({
+    localTime: 0,
+    normalizedTime: 0,
+    values: [{ targetKind: "slot", target: 0, property: "attachment", value: 1 }]
+  });
+  assert.equal(irisMask.bounds.width, 0);
+});
+
 test("update stores params and reapplies default transforms without animation", () => {
   const instance = new RigInstance(compiledFixture);
   const body = instance.getBoneContainer(1);
@@ -398,7 +437,7 @@ test("skinned mesh vertices follow sampled bone transforms", () => {
   const meshPart = instance.getPartContainer(0).children[0];
   const positions = meshPart.__bonesMeshPositions;
 
-  assert.equal(instance.getPartContainer(0).parent, instance.rigContainer);
+  assert.equal(instance.getPartContainer(0).parent, instance.getBoneContainer(0));
   assert.deepEqual(Array.from(positions), [10, 0, 20, 0, 10, 10]);
 
   instance.applySample({
@@ -477,8 +516,8 @@ test("skinned mesh deform offsets are applied before skinning", () => {
     values: [{ targetKind: "part", target: 0, property: "deform", value: [0, 5] }]
   });
 
-  assert.ok(Math.abs(positions[0] + 5) < 0.0001);
-  assert.ok(Math.abs(positions[1] - 10) < 0.0001);
+  assert.ok(Math.abs(positions[0] - 10) < 0.0001);
+  assert.ok(Math.abs(positions[1] - 5) < 0.0001);
 });
 
 test("update exposes state machine blend tree as mixer layers", () => {

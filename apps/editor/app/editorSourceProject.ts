@@ -234,12 +234,14 @@ export function readEditorFacialRig(
   ]);
   const gazeBoundsByExpression = readFacialGazeBoundsByExpression(value.gazeBoundsByExpression, expressionPartIds);
   if (value.gazeBoundsByExpression !== undefined && !gazeBoundsByExpression) return undefined;
+  const aperturesByExpression = readFacialAperturesByExpression(value.aperturesByExpression, expressionPartIds);
+  if (value.aperturesByExpression !== undefined && !aperturesByExpression) return undefined;
   if (irisParallaxParts && (irisParallaxParts.left === irisParallaxParts.right)) return undefined;
   if (irisParallaxParts && (!parts[irisParallaxParts.left] || !parts[irisParallaxParts.right])) return undefined;
 
   if ((irisParallaxParts || irisParallax !== undefined) && !irisOrigins) return undefined;
 
-  return { expressionSlots, pupilSlots, eyeAimBones, ...(irisParallaxParts ? { irisParallaxParts } : {}), ...(irisOrigins ? { irisOrigins } : {}), ...(irisParallax !== undefined ? { irisParallax } : {}), gazeBounds, ...(gazeBoundsByExpression ? { gazeBoundsByExpression } : {}), linkedByDefault: value.linkedByDefault };
+  return { expressionSlots, pupilSlots, eyeAimBones, ...(irisParallaxParts ? { irisParallaxParts } : {}), ...(irisOrigins ? { irisOrigins } : {}), ...(irisParallax !== undefined ? { irisParallax } : {}), gazeBounds, ...(gazeBoundsByExpression ? { gazeBoundsByExpression } : {}), ...(aperturesByExpression ? { aperturesByExpression } : {}), linkedByDefault: value.linkedByDefault };
 }
 
 function facialRigToJson(facialRig: EditorFacialRig) {
@@ -253,6 +255,9 @@ function facialRigToJson(facialRig: EditorFacialRig) {
     gazeBounds: { x: [...facialRig.gazeBounds.x], y: [...facialRig.gazeBounds.y] },
     ...(facialRig.gazeBoundsByExpression ? {
       gazeBoundsByExpression: Object.fromEntries(Object.entries(facialRig.gazeBoundsByExpression).map(([partId, bounds]) => [partId, { x: [...bounds.x], y: [...bounds.y] }]))
+    } : {}),
+    ...(facialRig.aperturesByExpression ? {
+      aperturesByExpression: Object.fromEntries(Object.entries(facialRig.aperturesByExpression).map(([partId, polygon]) => [partId, [...polygon]]))
     } : {}),
     linkedByDefault: facialRig.linkedByDefault
   };
@@ -293,6 +298,19 @@ function readFacialGazeBoundsByExpression(
   const entries = Object.entries(value).map(([partId, bounds]) => [partId, readFacialGazeBounds(bounds)] as const);
   if (entries.some(([partId, bounds]) => !expressionPartIds.has(partId) || !bounds)) return undefined;
   return Object.fromEntries(entries) as NonNullable<EditorFacialRig["gazeBoundsByExpression"]>;
+}
+
+function readFacialAperturesByExpression(
+  value: unknown,
+  expressionPartIds: ReadonlySet<string>
+): EditorFacialRig["aperturesByExpression"] | undefined {
+  if (!isRecord(value)) return undefined;
+  const entries = Object.entries(value);
+  if (entries.length !== expressionPartIds.size || entries.some(([partId, polygon]) => !expressionPartIds.has(partId)
+    || !Array.isArray(polygon)
+    || (polygon.length !== 0 && (polygon.length < 6 || polygon.length % 2 !== 0))
+    || polygon.some((coordinate) => typeof coordinate !== "number" || !Number.isFinite(coordinate)))) return undefined;
+  return Object.fromEntries(entries.map(([partId, polygon]) => [partId, [...polygon as number[]]]));
 }
 
 function readFiniteNumberPair(value: unknown): readonly [number, number] | undefined {
@@ -474,7 +492,7 @@ function fromSourceAnimationClip(clip: SourceAnimationClip): AnimationClip {
     duration: clip.duration,
     frameRate: clip.frameRate ?? clip.fps ?? 60,
     loop: clip.loop ?? false,
-    tracks: Object.fromEntries(clip.tracks.map((track) => [fromTrackId(track), track.keyframes.map(fromSourceKeyframe)])),
+    tracks: Object.fromEntries(clip.tracks.map((track) => [fromTrackId(track), fromSourceKeyframes(track.keyframes)])),
     events: (clip.events ?? []).map((event, index) => ({ id: `${clip.id}-event-${index}`, ...event })),
     markers: clip.markers ?? [],
     tags: clip.tags ?? []
@@ -520,6 +538,16 @@ function fromSourceKeyframe(keyframe: SourceAnimationClip["tracks"][number]["key
     ...(tangentIn !== undefined ? { tangentIn } : {}),
     ...(tangentOut !== undefined ? { tangentOut } : {})
   };
+}
+
+function fromSourceKeyframes(keyframes: SourceAnimationClip["tracks"][number]["keyframes"]): readonly Keyframe[] {
+  const usedIds = new Map<string, number>();
+  return keyframes.map((keyframe) => {
+    const restored = fromSourceKeyframe(keyframe);
+    const occurrence = (usedIds.get(restored.id) ?? 0) + 1;
+    usedIds.set(restored.id, occurrence);
+    return occurrence === 1 ? restored : { ...restored, id: `${restored.id}-${occurrence}` };
+  });
 }
 
 function readCurvePreset(value: unknown): Keyframe["curvePreset"] | undefined {

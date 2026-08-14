@@ -44,8 +44,18 @@ export interface RuntimeCompiledRigData {
   readonly bones: readonly RuntimeCompiledBone[];
   readonly parts: readonly RuntimeCompiledPart[];
   readonly visualSlots?: readonly RuntimeVisualSlot[];
+  readonly facialApertures?: readonly RuntimeFacialAperture[];
   readonly skins?: readonly RuntimeSkin[];
   readonly defaultSkinId?: string;
+}
+
+export interface RuntimeFacialAperture {
+  readonly expressionSlot: NumericId;
+  readonly clippedParts: readonly NumericId[];
+  readonly regions: readonly {
+    readonly attachment: NumericId;
+    readonly polygon: readonly number[];
+  }[];
 }
 
 export interface RuntimeVisualSlot {

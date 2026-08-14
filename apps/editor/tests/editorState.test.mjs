@@ -141,6 +141,18 @@ test("character kind survives source round-trip and legacy projects default to h
   assert.equal(fromSourceProject(legacySource).characterKind, "human");
 });
 
+test("source import repairs duplicate keyframe ids for timeline rendering", () => {
+  const source = toSourceProject(createDogCharacterProject("Scout"));
+  const track = source.animations[0].tracks[0];
+  track.keyframes = [
+    { time: 0, value: 0, interpolation: "linear", editor: { custom: { id: "duplicate" } } },
+    { time: 0.5, value: 1, interpolation: "linear", editor: { custom: { id: "duplicate" } } }
+  ];
+
+  const restoredTrack = Object.values(fromSourceProject(source).animations[source.animations[0].id].tracks)[0];
+  assert.deepEqual(restoredTrack.map((keyframe) => keyframe.id), ["duplicate", "duplicate-2"]);
+});
+
 test("independent facial rig metadata validates and survives source round-trip", () => {
   const visualSlots = {
     "eyes.left.expression": { id: "eyes.left.expression", name: "Left expression", boneId: "head", drawOrder: 20, partIds: ["headShape"] },
@@ -156,6 +168,10 @@ test("independent facial rig metadata validates and survives source round-trip",
     gazeBoundsByExpression: {
       headShape: { x: [-6, 6], y: [-4, 4] },
       bodyShape: { x: [-3, 3], y: [-2, 2] }
+    },
+    aperturesByExpression: {
+      headShape: [-8, -4, 8, -4, 8, 4, -8, 4],
+      bodyShape: []
     },
     linkedByDefault: true
   };
@@ -191,6 +207,8 @@ test("expression-specific gaze bounds reject unknown attachments and unsafe rang
   assert.equal(readEditorFacialRig({ ...facialRig, gazeBoundsByExpression: { missing: { x: [-2, 2], y: [-1, 1] } } }, initialEditorProject.bones, visualSlots), undefined);
   assert.equal(readEditorFacialRig({ ...facialRig, gazeBoundsByExpression: { headShape: { x: [2, -2], y: [-1, 1] } } }, initialEditorProject.bones, visualSlots), undefined);
   assert.equal(readEditorFacialRig({ ...facialRig, gazeBoundsByExpression: { headShape: { x: [1, 2], y: [-1, 1] } } }, initialEditorProject.bones, visualSlots), undefined);
+  assert.equal(readEditorFacialRig({ ...facialRig, aperturesByExpression: { missing: [-1, -1, 1, -1, 1, 1] } }, initialEditorProject.bones, visualSlots), undefined);
+  assert.equal(readEditorFacialRig({ ...facialRig, aperturesByExpression: { headShape: [-1, -1, 1] } }, initialEditorProject.bones, visualSlots), undefined);
 });
 
 test("invalid facial metadata falls back without changing legacy paired-eye slots", () => {

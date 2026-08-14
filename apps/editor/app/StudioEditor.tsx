@@ -1483,7 +1483,7 @@ function Timeline({ clip, clipId, currentTime, tracks, clips, duration, frameRat
               {keyValue === undefined ? <span className="bones-track-enabled">✓</span> : <button className="bones-track-key-add" aria-label={`Add ${row.trackId} key`} title="Add key at playhead" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onSelectBone(row.boneId); onRunCommand(createSetKeyframeAtTimeCommand(clipId, row.trackId, currentTime, keyValue)); }}><KeyRound /></button>}
             </div>
             <div className="bones-track-lane" style={{ width: timeWidth }} onPointerDown={seek}>
-              {row.keys.map((key) => <button key={key.id} className="bones-key" style={{ left: clamp(key.time, 0, safeDuration) * pixelsPerSecond }} aria-label={`${row.trackId} key at ${key.time}`} onPointerDown={(event) => dragKey(event, row.trackId, key)} />)}
+              {row.keys.map((key, index) => <button key={`${key.id}:${key.time}:${index}`} className="bones-key" style={{ left: clamp(key.time, 0, safeDuration) * pixelsPerSecond }} aria-label={`${row.trackId} key at ${key.time}`} onPointerDown={(event) => dragKey(event, row.trackId, key)} />)}
             </div>
           </div>;
         })}

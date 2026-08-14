@@ -43,6 +43,7 @@ export interface EditorFacialRig {
   readonly irisParallax?: number;
   readonly gazeBounds: EditorFacialGazeBounds;
   readonly gazeBoundsByExpression?: Readonly<Record<string, EditorFacialGazeBounds>>;
+  readonly aperturesByExpression?: Readonly<Record<string, readonly number[]>>;
   readonly linkedByDefault: boolean;
 }
 

@@ -43,8 +43,18 @@ export interface CompiledRigV1 {
   readonly bones: readonly CompiledBoneV1[];
   readonly parts: readonly CompiledPartV1[];
   readonly visualSlots?: readonly CompiledVisualSlotV1[];
+  readonly facialApertures?: readonly CompiledFacialApertureV1[];
   readonly skins?: readonly CompiledSkinV1[];
   readonly defaultSkinId?: string;
+}
+
+export interface CompiledFacialApertureV1 {
+  readonly expressionSlot: NumericId;
+  readonly clippedParts: readonly NumericId[];
+  readonly regions: readonly {
+    readonly attachment: NumericId;
+    readonly polygon: readonly number[];
+  }[];
 }
 
 export interface CompiledVisualSlotV1 {

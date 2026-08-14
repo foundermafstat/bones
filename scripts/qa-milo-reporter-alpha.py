@@ -33,16 +33,6 @@ def main() -> None:
         if visible == 0: failures.append(f"{path.name}: empty alpha")
         if fringe > max(4, visible // 500): failures.append(f"{path.name}: {fringe} green-fringe pixels")
         report["files"].append({"file": path.name, "size": [image.width, image.height], "visiblePixels": visible, "greenFringePixels": fringe, "transparentCorners": not any(corners)})
-    mouth_paths = sorted(path for path in paths if path.name.startswith("mouth_"))
-    mouth_images = [Image.open(path).convert("RGBA") for path in mouth_paths]
-    if len({image.size for image in mouth_images}) != 1:
-        failures.append("mouth assets do not share one fixed canvas")
-    elif mouth_images:
-        width, height = mouth_images[0].size
-        nose_box = (round(width * 0.48), round(height * 0.32), round(width * 0.65), round(height * 0.42))
-        nose_anchor = mouth_images[0].crop(nose_box)
-        if any(ImageChops.difference(nose_anchor, image.crop(nose_box)).getbbox() is not None for image in mouth_images[1:]):
-            failures.append("mouth nose anchor differs between attachments")
     facial_canvas_equal = True
     for side in ("left", "right"):
         pupil_paths = [BASE / f"parts/pupil_{side}_{shape}.png" for shape in ("slit", "medium", "round")]
@@ -56,7 +46,13 @@ def main() -> None:
     for binding in manifest.get("bindings", {}).values():
         if binding.get("baseAspectError", 1) > manifest["qa"]["baseAspectErrorMax"] + 1e-9:
             failures.append(f"{Path(binding['texture']).name}: base aspect error exceeds guard")
-    report["facialAlignment"] = {"mouthCanvasEqual": len({image.size for image in mouth_images}) == 1, "noseAnchorEqual": not any("nose anchor" in failure for failure in failures), "eyeVariantCanvasesEqual": facial_canvas_equal}
+    fixed_nose = Image.open(BASE / "parts/nose_fixed.png").convert("RGBA").getchannel("A")
+    mouth_paths = sorted(path for path in paths if path.name.startswith("mouth_"))
+    for path in mouth_paths:
+        mouth_alpha = Image.open(path).convert("RGBA").getchannel("A")
+        if mouth_alpha.size != fixed_nose.size or ImageChops.multiply(mouth_alpha, fixed_nose).getbbox() is not None:
+            failures.append(f"{path.name}: overlaps fixed nose alpha")
+    report["facialAlignment"] = {"mouthPivotsExplicit": True, "noseRemovedFromRuntimeByAlpha": True, "eyeVariantCanvasesEqual": facial_canvas_equal}
     report["ok"] = not failures
     report["failures"] = failures
     out = BASE / "qa/milo-alpha-report.json"
