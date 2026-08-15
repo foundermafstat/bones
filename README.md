@@ -25,8 +25,6 @@ Bones turns layered artwork, vector shapes, animation data, and gameplay paramet
 
 Open existing characters, import a source project, or start from a human, animal, reporter, or blank rig.
 
-![Bones project library](docs/screenshots/bones-projects.jpg)
-
 ### Animation studio
 
 The focused studio exposes Build, Animate, Test, and Export workflows, with hierarchy/slot controls, a PixiJS canvas, inspector, playback, auto-key, and a scalable timeline.
