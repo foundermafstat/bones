@@ -1,0 +1,133 @@
+Bones Source Available License 1.0
+
+Copyright (c) 2026 the Bones copyright holders.
+
+This is a custom source-available license. It is not the MIT License or
+Apache License 2.0 and is not an open-source license as defined by the Open
+Source Initiative.
+
+1. Scope and definitions
+
+"Software" means the original Bones code and documentation made available
+under this license by their copyright holders, including the editor,
+compiler, runtime, shared packages, and original example code.
+
+"Licensor" means each copyright holder granting rights to their own
+contribution under this license. No person grants rights to material they
+do not own or have authority to license.
+
+"Editor Service" means a hosted, managed, or remotely accessible offering
+that uses, incorporates, or is derived from the Software and gives third
+parties access to a substantial set of the Bones editor's authoring
+features, such as rigging, animation editing, or animation compilation
+and export. This includes access through a user interface or API, and
+includes modified, renamed, embedded, and white-label versions.
+
+"Monetized Editor Service" means an Editor Service for which its operator
+or an affiliated entity receives or seeks commercial compensation through
+paid access, subscriptions, usage fees, advertising, paid feature tiers,
+or inclusion in a paid product or service bundle. Calling an offering
+free does not exempt it if it is monetized through these means.
+
+2. Copyright permission
+
+Subject to this license, each Licensor grants you a worldwide,
+non-exclusive, royalty-free copyright license to use, reproduce, modify,
+prepare derivative works of, publicly display, perform, and distribute
+their contributions to the Software in source or compiled form, for
+commercial and noncommercial purposes.
+
+You may grant recipients rights to your original contributions, but may
+not remove or override this license's terms for the Software.
+
+3. Restriction on monetized editor services
+
+You may not operate, offer, sell access to, or distribute the Software as
+part of a Monetized Editor Service without separate prior written
+permission from the relevant copyright holders.
+
+This restriction applies regardless of modifications, branding,
+attribution, delivery architecture, or whether the Software is only one
+component of the service. Preserving attribution does not waive this
+restriction.
+
+Free Editor Services that are not monetized as defined above are
+permitted, subject to the other terms of this license.
+
+4. Commercial games and internal use
+
+You may use the editor and other Software internally, including within a
+commercial game studio, and modify them for your workflow.
+
+You may create, publish, sell, and monetize games using the Software,
+including through game sales, subscriptions, advertising, and in-game
+purchases. You may incorporate, modify, and distribute the Bones runtime
+and the shared code required for its operation as part of those games,
+including browser, downloadable, and hosted games.
+
+Charging for development work or for games and animations created with
+the Software is permitted. These permissions do not allow providing a
+Monetized Editor Service to customers or players. A game that uses the
+runtime for animation playback does not become an Editor Service merely
+because it uses the Software.
+
+5. User-created output and third-party materials
+
+This license does not claim ownership of your original artwork,
+animations, project data, or other output, and does not require that
+output to be licensed under these terms solely because it was created,
+processed, compiled, or exported using the Software.
+
+Any Software code included in an output or distribution remains subject
+to this license. Third-party content included in an output remains
+subject to its own applicable terms.
+
+Third-party dependencies, copied third-party code, artwork, fonts,
+character packs, imported animations, and other third-party materials
+are not relicensed by this license. Their respective licenses or
+permissions govern them. No permission to use or redistribute bundled
+sample artwork or imported animation assets is granted by this license
+unless those materials are expressly identified as covered by it or
+separately licensed for that use.
+
+6. Notices and redistribution
+
+When distributing any copy or substantial portion of the Software,
+including in a game, you must provide a copy of this license and retain
+applicable copyright, license, and attribution notices. For compiled or
+minified distributions, these may be provided in an accompanying
+licenses file or documentation made available to recipients.
+
+Modified copies must carry a prominent notice that they have been
+modified. You must not misrepresent authorship of the original Software.
+
+You are not required to publish your source code, game source, or private
+modifications. Separately applicable third-party obligations still apply.
+
+7. Other rights
+
+No trademark rights or endorsement are granted. This license grants
+copyright permissions only and does not grant an express patent license.
+Separate written agreements may grant additional rights.
+
+8. Termination
+
+Rights granted under this license terminate automatically if you violate
+its terms. If you cure the violation within 30 days after your first
+written notice of that violation from a Licensor, rights granted by that
+Licensor are reinstated. After a subsequent violation, reinstatement
+requires that Licensor's written permission.
+
+Termination of your rights does not terminate the rights of recipients
+who independently comply with this license.
+
+9. Disclaimer of warranty and limitation of liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE SOFTWARE IS
+PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NONINFRINGEMENT. IN NO
+EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY
+CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE
+SOFTWARE OR ITS USE OR OTHER DEALINGS.
